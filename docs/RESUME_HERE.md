@@ -16,7 +16,11 @@ Nothing needed to continue lives outside this repo.
 
 ## State as of the last commit
 
-**All stages (M0–M10) are complete and committed.** 145 tests pass.
+**All stages complete, and rebuilt as a multi-tenant SaaS.** 137 unit tests
+plus two integration checks (`npm run verify:tenants`, `npm run verify:ingest`).
+
+Sign up at `/signup` — the first account becomes admin of a new organisation.
+Everything is configured in the app; `.env` holds only infrastructure.
 
 ```
 git log --oneline

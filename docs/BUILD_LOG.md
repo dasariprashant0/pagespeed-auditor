@@ -713,3 +713,88 @@ Screenshot restored (pruning was discarding the image PSI leads with, to save
 not-applicable audit sections recovered from rawJson, CrUX distribution bars,
 and a run-conditions panel -- a mobile score is a score under 4x CPU throttling,
 and comparing it to desktop without that is meaningless.
+
+
+## Rebuilt as a multi-tenant SaaS
+
+The user asked for accounts, roles and multi-tenancy, then asked for a clean
+database. Both were done: the schema was rebuilt from a single init migration
+and the previous Zuddl data (747 pages, 153 results) was deliberately discarded.
+
+### The security finding that mattered
+
+The tenancy schema landed before the read paths were updated, which left a real
+cross-tenant hole for a short window: every page resolved its site with
+`findFirst()` and no organisation filter, so any signed-in user would have seen
+whichever site was first in the table. Page, group and run ids appear in URLs
+and were used unchecked.
+
+Everything now resolves through `lib/services/tenant.service.ts`, which scopes
+by the caller's organisation and reports "not found" rather than "forbidden" --
+confirming an id exists is itself a disclosure. Actions are gated by
+**capability**, not merely by being signed in: running audits spends the
+organisation's Google quota, so a viewer cannot.
+
+`npm run verify:tenants` proves this rather than asserting it -- two real
+organisations, every cross-tenant access refused, the owner's still working,
+and deleting one tenant leaving the other intact.
+
+MCP's single `MCP_BEARER_TOKEN` was the same class of problem: whoever held it
+reached whichever organisation a query resolved to. Tokens are now rows owned by
+an organisation, stored hashed, individually revocable.
+
+### Roles
+
+viewer / editor / developer / admin, defined as named capabilities in
+`lib/auth/roles.ts` rather than `role === 'admin'` scattered through the code.
+A test asserts privilege only accumulates going up the order, so promoting
+someone can never quietly remove a permission.
+
+The session carries `userId` and `organizationId` but deliberately **not** the
+role, which is re-read on every request -- otherwise removing or demoting
+someone would not take effect until their 30-day token expired.
+
+### Retention, as asked
+
+`RAW_JSON_RETAIN_RUNS` and `ISSUE_RETAIN_RUNS` were configured and never
+implemented -- dead settings. Now `RESULT_RETAIN_RUNS` keeps the last **10 runs
+per page and strategy**, roughly two months of weekly checks, and a run's
+results, markdown and AI recommendation are kept and removed **together**.
+Hollowing out old rows was rejected: a report you can open whose evidence has
+been deleted is worse than one that has plainly aged out.
+
+### Design pass
+
+The app's accent was `#dc2626` -- red -- sitting beside Lighthouse's red score
+band, which is a genuine confusion rather than only an aesthetic one. The chrome
+is now colourless and **score colour is the only saturated thing on screen**.
+
+The signature element is a **spectrum strip**: every page sorted worst to best,
+with bar height and colour both encoding score so it survives greyscale. It
+shows what pagespeed.web.dev structurally cannot -- the shape of a whole site. A
+long red shoulder means systemic; a thin red tail means a few bad pages.
+
+### Onboarding
+
+Derived from real data rather than a `hasOnboarded` flag, so it stays truthful:
+clearing a key makes the checklist say so instead of insisting setup is done.
+Only the next incomplete step gets a button, and a viewer is told who can do it
+rather than handed a control that will reject them.
+
+### Also closed
+
+- Per-site PSI keys, verified against Google on save, never returned to the
+  browser. Audits read the site's key, not the environment's.
+- Teammates: invite, change role, remove, revoke. The last admin cannot be
+  demoted or removed -- that locks everyone out of settings permanently.
+- Password reset by email: hashed, single-use, 30-minute expiry, identical
+  response for unknown addresses so the endpoint cannot enumerate accounts.
+- Agent-targeted markdown export with real resource URLs and evidence tables,
+  per page or per section, for handing to Cursor / Claude / Codex.
+- Resend transport so notifications send as the app from a verified domain
+  rather than from somebody's personal mailbox.
+
+### Verified on a clean database
+
+Sign up → add site → store key → read sitemap (747 pages, 68 sections) →
+measure a section (8 audits, 0 failures) using the site's own key.
