@@ -41,9 +41,9 @@ Milestone definitions and their verification steps are in `docs/PLAN.md`
 |----|-----------|--------|
 | M0 | Foundation — deps, schema, env, db, logger, eslint boundary | **done** (migration pending Docker) |
 | M1 | PSI extraction (pure, fixture-driven) | **done** — 47 tests passing against real fixtures |
-| M2 | Markdown report (pure) | **next** |
-| M3 | PSI client + rate limiter + throughput dry-run | not started |
-| M4 | Sitemap ingestion | not started |
+| M2 | Markdown report (pure) | **done** — 17 tests |
+| M3 | PSI client + rate limiter + throughput dry-run | **done** — gate PASSED |
+| M4 | Sitemap ingestion | **next** |
 | M5 | Queue, idempotency, resumability | not started |
 | M6 | Services for the dashboard | not started |
 | M7 | Auth + routes | not started |
@@ -61,9 +61,9 @@ re-plan rather than building on top of it.
 
 | Item | Why | Status |
 |---|---|---|
-| OrbStack installed + launched | Provides Postgres 17 + Redis 7 via `docker compose`. `prisma migrate dev` cannot run without it. | **outstanding** |
+| OrbStack installed + launched | Provides Postgres 17 + Redis 7. | **done** — installed, running, both containers healthy |
 | `PSI_API_KEY` in `.env` | Mandatory — the keyless PSI endpoint returns `429 Quota exceeded` (verified). Note: Prisma reads `.env`, not `.env.local`. | **done** — key present and verified working |
-| `SITE_SITEMAP_URL` in `.env` | Needed for M4 ingestion. Still the `example.com` placeholder — needs the real site URL. | **outstanding** |
+| `SITE_SITEMAP_URL` in `.env` | Needed for M4 ingestion. | **done** — set to `https://www.zuddl.com/sitemap.xml` |
 | Anthropic credentials | Only needed at stage 5 (AI recommendations). Not a blocker now. | deferred |
 
 Work that does **not** need any of the above: M0 file scaffolding, M1 and M2
@@ -264,7 +264,7 @@ Gaps found, and their status:
 
 | Gap | Status |
 |---|---|
-| **No git repository at all** | **Outstanding — the biggest one.** No version control, no undo, nothing to hand off cleanly. Left for the user to decide, since initialising and committing is their call. |
+| **No git repository** | **Fixed** — `git init` + initial commit `aa6ccbe`, after verifying no `.env` and no API key were staged. |
 | `prisma/seed.ts`, `scripts/hash-password.ts` referenced but missing | **Fixed** — both written and smoke-tested. |
 | `CLAUDE.md` still the marketing-site template | **Fixed** — rewritten; original preserved. |
 | `docs/DECISIONS.md` orphaned (unlinked) | **Fixed** — linked from README and this file. |
@@ -307,3 +307,59 @@ cannot silently regress. `app/` and `components/` still use `@/` normally.
 
 Also set `allowImportingTsExtensions: true` in tsconfig (safe — `noEmit` was
 already on) so tsc accepts the extensions Node requires.
+
+
+### Infrastructure live
+
+OrbStack installed and running; `docker-compose.dev.yml` up with Postgres 17 and
+Redis 7 both healthy. First migration applied (`20260819122746_init`) — all 11
+tables present. Seed run: the Site row points at `https://www.zuddl.com`.
+`SESSION_SECRET` generated. `AUTH_PASSWORD_HASH` still empty (M7; the password is
+the user's to choose — `npm run hash-password -- '...'`).
+
+`SITE_NAME` is still the default `"Company Site"` — cosmetic, appears in the UI
+header. Worth changing to `Zuddl`.
+
+Git initialised and committed as `aa6ccbe`, after verifying the staged set
+contained no `.env` file and no occurrence of the API key.
+
+### M2 complete — markdown report
+
+`lib/report/{format,aiSection,markdown}.ts`, 17 tests. Pure and deterministic
+(`generatedAt` is a parameter). Two tests exist specifically for the failure mode
+that motivated the sentinel design: an AI body containing its own `##` headings,
+and a body echoing a literal sentinel. Both must leave the document splice-able
+afterwards — the real hazard is a report that can never be updated again.
+
+### M3 complete — THE GATE PASSED
+
+`lib/psi/{rateLimiter,client}.ts`, `lib/queue/connection.ts`,
+`scripts/throughput-dryrun.ts`, 13 client tests.
+
+The rate limiter is a Redis token bucket implemented as a single Lua script, so
+check-and-increment is atomic — with 20 concurrent workers a read-then-write in
+JS would let several through at once. It is deliberately separate from BullMQ's
+own limiter, because BullMQ's only governs *queued* jobs and a synchronous
+single-page audit would bypass it.
+
+**Measured against real Redis with PSI latency simulated at the observed 11–24 s:**
+
+| | |
+|---|---|
+| Target | 0.750 req/s |
+| **Steady-state achieved** | **0.695 req/s** (within the ±0.08 tolerance) |
+| Peak in flight | 15 of 20 concurrency |
+| Projected 2000-call sweep | **48 minutes** |
+
+Peak in-flight of 15 against a concurrency of 20 is the important detail: it
+confirms the *limiter* is the bottleneck rather than the worker pool, which is
+the correct configuration. The steady-state sitting slightly under target comes
+from fixed-bucket boundaries in the sliding window, and erring under the limit
+is the safe direction.
+
+**The 0.75 assumption holds. The schedule-only design and the ~44-minute sweep
+estimate are sound.**
+
+Client error classification is tested against the captured live 400 body: a
+Lighthouse content failure (`lighthouseUserError` / `NO_FCP`) is classified
+`content` and becomes a stored error row, while other 400s stay `permanent`.
