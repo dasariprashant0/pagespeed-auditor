@@ -1,0 +1,265 @@
+// PageSpeed Auditor data model.
+//
+// Additions to the original build spec are marked "SPEC+" with the reason.
+// See docs/PLAN.md -> "Schema changes to the spec's reference model".
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+}
+
+model Site {
+  id         String   @id @default(cuid())
+  name       String
+  sitemapUrl String
+  baseUrl    String // SPEC+: normalization rejects cross-domain <loc> entries
+  createdAt  DateTime @default(now())
+
+  schedule Schedule?
+  notif    NotificationSetting?
+  groups   Group[]
+  pages    Page[]
+  runs     AuditRun[]
+}
+
+model Group {
+  id     String @id @default(cuid())
+  siteId String
+  site   Site   @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  name   String
+  slug   String
+
+  // The group's IDENTITY is user-owned: never auto-renamed or auto-deleted.
+  // Distinct from Page.isManuallyGrouped, which pins one page's assignment.
+  isManual Boolean @default(false)
+
+  pages   Page[]
+  aliases GroupAlias[]
+
+  @@unique([siteId, slug])
+}
+
+// SPEC+: without this, merging /blog and /blogs into "Blog" loses the `blogs`
+// slug, and the next ingest recreates it and pulls the pages back out.
+// Rename and merge must both leave an alias behind.
+model GroupAlias {
+  id      String @id @default(cuid())
+  slug    String @unique
+  groupId String
+  group   Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+}
+
+model Page {
+  id      String  @id @default(cuid())
+  siteId  String
+  site    Site    @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  groupId String?
+  group   Group?  @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  url     String  @unique
+  path    String
+  title   String?
+
+  // SPEC+: URLs dropped from the sitemap are deactivated, never deleted --
+  // the audit history is the product.
+  isActive Boolean @default(true)
+
+  // SPEC+: pins THIS page's group assignment against re-ingest.
+  isManuallyGrouped Boolean @default(false)
+
+  lastmod       DateTime?
+  lastAuditedAt DateTime?
+
+  // SPEC+: denormalized pointers. Turn "1000 pages with current scores" from a
+  // correlated subquery per row into two plain joins.
+  latestResultMobileId  String?
+  latestResultDesktopId String?
+
+  results AuditResult[]
+  issues  AuditIssue[]
+
+  @@index([siteId, isActive])
+  @@index([groupId, isActive])
+}
+
+model AuditRun {
+  id          String @id @default(cuid())
+  siteId      String
+  site        Site   @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  type        String // "full_sweep" | "group" | "page"
+  triggeredBy String // "schedule" | "manual"
+
+  // SPEC+: "skipped" added -- the overlap guard refuses to start a sweep while
+  // another is running rather than queueing it behind.
+  status String // "queued" | "running" | "completed" | "failed" | "skipped"
+
+  scopeLabel String? // "group:blog (mobile)" | "scheduled sweep"
+  skipReason String?
+
+  startedAt     DateTime  @default(now())
+  finishedAt    DateTime?
+  completedAt   DateTime?
+  totalJobs     Int
+  completedJobs Int       @default(0)
+  failedJobs    Int       @default(0) // SPEC+: lets a run finalize despite failures
+  error         String?
+  updatedAt     DateTime  @updatedAt
+
+  results AuditResult[]
+  issues  AuditIssue[]
+
+  @@index([siteId, type, status, finishedAt])
+  @@index([status])
+}
+
+model AuditResult {
+  id         String   @id @default(cuid())
+  pageId     String
+  page       Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  auditRunId String
+  auditRun   AuditRun @relation(fields: [auditRunId], references: [id], onDelete: Cascade)
+  strategy   String // "mobile" | "desktop"
+
+  // SPEC+: error rows carry status="error" with null scores, so completedJobs
+  // can reach totalJobs and the run can finalize.
+  // CONSEQUENCE: every average / trend / top-issues query MUST filter status="ok".
+  status       String  @default("ok") // "ok" | "error"
+  runtimeError String?
+
+  // Nullable throughout: a category can fail to run, and null != 0 on a trend chart.
+  performanceScore   Int?
+  accessibilityScore Int?
+  bestPracticesScore Int?
+  seoScore           Int?
+
+  // --- Lab metrics (Lighthouse) ---
+  lcp Float?
+  cls Float?
+  fcp Float?
+  ttfb Float?
+
+  // SPEC+: INP is a FIELD-ONLY metric. Lab runs do not produce it, so this is
+  // nullable and populated only from CrUX. NEVER write TBT here -- it silently
+  // poisons every trend and regression comparison.
+  inp Float?
+
+  // SPEC+: the lab proxy for responsiveness, always labelled as such in the UI.
+  tbt        Float?
+  speedIndex Float?
+
+  // --- Field data (CrUX) ---
+  // SPEC+: real columns, not derived from rawJson at read time -- a 90-day group
+  // trend pulls thousands of rows and JSON path extraction can't use an index.
+  fieldSource  String? // "page" | "origin_fallback" | "none"
+  fieldOverall String? // normalized "good" | "ni" | "poor"
+  fieldLcp     Float?
+  fieldInp     Float?
+  fieldCls     Float? // ALREADY divided by 100 (CrUX reports CLS x 100)
+  fieldFcp     Float?
+  fieldTtfb    Float?
+  fieldJson    Json? // trimmed loadingExperience blob (~2 KB), not the full response
+
+  finalUrl          String?
+  lighthouseVersion String?
+
+  // Pruned before storage (screenshots/treemap/i18n/timing stripped).
+  // Never SELECT * on this table -- use the shared summary select.
+  rawJson        Json?
+  markdownReport String
+
+  createdAt DateTime @default(now())
+
+  recommendation Recommendation?
+  issues         AuditIssue[]
+
+  // SPEC+ and load-bearing: the durable idempotency guarantee. BullMQ's jobId
+  // dedupe only holds while the job exists in Redis; this survives eviction.
+  @@unique([auditRunId, pageId, strategy])
+  @@index([pageId, strategy, createdAt])
+  @@index([auditRunId, status])
+}
+
+// SPEC+: one row per failing audit per result.
+// The "Top issues" widget groups the latest result of every page by audit id.
+// Doing that over rawJson means detoasting ~240 MB and running jsonb_each over
+// ~180 audit objects per row on every dashboard load, and no index helps (GIN
+// accelerates containment, not grouped aggregation over dynamic keys).
+// With this table it is one indexed GROUP BY. Target < 50 ms over 60k rows.
+model AuditIssue {
+  id            String      @id @default(cuid())
+  auditResultId String
+  auditResult   AuditResult @relation(fields: [auditResultId], references: [id], onDelete: Cascade)
+  auditRunId    String
+  auditRun      AuditRun    @relation(fields: [auditRunId], references: [id], onDelete: Cascade)
+  pageId        String
+  page          Page        @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  strategy      String
+
+  auditId  String // "render-blocking-resources"
+  category String // "performance" | "accessibility" | "best-practices" | "seo"
+  group    String // "load-opportunities" | "diagnostics" | "other"
+  title    String
+
+  score        Float?
+  displayValue String?
+  savingsMs    Float?
+  savingsBytes Float?
+  weight       Float   @default(0)
+
+  createdAt DateTime @default(now())
+
+  // Makes "row count == distinct page count" a real invariant, which is what
+  // lets groupBy._count be correct without COUNT(DISTINCT) (Prisma can't express it).
+  @@unique([auditResultId, auditId])
+  @@index([auditRunId, strategy, auditId])
+  @@index([auditRunId, strategy, savingsMs])
+  @@index([pageId, strategy, auditId])
+}
+
+model Recommendation {
+  id            String      @id @default(cuid())
+  auditResultId String      @unique
+  auditResult   AuditResult @relation(fields: [auditResultId], references: [id], onDelete: Cascade)
+
+  content String @default("")
+  model   String @default("")
+
+  // SPEC+: makes the create-then-read pattern an atomic lock (ON CONFLICT DO
+  // NOTHING), so two tabs opening the same report generate exactly once.
+  status    String  @default("generating") // "generating" | "complete" | "failed"
+  error     String?
+  startedAt DateTime @default(now())
+
+  generatedAt DateTime @default(now())
+}
+
+model Schedule {
+  id       String  @id @default(cuid())
+  siteId   String  @unique
+  site     Site    @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  cronExpr String? // null = disabled
+  timezone String  @default("UTC")
+  enabled  Boolean @default(false)
+
+  lastRunAt DateTime?
+  nextRunAt DateTime?
+}
+
+model NotificationSetting {
+  id              String  @id @default(cuid())
+  siteId          String  @unique
+  site            Site    @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  emailEnabled    Boolean @default(false)
+  emailTo         String?
+  slackEnabled    Boolean @default(false)
+  slackWebhookUrl String?
+}
