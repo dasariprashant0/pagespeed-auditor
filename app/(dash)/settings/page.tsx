@@ -1,58 +1,108 @@
 import { prisma } from '@/lib/db';
 import { getEnv } from '@/lib/env';
 import { listGroupsWithAggregates } from '@/lib/services/results.service';
+import { estimateRun, formatDuration } from '@/lib/services/estimate.service';
 import { AppShell } from '@/components/shell/AppShell';
+import { ScheduleForm } from '@/components/settings/ScheduleForm';
+import { NotificationForm } from '@/components/settings/NotificationForm';
+import { PriorityForm } from '@/components/settings/PriorityForm';
 
 export const dynamic = 'force-dynamic';
 
-/** Masks a secret so the page can confirm it is set without disclosing it. */
-function masked(v: string): string {
+/** Confirms a secret is set without disclosing it. */
+function masked(v: string | null | undefined): string {
   if (!v) return 'not set';
-  return `${v.slice(0, 4)}${'•'.repeat(8)}${v.slice(-4)}`;
+  return v.length <= 12 ? '••••••••' : `${v.slice(0, 6)}${'•'.repeat(10)}${v.slice(-4)}`;
+}
+
+function Section({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <section className="rounded-[8px] border border-[var(--border)] bg-[var(--surface)] p-4">
+      <h2 className="font-[family-name:var(--font-display)] text-[13px] font-medium">{title}</h2>
+      {hint && <p className="mb-3 mt-0.5 max-w-xl text-[11px] text-[var(--muted)]">{hint}</p>}
+      {children}
+    </section>
+  );
 }
 
 export default async function SettingsPage() {
   const env = getEnv();
   const site = await prisma.site.findFirstOrThrow();
-  const groups = await listGroupsWithAggregates(site.id, { strategy: 'mobile' });
-  const rail = groups
-    // Already in sitemap order from the service; re-sorting here would undo it.
-    .filter((g) => g.pageCount > 0)
-    .map((g) => ({ slug: g.slug, name: g.name, pageCount: g.pageCount }));
 
-  const schedule = await prisma.schedule.findUnique({ where: { siteId: site.id } });
+  const [groups, schedule, notif] = await Promise.all([
+    listGroupsWithAggregates(site.id, { strategy: 'mobile' }),
+    prisma.schedule.findUnique({ where: { siteId: site.id } }),
+    prisma.notificationSetting.findUnique({ where: { siteId: site.id } }),
+  ]);
 
-  const rows: Array<[string, string]> = [
-    ['Site', site.name],
-    ['Base URL', site.baseUrl],
-    ['Sitemap', site.sitemapUrl],
-    ['PSI API key', masked(env.PSI_API_KEY)],
-    ['Login user', env.AUTH_USERNAME],
-    ['Password', env.AUTH_PASSWORD_HASH ? 'configured' : 'NOT SET — run npm run set-password'],
-    ['Worker concurrency', String(env.WORKER_CONCURRENCY)],
-    ['PSI rate', `${env.PSI_RATE_MAX} per ${env.PSI_RATE_WINDOW_MS} ms`],
-    ['Sync group limit', `${env.SYNC_GROUP_PAGE_LIMIT} pages`],
-    ['Schedule', schedule?.enabled ? (schedule.cronExpr ?? 'enabled') : 'disabled'],
-  ];
+  const activePages = groups.reduce((n, g) => n + g.pageCount, 0);
+  const sweepEstimate = await estimateRun(activePages * 2, site.id);
+
+  const rail = groups.filter((g) => g.pageCount > 0).map((g) => ({ slug: g.slug, name: g.name, pageCount: g.pageCount }));
+  const pinned = groups.filter((g) => g.priority !== null).sort((a, b) => a.priority! - b.priority!).map((g) => g.slug);
 
   return (
     <AppShell siteName={site.name} groups={rail} breadcrumb="Settings">
-      <h1 className="mb-1 font-[family-name:var(--font-display)] text-lg font-semibold tracking-tight">
-        Settings
-      </h1>
-      <p className="mb-5 max-w-xl text-[12px] text-[var(--muted)]">
-        Read-only for now. Everything here is configured in <code>.env</code>; editable
-        settings and the schedule builder are the next milestone.
-      </p>
+      <h1 className="mb-4 font-[family-name:var(--font-display)] text-lg font-semibold tracking-tight">Settings</h1>
 
-      <dl className="max-w-2xl divide-y divide-[var(--border)] overflow-hidden rounded-[8px] border border-[var(--border)] bg-[var(--surface)]">
-        {rows.map(([k, v]) => (
-          <div key={k} className="flex gap-4 px-3.5 py-2">
-            <dt className="w-44 shrink-0 text-[12px] text-[var(--muted)]">{k}</dt>
-            <dd className="min-w-0 break-all text-[12px]">{v}</dd>
-          </div>
-        ))}
-      </dl>
+      <div className="max-w-3xl space-y-3">
+        <Section
+          title="Scheduled sweep"
+          hint={`A full sweep is ${sweepEstimate.jobs} PSI calls, ${formatDuration(sweepEstimate.seconds)}${
+            sweepEstimate.measured ? ` based on your last ${sweepEstimate.sampleSize} audits` : ' (estimated)'
+          }. Sweeps only ever run on this schedule — there is no "audit everything now" button, because a button that shows nothing for half an hour is worse than no button.`}
+        >
+          <ScheduleForm
+            initial={{
+              cronExpr: schedule?.cronExpr ?? null,
+              timezone: schedule?.timezone ?? 'Asia/Kolkata',
+              enabled: schedule?.enabled ?? false,
+              nextRunAt: schedule?.nextRunAt ? schedule.nextRunAt.toISOString() : null,
+            }}
+          />
+        </Section>
+
+        <Section title="Notifications" hint="Both channels are off until you turn them on.">
+          <NotificationForm
+            initial={{
+              emailEnabled: notif?.emailEnabled ?? false,
+              emailTo: notif?.emailTo ?? null,
+              slackEnabled: notif?.slackEnabled ?? false,
+              slackWebhookMasked: notif?.slackWebhookUrl ? masked(notif.slackWebhookUrl) : null,
+            }}
+          />
+        </Section>
+
+        <Section
+          title="Sweep order"
+          hint="Groups are swept in sitemap order by default. Pin the ones you care about to have them measured first."
+        >
+          <PriorityForm groups={rail} initialPinned={pinned} />
+        </Section>
+
+        <Section title="Configuration" hint="Set in .env; restart after changing.">
+          <dl className="divide-y divide-[var(--border)] text-[12px]">
+            {([
+              ['Site', site.name],
+              ['Base URL', site.baseUrl],
+              ['Sitemap', site.sitemapUrl],
+              ['Pages tracked', `${activePages} active`],
+              ['PSI API key', masked(env.PSI_API_KEY)],
+              ['Login user', env.AUTH_USERNAME],
+              ['Password', env.AUTH_PASSWORD_HASH ? 'configured' : 'NOT SET — run npm run set-password'],
+              ['Worker concurrency', String(env.WORKER_CONCURRENCY)],
+              ['PSI rate limit', `${env.PSI_RATE_MAX} per ${env.PSI_RATE_WINDOW_MS} ms`],
+              ['Measured call time', sweepEstimate.measured ? `${Math.round(sweepEstimate.medianCallMs / 1000)}s median` : 'no data yet'],
+              ['Email transport', process.env.EMAIL_TRANSPORT ?? 'none'],
+            ] as Array<[string, string]>).map(([k, v]) => (
+              <div key={k} className="flex flex-wrap gap-x-4 py-1.5">
+                <dt className="w-44 shrink-0 text-[var(--muted)]">{k}</dt>
+                <dd className="min-w-0 break-all">{v}</dd>
+              </div>
+            ))}
+          </dl>
+        </Section>
+      </div>
     </AppShell>
   );
 }

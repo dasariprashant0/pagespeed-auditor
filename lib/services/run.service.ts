@@ -287,10 +287,17 @@ export async function expandScope(
         ? { siteId, isActive: true, group: { slug: scope.ref ?? '', siteId } }
         : { siteId, isActive: true };
 
+  // Sweep order matters: a full sweep is ~35 minutes, so whoever is watching a
+  // specific fix wants those pages measured first. Manual group priority wins,
+  // then the sitemap's own order, then path for stability.
   const pages = await prisma.page.findMany({
     where,
-    select: { id: true, url: true },
-    orderBy: { id: 'asc' },
+    select: { id: true, url: true, sitemapIndex: true, group: { select: { priority: true } } },
+    orderBy: [
+      { group: { priority: { sort: 'asc', nulls: 'last' } } },
+      { sitemapIndex: { sort: 'asc', nulls: 'last' } },
+      { path: 'asc' },
+    ],
   });
 
   return pages.flatMap((p) =>

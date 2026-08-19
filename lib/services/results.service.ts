@@ -185,7 +185,7 @@ export async function listGroupsWithAggregates(
   const [groups, pages] = await Promise.all([
     prisma.group.findMany({
       where: { siteId },
-      select: { id: true, slug: true, name: true, isManual: true },
+      select: { id: true, slug: true, name: true, isManual: true, priority: true },
     }),
     // Inactive pages are excluded everywhere in this file: they have left the
     // sitemap, will never be swept again, and counting them would inflate
@@ -247,6 +247,7 @@ export async function listGroupsWithAggregates(
     return {
       id: g.id,
       sitemapIndex,
+      priority: g.priority,
       slug: g.slug,
       name: g.name,
       isManual: g.isManual,
@@ -265,6 +266,12 @@ export async function listGroupsWithAggregates(
   // so ranking by it buries a small but important group under a large
   // incidental one. Groups with no position (nothing ingested yet) sort last.
   summaries.sort((a, b) => {
+    // An explicit priority always outranks sitemap position.
+    if (a.priority !== null || b.priority !== null) {
+      if (a.priority === null) return 1;
+      if (b.priority === null) return -1;
+      if (a.priority !== b.priority) return a.priority - b.priority;
+    }
     if (a.sitemapIndex === null && b.sitemapIndex === null) return a.name.localeCompare(b.name);
     if (a.sitemapIndex === null) return 1;
     if (b.sitemapIndex === null) return -1;

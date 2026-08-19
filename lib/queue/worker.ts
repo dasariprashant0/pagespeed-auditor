@@ -5,6 +5,8 @@ import { logger } from '../logger.ts';
 import { prisma } from '../db.ts';
 import { backoffMs } from '../psi/client.ts';
 import { reconcileStaleRuns } from '../services/run.service.ts';
+import { advanceSchedule, dueSchedules } from '../services/schedule.service.ts';
+import { enqueuePlanSweep } from './producers.ts';
 import { QUEUE_AUDIT, QUEUE_CONTROL, JOB_FINALIZE_RUN, JOB_PLAN_SWEEP } from './names.ts';
 import { getRedis, auditJobOptions, closeQueues } from './queues.ts';
 import { processAuditPage } from './processors/auditPage.processor.ts';
@@ -99,11 +101,39 @@ async function main() {
     'worker ready',
   );
 
+  /**
+   * Schedule ticker.
+   *
+   * A plain interval in the worker rather than BullMQ repeatable jobs: the
+   * schedule already lives in Postgres as the source of truth, so a second copy
+   * in Redis is a second thing to keep in sync and to reconcile after a flush.
+   * Firing is idempotent -- nextRunAt advances immediately, and the planner
+   * skips if a sweep is already running.
+   */
+  const scheduleTick = setInterval(() => {
+    void (async () => {
+      try {
+        const due = await dueSchedules();
+        for (const s of due) {
+          if (!s.cronExpr) continue;
+          // Advance FIRST: a slow enqueue must not let the next tick fire the
+          // same schedule again.
+          await advanceSchedule(s.id, s.cronExpr, s.timezone);
+          await enqueuePlanSweep(s.siteId, 'schedule');
+          logger.info({ siteId: s.siteId, cron: s.cronExpr }, 'scheduled sweep queued');
+        }
+      } catch (e) {
+        logger.error({ err: e instanceof Error ? e.message : String(e) }, 'schedule tick failed');
+      }
+    })();
+  }, 60_000);
+
   let shuttingDown = false;
   const shutdown = async (signal: string) => {
     if (shuttingDown) return;
     shuttingDown = true;
     logger.info({ signal }, 'shutting down — letting in-flight jobs finish');
+    clearInterval(scheduleTick);
     // close() waits for active jobs rather than killing them mid-PSI-call,
     // so their results are still written and completedJobs stays truthful.
     await Promise.allSettled([auditWorker.close(), controlWorker.close()]);

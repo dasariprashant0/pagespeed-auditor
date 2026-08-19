@@ -43,6 +43,11 @@ model Group {
   // Distinct from Page.isManuallyGrouped, which pins one page's assignment.
   isManual Boolean @default(false)
 
+  // SPEC+: manual sweep ordering. Null means "use sitemap position"; a number
+  // pulls the group forward. A sweep takes ~35 minutes, so which groups get
+  // measured first genuinely matters when one is watching a specific fix.
+  priority Int?
+
   pages   Page[]
   aliases GroupAlias[]
 

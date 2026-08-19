@@ -38,6 +38,8 @@ export interface GroupSummaryDTO {
   id: string;
   /** Earliest sitemap position of any page in the group; null if unknown. */
   sitemapIndex: number | null;
+  /** Manual sweep order; null means "follow the sitemap". */
+  priority: number | null;
   slug: string;
   name: string;
   isManual: boolean;
