@@ -6,6 +6,7 @@ import { saveNotificationsAction, sendTestNotificationAction } from '@/app/actio
 export function NotificationForm({
   initial,
   sentFrom,
+  appSender = false,
 }: {
   initial: {
     emailEnabled: boolean;
@@ -16,6 +17,8 @@ export function NotificationForm({
   };
   /** The sending mailbox, shown so it is not confused with the recipients. */
   sentFrom: string | null;
+  /** True when sending as the app (verified domain) rather than a person's mailbox. */
+  appSender?: boolean;
 }) {
   const [state, action, pending] = useActionState(saveNotificationsAction, null);
   const [testing, startTest] = useTransition();
@@ -42,8 +45,14 @@ export function NotificationForm({
           </label>
           {sentFrom && (
             <p className="text-[11px] text-[var(--muted)]">
-              Sent from <strong>{sentFrom}</strong> — the one mailbox that does the sending,
-              configured in <code>.env</code>. Recipients above can be anyone.
+              Sent from <strong>{sentFrom}</strong>. Recipients above can be anyone, on any domain.
+              {!appSender && (
+                <>
+                  {' '}That is a personal mailbox — to send as the app instead, from an address
+                  like <code>pagespeed@yourdomain.com</code> that belongs to nobody in particular,
+                  switch <code>EMAIL_TRANSPORT</code> to <code>resend</code>.
+                </>
+              )}
             </p>
           )}
         </div>

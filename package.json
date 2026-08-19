@@ -12,7 +12,7 @@
     "worker": "tsx lib/queue/worker.ts",
     "db:up": "docker compose -f docker-compose.dev.yml up -d",
     "db:down": "docker compose -f docker-compose.dev.yml down",
-    "db:migrate": "prisma migrate dev && prisma generate && echo \"\n  Schema changed \u2014 RESTART the dev server and worker; both cache the generated client.\n\"",
+    "db:migrate": "prisma migrate dev && prisma generate && echo \"\n  Schema changed — RESTART the dev server and worker; both cache the generated client.\n\"",
     "db:studio": "prisma studio",
     "db:generate": "prisma generate",
     "db:seed": "tsx prisma/seed.ts",
@@ -49,6 +49,7 @@
     "prisma": "^7.9.1",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "resend": "^6.20.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {

@@ -73,7 +73,8 @@ export default async function SettingsPage() {
           }
         >
           <NotificationForm
-            sentFrom={process.env.SMTP_USER ?? null}
+            sentFrom={process.env.EMAIL_TRANSPORT === 'resend' ? (process.env.EMAIL_FROM ?? null) : (process.env.SMTP_USER ?? null)}
+            appSender={process.env.EMAIL_TRANSPORT === 'resend'}
             initial={{
               emailEnabled: notif?.emailEnabled ?? false,
               emailTo: notif?.emailTo ?? null,
@@ -103,7 +104,14 @@ export default async function SettingsPage() {
               ['Pages tested at once', String(env.WORKER_CONCURRENCY)],
               ['Google rate limit', `${env.PSI_RATE_MAX} requests per ${env.PSI_RATE_WINDOW_MS / 1000}s`],
               ['Typical time per page', sweepEstimate.measured ? `${Math.round(sweepEstimate.medianCallMs / 1000)} seconds (measured)` : 'not measured yet'],
-              ['Email', emailProblem ? 'not sending — see the Notifications section' : `sending via ${process.env.SMTP_HOST}`],
+              [
+                'Email',
+                emailProblem
+                  ? 'not sending — see the Notifications section'
+                  : process.env.EMAIL_TRANSPORT === 'resend'
+                    ? `sending as ${process.env.EMAIL_FROM} via Resend`
+                    : `sending via ${process.env.SMTP_HOST}`,
+              ],
             ] as Array<[string, string]>).map(([k, v]) => (
               <div key={k} className="flex flex-wrap gap-x-4 py-1.5">
                 <dt className="w-44 shrink-0 text-[var(--muted)]">{k}</dt>

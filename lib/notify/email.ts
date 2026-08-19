@@ -23,8 +23,20 @@ export type EmailOutcome =
  * harder to trace.
  */
 export function emailConfigProblem(): string | null {
-  if ((process.env.EMAIL_TRANSPORT ?? 'none') !== 'smtp') {
-    return 'EMAIL_TRANSPORT is not "smtp", so messages are written to the log instead of sent.';
+  const transport = process.env.EMAIL_TRANSPORT ?? 'none';
+
+  if (transport === 'resend') {
+    if (!process.env.RESEND_API_KEY) {
+      return 'RESEND_API_KEY is not set. Create a key at resend.com, verify your domain, then run: npm run env -- RESEND_API_KEY re_xxx';
+    }
+    if (!process.env.EMAIL_FROM) {
+      return 'EMAIL_FROM is not set. Use an address on your verified domain, e.g. "PageSpeed Auditor <pagespeed@zuddl.com>".';
+    }
+    return null;
+  }
+
+  if (transport !== 'smtp') {
+    return 'Email is not configured, so messages are written to the log instead of sent. Set EMAIL_TRANSPORT to "resend" (sends as the app from your own domain) or "smtp" (sends from one person\'s mailbox).';
   }
   if (!process.env.SMTP_HOST) return 'SMTP_HOST is not set.';
   if (!process.env.SMTP_USER) return 'SMTP_USER is not set.';
@@ -46,13 +58,6 @@ export async function sendEmail(
 ): Promise<EmailOutcome> {
   const transport = process.env.EMAIL_TRANSPORT ?? 'none';
   if (to.length === 0) return { sent: false, reason: 'No recipient address.' };
-
-  if (transport !== 'smtp') {
-    // Logging is a legitimate dev mode, but returning success here is how the
-    // UI came to report "Test sent" when nothing had been sent.
-    logger.info({ to, subject, preview: text.slice(0, 200) }, 'email suppressed (EMAIL_TRANSPORT=none)');
-    return { sent: false, reason: emailConfigProblem() ?? 'Email is not configured.' };
-  }
 
   const problem = emailConfigProblem();
   if (problem) return { sent: false, reason: problem };
