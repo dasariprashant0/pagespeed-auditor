@@ -66,6 +66,7 @@ export default async function PageReport({
 
   return (
     <AppShell
+      orgName={ctx.organizationName}
       siteName={site.name}
       groups={rail}
       activeSlug={report.page.groupSlug ?? undefined}

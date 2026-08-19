@@ -1,0 +1,17 @@
+[     358ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297
+[     400ms] [LOG] [HMR] connected @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297
+[     545ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297
+[     930ms] [LOG] [Fast Refresh] done in 507ms @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297
+[   83121ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297
+[   83145ms] [LOG] [Fast Refresh] done in 53ms @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297
+[   85882ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297
+[   86072ms] [LOG] [Fast Refresh] done in 35ms @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297
+[  123307ms] [ERROR] WebSocket connection to 'ws://localhost:3000/_next/webpack-hmr?id=aiCcucGIc9F6VIkXdCpjk' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/_next/static/chunks/883b8_next_dist_client_93c1f073._.js:10876
+[  124312ms] [ERROR] WebSocket connection to 'ws://localhost:3000/_next/webpack-hmr?id=aiCcucGIc9F6VIkXdCpjk' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/_next/static/chunks/883b8_next_dist_client_93c1f073._.js:10876
+[  125785ms] [LOG] [HMR] connected @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297
+[  127334ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297
+[  127361ms] [LOG] [HMR] connected @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297
+[  127700ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297
+[  127874ms] [LOG] [Fast Refresh] done in 276ms @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297
+[  128216ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297
+[  128452ms] [LOG] [Fast Refresh] done in 337ms @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297

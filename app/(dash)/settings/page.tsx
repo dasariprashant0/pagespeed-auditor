@@ -52,7 +52,7 @@ export default async function SettingsPage() {
   const pinned = groups.filter((g) => g.priority !== null).sort((a, b) => a.priority! - b.priority!).map((g) => g.slug);
 
   return (
-    <AppShell siteName={site.name} groups={rail} breadcrumb="Settings">
+    <AppShell orgName={ctx.organizationName} siteName={site.name} groups={rail} breadcrumb="Settings">
       <h1 className="mb-4 font-[family-name:var(--font-display)] text-lg font-semibold tracking-tight">Settings</h1>
 
       <div className="max-w-3xl space-y-3">

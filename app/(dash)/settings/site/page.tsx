@@ -40,7 +40,7 @@ export default async function SiteSettingsPage() {
   const pageCount = groups.reduce((n, g) => n + g.pageCount, 0);
 
   return (
-    <AppShell siteName={ctx.organizationName} groups={rail} breadcrumb="Settings / Site">
+    <AppShell orgName={ctx.organizationName} siteName={site?.name} groups={rail} breadcrumb="Settings / Site">
       <h1 className="title-lg mb-4">Settings</h1>
       <SettingsNav role={ctx.role} active="/settings/site" />
 

@@ -16,6 +16,7 @@ export interface RailGroup {
  * round-trip through the home page.
  */
 export function AppShell({
+  orgName,
   siteName,
   groups,
   activeSlug,
@@ -23,7 +24,10 @@ export function AppShell({
   actions,
   children,
 }: {
-  siteName: string;
+  /** The tenant. Always shown, because a person can belong to several. */
+  orgName: string;
+  /** The site whose sections the rail lists. Null before one is added. */
+  siteName?: string | null;
   groups: RailGroup[];
   activeSlug?: string;
   breadcrumb?: React.ReactNode;
@@ -44,9 +48,12 @@ export function AppShell({
           aria-label="Groups"
           className="sticky top-0 hidden h-screen w-[var(--rail-w)] shrink-0 overflow-y-auto border-r border-[var(--border)] bg-[var(--surface-subtle)] px-3 py-4 lg:block"
         >
+          {/* Organisation above, site below. Passing one or the other made the
+              sidebar label change between screens for no reason the reader
+              could see. */}
           <Link href="/" className="mb-5 block px-2">
-            <div className="eyebrow mb-0.5">PageSpeed</div>
-            <div className="title-md truncate">{siteName}</div>
+            <div className="eyebrow mb-0.5 truncate">{orgName}</div>
+            <div className="title-md truncate">{siteName ?? 'No site yet'}</div>
           </Link>
 
           <div className="eyebrow mb-1.5 px-2">Sections</div>

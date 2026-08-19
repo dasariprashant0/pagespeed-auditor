@@ -45,3 +45,415 @@
 [  373326ms] [LOG] [HMR] connected @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297
 [  375123ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297
 [  375479ms] [LOG] [Fast Refresh] done in 457ms @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297
+[  755659ms] [ERROR] ./ShipStudio/pagespeed-auditor/components/settings/ScheduleForm.tsx:5:1
+Export formatHour doesn't exist in target module
+   3 | import { useActionState, useState } from 'react';
+   4 | import { saveScheduleAction } from '@/app/actions/settings';
+>  5 | import {
+     | ^^^^^^^^
+>  6 |   choiceToCron, cronToChoice, describeChoice, describeCron, formatHour,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   DAYS, DEFAULT_CHOICE, type Frequency, type ScheduleChoice,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/services/cronPhrase';
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | const FREQUENCIES: Array<{ value: Frequency; label: string }> = [
+  11 |   { value: 'daily', label: 'Every day' },
+
+The export formatHour was not found in module [project]/ShipStudio/pagespeed-auditor/lib/services/cronPhrase.ts [app-client] (ecmascript).
+Did you mean to import formatTime?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./ShipStudio/pagespeed-auditor/components/settings/ScheduleForm.tsx
+    ./ShipStudio/pagespeed-auditor/app/(dash)/settings/page.tsx @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:3127
+[  755659ms] [ERROR] ./ShipStudio/pagespeed-auditor/components/settings/ScheduleForm.tsx:5:1
+Export formatHour doesn't exist in target module
+   3 | import { useActionState, useState } from 'react';
+   4 | import { saveScheduleAction } from '@/app/actions/settings';
+>  5 | import {
+     | ^^^^^^^^
+>  6 |   choiceToCron, cronToChoice, describeChoice, describeCron, formatHour,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   DAYS, DEFAULT_CHOICE, type Frequency, type ScheduleChoice,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/services/cronPhrase';
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | const FREQUENCIES: Array<{ value: Frequency; label: string }> = [
+  11 |   { value: 'daily', label: 'Every day' },
+
+The export formatHour was not found in module [project]/ShipStudio/pagespeed-auditor/lib/services/cronPhrase.ts [app-ssr] (ecmascript).
+Did you mean to import formatTime?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./ShipStudio/pagespeed-auditor/components/settings/ScheduleForm.tsx
+    ./ShipStudio/pagespeed-auditor/app/(dash)/settings/page.tsx @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:3127
+[  755707ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297
+[  759001ms] [ERROR] ./ShipStudio/pagespeed-auditor/components/settings/ScheduleForm.tsx:5:1
+Export formatHour doesn't exist in target module
+   3 | import { useActionState, useState } from 'react';
+   4 | import { saveScheduleAction } from '@/app/actions/settings';
+>  5 | import {
+     | ^^^^^^^^
+>  6 |   choiceToCron, cronToChoice, describeChoice, describeCron, formatHour,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   DAYS, DEFAULT_CHOICE, type Frequency, type ScheduleChoice,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/services/cronPhrase';
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | const FREQUENCIES: Array<{ value: Frequency; label: string }> = [
+  11 |   { value: 'daily', label: 'Every day' },
+
+The export formatHour was not found in module [project]/ShipStudio/pagespeed-auditor/lib/services/cronPhrase.ts [app-client] (ecmascript).
+Did you mean to import formatTime?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./ShipStudio/pagespeed-auditor/components/settings/ScheduleForm.tsx
+    ./ShipStudio/pagespeed-auditor/app/(dash)/settings/page.tsx @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:3127
+[  759001ms] [ERROR] ./ShipStudio/pagespeed-auditor/components/settings/ScheduleForm.tsx:5:1
+Export formatHour doesn't exist in target module
+   3 | import { useActionState, useState } from 'react';
+   4 | import { saveScheduleAction } from '@/app/actions/settings';
+>  5 | import {
+     | ^^^^^^^^
+>  6 |   choiceToCron, cronToChoice, describeChoice, describeCron, formatHour,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   DAYS, DEFAULT_CHOICE, type Frequency, type ScheduleChoice,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/services/cronPhrase';
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | const FREQUENCIES: Array<{ value: Frequency; label: string }> = [
+  11 |   { value: 'daily', label: 'Every day' },
+
+The export formatHour was not found in module [project]/ShipStudio/pagespeed-auditor/lib/services/cronPhrase.ts [app-ssr] (ecmascript).
+Did you mean to import formatTime?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./ShipStudio/pagespeed-auditor/components/settings/ScheduleForm.tsx
+    ./ShipStudio/pagespeed-auditor/app/(dash)/settings/page.tsx @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:3127
+[  759067ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297
+[  767239ms] [ERROR] ./ShipStudio/pagespeed-auditor/components/settings/ScheduleForm.tsx:5:1
+Export formatHour doesn't exist in target module
+   3 | import { useActionState, useState } from 'react';
+   4 | import { saveScheduleAction } from '@/app/actions/settings';
+>  5 | import {
+     | ^^^^^^^^
+>  6 |   choiceToCron, cronToChoice, describeChoice, describeCron, formatHour,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   DAYS, DEFAULT_CHOICE, type Frequency, type ScheduleChoice,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/services/cronPhrase';
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | const FREQUENCIES: Array<{ value: Frequency; label: string }> = [
+  11 |   { value: 'daily', label: 'Every day' },
+
+The export formatHour was not found in module [project]/ShipStudio/pagespeed-auditor/lib/services/cronPhrase.ts [app-client] (ecmascript).
+Did you mean to import formatTime?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./ShipStudio/pagespeed-auditor/components/settings/ScheduleForm.tsx
+    ./ShipStudio/pagespeed-auditor/app/(dash)/settings/page.tsx @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:3127
+[  767239ms] [ERROR] ./ShipStudio/pagespeed-auditor/components/settings/ScheduleForm.tsx:5:1
+Export formatHour doesn't exist in target module
+   3 | import { useActionState, useState } from 'react';
+   4 | import { saveScheduleAction } from '@/app/actions/settings';
+>  5 | import {
+     | ^^^^^^^^
+>  6 |   choiceToCron, cronToChoice, describeChoice, describeCron, formatHour,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   DAYS, DEFAULT_CHOICE, type Frequency, type ScheduleChoice,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/services/cronPhrase';
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | const FREQUENCIES: Array<{ value: Frequency; label: string }> = [
+  11 |   { value: 'daily', label: 'Every day' },
+
+The export formatHour was not found in module [project]/ShipStudio/pagespeed-auditor/lib/services/cronPhrase.ts [app-ssr] (ecmascript).
+Did you mean to import formatTime?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./ShipStudio/pagespeed-auditor/components/settings/ScheduleForm.tsx
+    ./ShipStudio/pagespeed-auditor/app/(dash)/settings/page.tsx @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:3127
+[  767303ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297
+[  771025ms] [ERROR] ./ShipStudio/pagespeed-auditor/components/settings/ScheduleForm.tsx:5:1
+Export formatHour doesn't exist in target module
+   3 | import { useActionState, useState } from 'react';
+   4 | import { saveScheduleAction } from '@/app/actions/settings';
+>  5 | import {
+     | ^^^^^^^^
+>  6 |   choiceToCron, cronToChoice, describeChoice, describeCron, formatHour,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   DAYS, DEFAULT_CHOICE, type Frequency, type ScheduleChoice,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/services/cronPhrase';
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | const FREQUENCIES: Array<{ value: Frequency; label: string }> = [
+  11 |   { value: 'daily', label: 'Every day' },
+
+The export formatHour was not found in module [project]/ShipStudio/pagespeed-auditor/lib/services/cronPhrase.ts [app-client] (ecmascript).
+Did you mean to import formatTime?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./ShipStudio/pagespeed-auditor/components/settings/ScheduleForm.tsx
+    ./ShipStudio/pagespeed-auditor/app/(dash)/settings/page.tsx @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:3127
+[  771025ms] [ERROR] ./ShipStudio/pagespeed-auditor/components/settings/ScheduleForm.tsx:5:1
+Export formatHour doesn't exist in target module
+   3 | import { useActionState, useState } from 'react';
+   4 | import { saveScheduleAction } from '@/app/actions/settings';
+>  5 | import {
+     | ^^^^^^^^
+>  6 |   choiceToCron, cronToChoice, describeChoice, describeCron, formatHour,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   DAYS, DEFAULT_CHOICE, type Frequency, type ScheduleChoice,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/services/cronPhrase';
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | const FREQUENCIES: Array<{ value: Frequency; label: string }> = [
+  11 |   { value: 'daily', label: 'Every day' },
+
+The export formatHour was not found in module [project]/ShipStudio/pagespeed-auditor/lib/services/cronPhrase.ts [app-ssr] (ecmascript).
+Did you mean to import formatTime?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./ShipStudio/pagespeed-auditor/components/settings/ScheduleForm.tsx
+    ./ShipStudio/pagespeed-auditor/app/(dash)/settings/page.tsx @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:3127
+[  771090ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297
+[  779266ms] [ERROR] ./ShipStudio/pagespeed-auditor/components/settings/ScheduleForm.tsx:5:1
+Export formatHour doesn't exist in target module
+   3 | import { useActionState, useState } from 'react';
+   4 | import { saveScheduleAction } from '@/app/actions/settings';
+>  5 | import {
+     | ^^^^^^^^
+>  6 |   choiceToCron, cronToChoice, describeChoice, describeCron, formatHour,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   DAYS, DEFAULT_CHOICE, type Frequency, type ScheduleChoice,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/services/cronPhrase';
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | const FREQUENCIES: Array<{ value: Frequency; label: string }> = [
+  11 |   { value: 'daily', label: 'Every day' },
+
+The export formatHour was not found in module [project]/ShipStudio/pagespeed-auditor/lib/services/cronPhrase.ts [app-client] (ecmascript).
+Did you mean to import formatTime?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./ShipStudio/pagespeed-auditor/components/settings/ScheduleForm.tsx
+    ./ShipStudio/pagespeed-auditor/app/(dash)/settings/page.tsx @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:3127
+[  779267ms] [ERROR] ./ShipStudio/pagespeed-auditor/components/settings/ScheduleForm.tsx:5:1
+Export formatHour doesn't exist in target module
+   3 | import { useActionState, useState } from 'react';
+   4 | import { saveScheduleAction } from '@/app/actions/settings';
+>  5 | import {
+     | ^^^^^^^^
+>  6 |   choiceToCron, cronToChoice, describeChoice, describeCron, formatHour,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   DAYS, DEFAULT_CHOICE, type Frequency, type ScheduleChoice,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/services/cronPhrase';
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | const FREQUENCIES: Array<{ value: Frequency; label: string }> = [
+  11 |   { value: 'daily', label: 'Every day' },
+
+The export formatHour was not found in module [project]/ShipStudio/pagespeed-auditor/lib/services/cronPhrase.ts [app-ssr] (ecmascript).
+Did you mean to import formatTime?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./ShipStudio/pagespeed-auditor/components/settings/ScheduleForm.tsx
+    ./ShipStudio/pagespeed-auditor/app/(dash)/settings/page.tsx @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:3127
+[  779331ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297
+[  783051ms] [ERROR] ./ShipStudio/pagespeed-auditor/components/settings/ScheduleForm.tsx:5:1
+Export formatHour doesn't exist in target module
+   3 | import { useActionState, useState } from 'react';
+   4 | import { saveScheduleAction } from '@/app/actions/settings';
+>  5 | import {
+     | ^^^^^^^^
+>  6 |   choiceToCron, cronToChoice, describeChoice, describeCron, formatHour,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   DAYS, DEFAULT_CHOICE, type Frequency, type ScheduleChoice,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/services/cronPhrase';
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | const FREQUENCIES: Array<{ value: Frequency; label: string }> = [
+  11 |   { value: 'daily', label: 'Every day' },
+
+The export formatHour was not found in module [project]/ShipStudio/pagespeed-auditor/lib/services/cronPhrase.ts [app-client] (ecmascript).
+Did you mean to import formatTime?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./ShipStudio/pagespeed-auditor/components/settings/ScheduleForm.tsx
+    ./ShipStudio/pagespeed-auditor/app/(dash)/settings/page.tsx @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:3127
+[  783051ms] [ERROR] ./ShipStudio/pagespeed-auditor/components/settings/ScheduleForm.tsx:5:1
+Export formatHour doesn't exist in target module
+   3 | import { useActionState, useState } from 'react';
+   4 | import { saveScheduleAction } from '@/app/actions/settings';
+>  5 | import {
+     | ^^^^^^^^
+>  6 |   choiceToCron, cronToChoice, describeChoice, describeCron, formatHour,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   DAYS, DEFAULT_CHOICE, type Frequency, type ScheduleChoice,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/services/cronPhrase';
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | const FREQUENCIES: Array<{ value: Frequency; label: string }> = [
+  11 |   { value: 'daily', label: 'Every day' },
+
+The export formatHour was not found in module [project]/ShipStudio/pagespeed-auditor/lib/services/cronPhrase.ts [app-ssr] (ecmascript).
+Did you mean to import formatTime?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./ShipStudio/pagespeed-auditor/components/settings/ScheduleForm.tsx
+    ./ShipStudio/pagespeed-auditor/app/(dash)/settings/page.tsx @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:3127
+[  783114ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297
+[  791307ms] [ERROR] ./ShipStudio/pagespeed-auditor/components/settings/ScheduleForm.tsx:5:1
+Export formatHour doesn't exist in target module
+   3 | import { useActionState, useState } from 'react';
+   4 | import { saveScheduleAction } from '@/app/actions/settings';
+>  5 | import {
+     | ^^^^^^^^
+>  6 |   choiceToCron, cronToChoice, describeChoice, describeCron, formatHour,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   DAYS, DEFAULT_CHOICE, type Frequency, type ScheduleChoice,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/services/cronPhrase';
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | const FREQUENCIES: Array<{ value: Frequency; label: string }> = [
+  11 |   { value: 'daily', label: 'Every day' },
+
+The export formatHour was not found in module [project]/ShipStudio/pagespeed-auditor/lib/services/cronPhrase.ts [app-client] (ecmascript).
+Did you mean to import formatTime?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./ShipStudio/pagespeed-auditor/components/settings/ScheduleForm.tsx
+    ./ShipStudio/pagespeed-auditor/app/(dash)/settings/page.tsx @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:3127
+[  791307ms] [ERROR] ./ShipStudio/pagespeed-auditor/components/settings/ScheduleForm.tsx:5:1
+Export formatHour doesn't exist in target module
+   3 | import { useActionState, useState } from 'react';
+   4 | import { saveScheduleAction } from '@/app/actions/settings';
+>  5 | import {
+     | ^^^^^^^^
+>  6 |   choiceToCron, cronToChoice, describeChoice, describeCron, formatHour,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   DAYS, DEFAULT_CHOICE, type Frequency, type ScheduleChoice,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/services/cronPhrase';
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | const FREQUENCIES: Array<{ value: Frequency; label: string }> = [
+  11 |   { value: 'daily', label: 'Every day' },
+
+The export formatHour was not found in module [project]/ShipStudio/pagespeed-auditor/lib/services/cronPhrase.ts [app-ssr] (ecmascript).
+Did you mean to import formatTime?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./ShipStudio/pagespeed-auditor/components/settings/ScheduleForm.tsx
+    ./ShipStudio/pagespeed-auditor/app/(dash)/settings/page.tsx @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:3127
+[  791371ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297
+[  795075ms] [ERROR] ./ShipStudio/pagespeed-auditor/components/settings/ScheduleForm.tsx:5:1
+Export formatHour doesn't exist in target module
+   3 | import { useActionState, useState } from 'react';
+   4 | import { saveScheduleAction } from '@/app/actions/settings';
+>  5 | import {
+     | ^^^^^^^^
+>  6 |   choiceToCron, cronToChoice, describeChoice, describeCron, formatHour,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   DAYS, DEFAULT_CHOICE, type Frequency, type ScheduleChoice,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/services/cronPhrase';
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | const FREQUENCIES: Array<{ value: Frequency; label: string }> = [
+  11 |   { value: 'daily', label: 'Every day' },
+
+The export formatHour was not found in module [project]/ShipStudio/pagespeed-auditor/lib/services/cronPhrase.ts [app-client] (ecmascript).
+Did you mean to import formatTime?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./ShipStudio/pagespeed-auditor/components/settings/ScheduleForm.tsx
+    ./ShipStudio/pagespeed-auditor/app/(dash)/settings/page.tsx @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:3127
+[  795076ms] [ERROR] ./ShipStudio/pagespeed-auditor/components/settings/ScheduleForm.tsx:5:1
+Export formatHour doesn't exist in target module
+   3 | import { useActionState, useState } from 'react';
+   4 | import { saveScheduleAction } from '@/app/actions/settings';
+>  5 | import {
+     | ^^^^^^^^
+>  6 |   choiceToCron, cronToChoice, describeChoice, describeCron, formatHour,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  7 |   DAYS, DEFAULT_CHOICE, type Frequency, type ScheduleChoice,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  8 | } from '@/lib/services/cronPhrase';
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | const FREQUENCIES: Array<{ value: Frequency; label: string }> = [
+  11 |   { value: 'daily', label: 'Every day' },
+
+The export formatHour was not found in module [project]/ShipStudio/pagespeed-auditor/lib/services/cronPhrase.ts [app-ssr] (ecmascript).
+Did you mean to import formatTime?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  Server Component:
+    ./ShipStudio/pagespeed-auditor/components/settings/ScheduleForm.tsx
+    ./ShipStudio/pagespeed-auditor/app/(dash)/settings/page.tsx @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:3127
+[  795141ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297
+[  802579ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297
+[  802679ms] [LOG] [Fast Refresh] done in 109ms @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297
+[  802830ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297
+[  803137ms] [LOG] [Fast Refresh] done in 409ms @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297
+[  846912ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297
+[  847098ms] [LOG] [Fast Refresh] done in 55ms @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297
+[  847222ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297
+[  847347ms] [LOG] [Fast Refresh] done in 227ms @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297
+[  848109ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297
+[  848121ms] [LOG] [Fast Refresh] done in 114ms @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297
+[  849223ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297
+[  849266ms] [LOG] [Fast Refresh] done in 144ms @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297
+[  889662ms] [ERROR] WebSocket connection to 'ws://localhost:3000/_next/webpack-hmr?id=LxNPsLK_33ECNIHOR7q3v' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/_next/static/chunks/883b8_next_dist_client_93c1f073._.js:10876
+[  890666ms] [ERROR] WebSocket connection to 'ws://localhost:3000/_next/webpack-hmr?id=LxNPsLK_33ECNIHOR7q3v' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/_next/static/chunks/883b8_next_dist_client_93c1f073._.js:10876
+[  891235ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/api/runs/active:0
+[  892186ms] [LOG] [HMR] connected @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297
+[  894822ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297
+[  894867ms] [LOG] [HMR] connected @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297
+[  895294ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297
+[  895570ms] [LOG] [Fast Refresh] done in 377ms @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297

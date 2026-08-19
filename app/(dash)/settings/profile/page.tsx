@@ -14,7 +14,7 @@ export default async function ProfilePage() {
   const rail = groups.filter((g) => g.pageCount > 0).map((g) => ({ slug: g.slug, name: g.name, pageCount: g.pageCount }));
 
   return (
-    <AppShell siteName={ctx.organizationName} groups={rail} breadcrumb="Settings / Profile">
+    <AppShell orgName={ctx.organizationName} siteName={site?.name} groups={rail} breadcrumb="Settings / Profile">
       <h1 className="mb-4 font-[family-name:var(--font-display)] text-lg font-semibold tracking-tight">Settings</h1>
       <SettingsNav role={ctx.role} active="/settings/profile" />
       <ProfileForms email={ctx.email} name={ctx.name} role={ctx.role} organizationName={ctx.organizationName} />

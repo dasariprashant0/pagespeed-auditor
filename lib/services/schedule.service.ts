@@ -28,6 +28,14 @@ export function validateCron(expr: string, timezone = 'UTC'): CronValidation {
   const trimmed = expr.trim();
   if (!trimmed) return { valid: false, error: 'Enter a schedule.', next: [] };
 
+  // A misspelled zone would otherwise be accepted and then quietly run in UTC,
+  // hours away from what was intended.
+  try {
+    new Intl.DateTimeFormat('en-GB', { timeZone: timezone });
+  } catch {
+    return { valid: false, error: `"${timezone}" is not a timezone. Use a name like Asia/Kolkata or Europe/London.`, next: [] };
+  }
+
   let times: Date[];
   try {
     const it = CronExpressionParser.parse(trimmed, { tz: timezone });

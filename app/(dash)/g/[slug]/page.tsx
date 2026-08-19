@@ -47,6 +47,7 @@ export default async function GroupPage({
 
   return (
     <AppShell
+      orgName={ctx.organizationName}
       siteName={site.name}
       groups={rail}
       activeSlug={slug}

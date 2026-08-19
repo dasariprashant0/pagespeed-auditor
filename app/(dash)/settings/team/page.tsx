@@ -46,7 +46,7 @@ export default async function TeamPage() {
   }));
 
   return (
-    <AppShell siteName={ctx.organizationName} groups={rail} breadcrumb="Settings / Teammates">
+    <AppShell orgName={ctx.organizationName} siteName={site?.name} groups={rail} breadcrumb="Settings / Teammates">
       <h1 className="title-lg mb-4">Settings</h1>
       <SettingsNav role={ctx.role} active="/settings/team" />
       <div className="max-w-2xl">

@@ -42,7 +42,7 @@ export default async function HomePage({
 
   if (!site) {
     return (
-      <AppShell siteName={ctx.organizationName} groups={[]} breadcrumb="Getting started">
+      <AppShell orgName={ctx.organizationName} groups={[]} breadcrumb="Getting started">
         <header className="mb-6">
           <div className="eyebrow">Welcome</div>
           <h1 className="title-lg mt-1">Let&rsquo;s measure your site</h1>
@@ -85,6 +85,7 @@ export default async function HomePage({
 
   return (
     <AppShell
+      orgName={ctx.organizationName}
       siteName={site.name}
       groups={rail}
       breadcrumb="Overview"
