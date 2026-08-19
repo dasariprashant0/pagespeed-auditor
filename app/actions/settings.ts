@@ -78,7 +78,7 @@ export async function sendTestNotificationAction(): Promise<SettingsResult> {
     select: { performanceScore: true, page: { select: { url: true } } },
   });
 
-  await dispatchSweepNotification(site.id, {
+  const outcome = await dispatchSweepNotification(site.id, {
     runId: 'test',
     siteName: site.name,
     event: 'sweep.completed',
@@ -93,8 +93,12 @@ export async function sendTestNotificationAction(): Promise<SettingsResult> {
     error: 'This is a test notification — no sweep actually ran.',
   });
 
-  const via = [settings.emailEnabled && 'email', settings.slackEnabled && 'Slack'].filter(Boolean).join(' and ');
-  return { ok: true, message: `Test sent via ${via}. Check the worker log if nothing arrives.` };
+  // Report what actually happened. Claiming "sent" when the transport is
+  // log-only is exactly how this looked broken rather than unconfigured.
+  if (outcome.problems.length > 0) {
+    return { ok: false, error: outcome.problems.join('  ') };
+  }
+  return { ok: true, message: `Delivered via ${outcome.attempted.join(' and ')}.` };
 }
 
 export async function previewCronAction(expr: string, timezone: string) {

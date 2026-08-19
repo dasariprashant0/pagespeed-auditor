@@ -6,6 +6,7 @@ import { AppShell } from '@/components/shell/AppShell';
 import { ScheduleForm } from '@/components/settings/ScheduleForm';
 import { NotificationForm } from '@/components/settings/NotificationForm';
 import { PriorityForm } from '@/components/settings/PriorityForm';
+import { emailIsConfigured } from '@/lib/notify/email';
 
 export const dynamic = 'force-dynamic';
 
@@ -35,6 +36,7 @@ export default async function SettingsPage() {
     prisma.notificationSetting.findUnique({ where: { siteId: site.id } }),
   ]);
 
+  const emailReady = emailIsConfigured();
   const activePages = groups.reduce((n, g) => n + g.pageCount, 0);
   const sweepEstimate = await estimateRun(activePages * 2, site.id);
 
@@ -47,10 +49,10 @@ export default async function SettingsPage() {
 
       <div className="max-w-3xl space-y-3">
         <Section
-          title="Scheduled sweep"
-          hint={`A full sweep is ${sweepEstimate.jobs} PSI calls, ${formatDuration(sweepEstimate.seconds)}${
-            sweepEstimate.measured ? ` based on your last ${sweepEstimate.sampleSize} audits` : ' (estimated)'
-          }. Sweeps only ever run on this schedule — there is no "audit everything now" button, because a button that shows nothing for half an hour is worse than no button.`}
+          title="Automatic site check"
+          hint={`Tests all ${activePages} pages on phone and desktop. Takes ${formatDuration(sweepEstimate.seconds)}${
+            sweepEstimate.measured ? '' : ' (rough estimate until a few pages have been tested)'
+          }, so it runs on a schedule rather than on demand — usually overnight. You can still test any single page or section whenever you like.`}
         >
           <ScheduleForm
             initial={{
@@ -62,7 +64,14 @@ export default async function SettingsPage() {
           />
         </Section>
 
-        <Section title="Notifications" hint="Both channels are off until you turn them on.">
+        <Section
+          title="Notifications"
+          hint={
+            emailReady
+              ? 'Both channels are off until you turn them on. Email is configured and will actually send.'
+              : 'Both channels are off until you turn them on. NOTE: EMAIL_TRANSPORT is not set to "smtp", so email is written to the log rather than sent — set EMAIL_TRANSPORT, SMTP_HOST, SMTP_USER and SMTP_PASS in .env and restart. Slack needs only a webhook URL and works without any of that.'
+          }
+        >
           <NotificationForm
             initial={{
               emailEnabled: notif?.emailEnabled ?? false,
@@ -74,8 +83,8 @@ export default async function SettingsPage() {
         </Section>
 
         <Section
-          title="Sweep order"
-          hint="Groups are swept in sitemap order by default. Pin the ones you care about to have them measured first."
+          title="Which sections get tested first"
+          hint="The automatic check works through your sitemap in order. If you are watching a particular section, pin it to the front so it is measured early rather than 30 minutes in."
         >
           <PriorityForm groups={rail} initialPinned={pinned} />
         </Section>
@@ -90,10 +99,10 @@ export default async function SettingsPage() {
               ['PSI API key', masked(env.PSI_API_KEY)],
               ['Login user', env.AUTH_USERNAME],
               ['Password', env.AUTH_PASSWORD_HASH ? 'configured' : 'NOT SET — run npm run set-password'],
-              ['Worker concurrency', String(env.WORKER_CONCURRENCY)],
-              ['PSI rate limit', `${env.PSI_RATE_MAX} per ${env.PSI_RATE_WINDOW_MS} ms`],
-              ['Measured call time', sweepEstimate.measured ? `${Math.round(sweepEstimate.medianCallMs / 1000)}s median` : 'no data yet'],
-              ['Email transport', process.env.EMAIL_TRANSPORT ?? 'none'],
+              ['Pages tested at once', String(env.WORKER_CONCURRENCY)],
+              ['Google rate limit', `${env.PSI_RATE_MAX} requests per ${env.PSI_RATE_WINDOW_MS / 1000}s`],
+              ['Typical time per page', sweepEstimate.measured ? `${Math.round(sweepEstimate.medianCallMs / 1000)} seconds (measured)` : 'not measured yet'],
+              ['Email transport', emailReady ? `smtp via ${process.env.SMTP_HOST}` : `${process.env.EMAIL_TRANSPORT ?? 'none'} — logs only, does not send`],
             ] as Array<[string, string]>).map(([k, v]) => (
               <div key={k} className="flex flex-wrap gap-x-4 py-1.5">
                 <dt className="w-44 shrink-0 text-[var(--muted)]">{k}</dt>

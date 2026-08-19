@@ -265,7 +265,8 @@ model Schedule {
   siteId   String  @unique
   site     Site    @relation(fields: [siteId], references: [id], onDelete: Cascade)
   cronExpr String? // null = disabled
-  timezone String  @default("UTC")
+  // Team-local, not UTC: "3am" should mean 3am where the people are.
+  timezone String  @default("Asia/Kolkata")
   enabled  Boolean @default(false)
 
   lastRunAt DateTime?

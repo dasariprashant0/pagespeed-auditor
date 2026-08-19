@@ -16,16 +16,25 @@ export type { NotificationEvent, SweepSummary };
  * Both channels are off by default and fail independently: one broken Slack
  * webhook must never stop the email going out.
  */
-export async function dispatchSweepNotification(siteId: string, summary: SweepSummary): Promise<void> {
+export interface DispatchOutcome {
+  attempted: string[];
+  /** Channels that did not actually deliver, with why. Empty means all sent. */
+  problems: string[];
+}
+
+export async function dispatchSweepNotification(
+  siteId: string,
+  summary: SweepSummary,
+): Promise<DispatchOutcome> {
   const settings = await prisma.notificationSetting.findUnique({ where: { siteId } });
-  if (!settings) return;
+  if (!settings) return { attempted: [], problems: ['No notification settings saved.'] };
 
   const subject =
     summary.event === 'sweep.failed'
       ? `PageSpeed sweep FAILED — ${summary.siteName}`
       : `PageSpeed sweep complete — ${summary.siteName}`;
 
-  const channels: Array<[string, Promise<void>]> = [];
+  const channels: Array<[string, Promise<unknown>]> = [];
   if (settings.emailEnabled && settings.emailTo) {
     const to = settings.emailTo.split(',').map((s) => s.trim()).filter(Boolean);
     channels.push(['email', sendEmail(to, subject, renderHtml(summary), renderText(summary))]);
@@ -33,14 +42,24 @@ export async function dispatchSweepNotification(siteId: string, summary: SweepSu
   if (settings.slackEnabled && settings.slackWebhookUrl) {
     channels.push(['slack', sendSlack(settings.slackWebhookUrl, summary)]);
   }
-  if (channels.length === 0) return;
+  if (channels.length === 0) return { attempted: [], problems: ['No channel is enabled.'] };
 
   const results = await Promise.allSettled(channels.map(([, p]) => p));
+  const problems: string[] = [];
+
   for (const [i, r] of results.entries()) {
+    const channel = channels[i][0];
     if (r.status === 'rejected') {
-      logger.error({ channel: channels[i][0], err: String(r.reason) }, 'notification channel failed');
+      logger.error({ channel, err: String(r.reason) }, 'notification channel failed');
+      problems.push(`${channel}: ${String(r.reason)}`);
+      continue;
     }
+    // A suppressed email resolves successfully but was not delivered.
+    const v = r.value as { sent?: boolean; reason?: string } | undefined;
+    if (v && v.sent === false) problems.push(`${channel}: ${v.reason ?? 'not delivered'}`);
   }
+
+  return { attempted: channels.map(([c]) => c), problems };
 }
 
 function delta(s: SweepSummary): string {
