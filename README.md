@@ -29,7 +29,7 @@ Requires **OrbStack** (or any `docker compose` runtime) and Node 26+.
 ```bash
 brew install orbstack        # then launch it once
 npm install                  # see the install-scripts note below
-cp .env.example .env         # fill in PSI_API_KEY and SITE_SITEMAP_URL
+cp .env.example .env         # then: npm run env -- PSI_API_KEY <your-key>
 npm run db:up                # Postgres 17 + Redis 7
 npm run db:migrate
 npm run dev                  # web app (Ship Studio may already be running this)
@@ -65,6 +65,8 @@ Without this Prisma silently has no engine and fails at first use.
 | `npm run audit:queue -- <group>` | Queue a group through the worker |
 | `npm run canary -- 50` | Bounded real slice before ever scheduling a full sweep |
 | `npm run set-password -- '...'` | Set the login password (writes to .env) |
+| `npm run env` | Show every setting, secrets masked |
+| `npm run env -- KEY value` | Change one setting without opening the file |
 | `npm run inspect-sitemap` | Crawl/normalize/group report, writes nothing |
 
 ## Two rules worth knowing before you edit
@@ -111,3 +113,18 @@ Nine read/write tools at `/api/mcp`, authenticated by `MCP_BEARER_TOKEN` from
 There is deliberately no `run_full_sweep` tool — sweeps are schedule-only, and
 `run_group_audit`'s description says so, because an agent will otherwise loop
 over every group to imitate one.
+
+
+## Where the settings live
+
+`.env` holds every secret. It is a **dotfile and gitignored on purpose**, so it
+will not appear in Finder or in any git-backed file browser — that is what keeps
+the API key out of the repository. You never need to find it:
+
+```bash
+npm run env                          # show everything, secrets masked
+npm run env -- SMTP_PASS abcd1234    # change one value
+open -e .env                         # or just open it directly
+```
+
+`.env.example` is the committed template documenting every variable.

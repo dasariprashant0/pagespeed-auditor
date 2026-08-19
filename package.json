@@ -25,7 +25,8 @@
     "set-password": "tsx scripts/set-password.ts",
     "audit:group": "tsx scripts/audit-group.ts",
     "audit:queue": "tsx scripts/queue-audit.ts",
-    "canary": "tsx scripts/canary.ts"
+    "canary": "tsx scripts/canary.ts",
+    "env": "tsx scripts/set-env.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.117.1",

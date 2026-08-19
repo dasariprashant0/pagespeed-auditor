@@ -90,7 +90,7 @@ export default async function SettingsPage() {
           <PriorityForm groups={rail} initialPinned={pinned} />
         </Section>
 
-        <Section title="Configuration" hint="Set in .env; restart after changing.">
+        <Section title="Configuration" hint="Set in .env, which is hidden and gitignored so secrets stay out of the repository. Change a value with `npm run env -- KEY value`, then restart.">
           <dl className="divide-y divide-[var(--border)] text-[12px]">
             {([
               ['Site', site.name],
