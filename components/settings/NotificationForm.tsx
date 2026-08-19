@@ -5,6 +5,7 @@ import { saveNotificationsAction, sendTestNotificationAction } from '@/app/actio
 
 export function NotificationForm({
   initial,
+  sentFrom,
 }: {
   initial: {
     emailEnabled: boolean;
@@ -13,6 +14,8 @@ export function NotificationForm({
     /** Masked; the real value never reaches the browser. */
     slackWebhookMasked: string | null;
   };
+  /** The sending mailbox, shown so it is not confused with the recipients. */
+  sentFrom: string | null;
 }) {
   const [state, action, pending] = useActionState(saveNotificationsAction, null);
   const [testing, startTest] = useTransition();
@@ -24,20 +27,31 @@ export function NotificationForm({
         <div className="space-y-2">
           <label className="flex items-center gap-2 text-[12px]">
             <input type="checkbox" name="emailEnabled" defaultChecked={initial.emailEnabled} />
-            Email on sweep completion or failure
+            Email when the automatic site check finishes or fails
           </label>
-          <input
-            name="emailTo"
-            defaultValue={initial.emailTo ?? ''}
-            placeholder="you@company.com, someone@company.com"
-            className="w-full max-w-md rounded-[5px] border border-[var(--border)] bg-[var(--background)] px-2 py-1.5 text-[12px]"
-          />
+          <label className="block max-w-md">
+            <span className="mb-1 block text-[11px] text-[var(--muted)]">
+              Send to — any addresses, separated by commas
+            </span>
+            <input
+              name="emailTo"
+              defaultValue={initial.emailTo ?? ''}
+              placeholder="you@company.com, teammate@company.com"
+              className="w-full rounded-[5px] border border-[var(--border)] bg-[var(--background)] px-2 py-1.5 text-[12px]"
+            />
+          </label>
+          {sentFrom && (
+            <p className="text-[11px] text-[var(--muted)]">
+              Sent from <strong>{sentFrom}</strong> — the one mailbox that does the sending,
+              configured in <code>.env</code>. Recipients above can be anyone.
+            </p>
+          )}
         </div>
 
         <div className="space-y-2">
           <label className="flex items-center gap-2 text-[12px]">
             <input type="checkbox" name="slackEnabled" defaultChecked={initial.slackEnabled} />
-            Slack on sweep completion or failure
+            Slack when the automatic site check finishes or fails
           </label>
           <input
             name="slackWebhookUrl"

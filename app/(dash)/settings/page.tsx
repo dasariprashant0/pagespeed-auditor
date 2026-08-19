@@ -73,6 +73,7 @@ export default async function SettingsPage() {
           }
         >
           <NotificationForm
+            sentFrom={process.env.SMTP_USER ?? null}
             initial={{
               emailEnabled: notif?.emailEnabled ?? false,
               emailTo: notif?.emailTo ?? null,
