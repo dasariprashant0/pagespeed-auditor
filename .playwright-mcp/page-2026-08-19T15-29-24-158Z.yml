@@ -1,0 +1,78 @@
+- generic [ref=f14e1]:
+  - generic [active]:
+    - generic [ref=f14e4]:
+      - generic [ref=f14e5]:
+        - navigation [ref=f14e7]:
+          - button [disabled] [ref=f14e8]:
+            - img "previous" [ref=f14e9]
+          - generic [ref=f14e11]:
+            - generic [ref=f14e12]: 1/
+            - text: "1"
+          - button [disabled] [ref=f14e13]:
+            - img "next" [ref=f14e14]
+        - link "Next.js 16.1.2 (stale) Turbopack" [ref=f14e17] [cursor=pointer]:
+          - /url: https://nextjs.org/docs/messages/version-staleness
+          - generic "There is a newer version (16.3.1) available, upgrade recommended!" [ref=f14e20]: Next.js 16.1.2 (stale)
+          - generic [ref=f14e21]: Turbopack
+      - dialog "Runtime PrismaClientValidationError" [ref=f14e23]:
+        - generic [ref=f14e26]:
+          - generic [ref=f14e27]:
+            - generic [ref=f14e28]:
+              - generic [ref=f14e29]:
+                - generic [ref=f14e30]: Runtime PrismaClientValidationError
+                - generic [ref=f14e31]: Server
+              - generic [ref=f14e32]:
+                - button "Copy Error Info" [ref=f14e33] [cursor=pointer]
+                - button "No related documentation found" [disabled] [ref=f14e36]
+                - button "Attach Node.js inspector" [ref=f14e39] [cursor=pointer]
+            - generic [ref=f14e48]:
+              - generic [ref=f14e49]: "Invalid `{imported module ./ShipStudio/pagespeed-auditor/lib/db.ts}[\"prisma\"].page.findMany()` invocation in /Users/prashantdasari/ShipStudio/pagespeed-auditor/.next/dev/server/chunks/ssr/[root-of-the-server]__f5b21a0c._.js:262:168 259 // Inactive pages are excluded everywhere in this file: they have left the 260 // sitemap, will never be swept again, and counting them would inflate 261 // `unaudited` permanently. Their history stays reachable by page id. → 262 {imported module ./ShipStudio/pagespeed-auditor/lib/db.ts}[\"prisma\"].page.findMany({ where: { siteId: \"cmt02hw8h00004tw6jcr08tuh\", isActive: true, groupId: { not: null } }, select: { id: true, groupId: true, sitemapIndex: true, ~~~~~~~~~~~~ latestResultMobileId: true, latestResultDesktopId: true, ? siteId?: true, ? url?: true, ? path?: true, ? title?: true, ? isActive?: true, ? isManuallyGrouped?: true, ? lastmod?: true, ? lastAuditedAt?: true, ? site?: true, ? group?: true, ? results?: true, ? issues?: true, ? _count?: true } }) Unknown field `sitemapIndex` for select statement on model `Page`. Available options are marked with ?."
+              - button "Show More" [ref=f14e51] [cursor=pointer]
+          - generic [ref=f14e52]:
+            - generic [ref=f14e53]:
+              - paragraph [ref=f14e55]:
+                - generic [ref=f14e61]: lib/services/results.service.ts (193:17) @ <unknown>
+                - button "Open in editor" [ref=f14e62] [cursor=pointer]
+              - generic [ref=f14e67]:
+                - generic [ref=f14e68]: 191 | // sitemap, will never be swept again, and counting them would inflate
+                - generic [ref=f14e69]: "192 | // `unaudited` permanently. Their history stays reachable by page id."
+                - generic [ref=f14e70]: "> 193 | prisma.page.findMany({"
+                - generic [ref=f14e71]: "| ^"
+                - generic [ref=f14e72]: "194 | where: { siteId, isActive: true, groupId: { not: null } },"
+                - generic [ref=f14e73]: "195 | select: {"
+                - generic [ref=f14e74]: "196 | id: true,"
+            - generic [ref=f14e75]:
+              - generic [ref=f14e76]:
+                - paragraph [ref=f14e77]:
+                  - text: Call Stack
+                  - generic [ref=f14e78]: "8"
+                - button "Show 5 ignore-listed frame(s)" [ref=f14e79] [cursor=pointer]
+              - generic [ref=f14e82]:
+                - generic [ref=f14e83]:
+                  - text: <unknown>
+                  - button "Open <unknown> in editor" [ref=f14e84] [cursor=pointer]
+                - text: lib/services/results.service.ts (193:17)
+              - generic [ref=f14e87]:
+                - generic [ref=f14e88]:
+                  - text: listGroupsWithAggregates
+                  - button "Open listGroupsWithAggregates in editor" [ref=f14e89] [cursor=pointer]
+                - text: lib/services/results.service.ts (185:27)
+              - generic [ref=f14e92]:
+                - generic [ref=f14e93]:
+                  - text: GroupPage
+                  - button "Open GroupPage in editor" [ref=f14e94] [cursor=pointer]
+                - text: app/(dash)/g/[slug]/page.tsx (31:30)
+        - generic [ref=f14e97]: "1"
+        - generic [ref=f14e98]: "2"
+    - generic [ref=f14e103] [cursor=pointer]:
+      - button "Open Next.js Dev Tools" [ref=f14e104]
+      - generic [ref=f14e108]:
+        - button "Open issues overlay" [ref=f14e109]:
+          - generic [ref=f14e110]:
+            - generic [ref=f14e111]: "0"
+            - generic [ref=f14e112]: "1"
+          - generic [ref=f14e113]: Issue
+        - button "Collapse issues badge" [ref=f14e114]
+  - generic [ref=f14e118]:
+    - 'heading "Application error: a server-side exception has occurred while loading localhost (see the server logs for more information)." [level=2] [ref=f14e119]'
+    - paragraph [ref=f14e120]: "Digest: 935724471"
