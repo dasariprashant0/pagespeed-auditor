@@ -17,7 +17,10 @@
     "db:generate": "prisma generate",
     "db:seed": "tsx prisma/seed.ts",
     "hash-password": "tsx scripts/hash-password.ts",
-    "throughput-dryrun": "tsx scripts/throughput-dryrun.ts"
+    "throughput-dryrun": "tsx scripts/throughput-dryrun.ts",
+    "inspect-sitemap": "tsx scripts/inspect-sitemap.ts",
+    "ingest": "tsx scripts/ingest.ts",
+    "verify:ingest": "tsx scripts/verify-ingest-invariants.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.9.1",
