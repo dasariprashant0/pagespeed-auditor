@@ -34,8 +34,8 @@ export default async function GroupPage({
   ]);
 
   const rail = allGroups
+    // Already in sitemap order from the service; re-sorting here would undo it.
     .filter((g) => g.pageCount > 0)
-    .sort((a, b) => b.pageCount - a.pageCount)
     .map((g) => ({ slug: g.slug, name: g.name, pageCount: g.pageCount }));
 
   return (

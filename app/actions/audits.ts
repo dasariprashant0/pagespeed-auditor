@@ -3,13 +3,13 @@
 import { revalidatePath } from 'next/cache';
 import { requireSession } from '@/lib/http/auth-guard';
 import { prisma } from '@/lib/db';
-import { getEnv } from '@/lib/env';
 import { BOTH_STRATEGIES, createRun, expandScope, findActiveRun } from '@/lib/services/run.service';
 import { enqueueAuditJobs } from '@/lib/queue/producers';
+import { estimateRun, formatDuration } from '@/lib/services/estimate.service';
 import type { PsiStrategy } from '@/lib/services/types';
 
 export type QueueResult =
-  | { ok: true; runId: string; jobs: number; etaMinutes: number }
+  | { ok: true; runId: string; jobs: number; eta: string; measured: boolean }
   | { ok: false; error: string };
 
 /**
@@ -33,7 +33,6 @@ export async function queueAuditAction(input: {
   // matches, so this is the actual authorization boundary.
   await requireSession();
 
-  const env = getEnv();
   const site = await prisma.site.findFirst({ select: { id: true } });
   if (!site) return { ok: false, error: 'No site configured.' };
 
@@ -60,8 +59,14 @@ export async function queueAuditAction(input: {
 
   await enqueueAuditJobs(runId, pairs);
 
-  const rate = (env.PSI_RATE_MAX / env.PSI_RATE_WINDOW_MS) * 1000;
+  const estimate = await estimateRun(pairs.length, site.id);
   revalidatePath('/', 'layout');
 
-  return { ok: true, runId, jobs: pairs.length, etaMinutes: Math.max(1, Math.ceil(pairs.length / rate / 60)) };
+  return {
+    ok: true,
+    runId,
+    jobs: pairs.length,
+    eta: formatDuration(estimate.seconds),
+    measured: estimate.measured,
+  };
 }

@@ -16,8 +16,8 @@ export default async function SettingsPage() {
   const site = await prisma.site.findFirstOrThrow();
   const groups = await listGroupsWithAggregates(site.id, { strategy: 'mobile' });
   const rail = groups
+    // Already in sitemap order from the service; re-sorting here would undo it.
     .filter((g) => g.pageCount > 0)
-    .sort((a, b) => b.pageCount - a.pageCount)
     .map((g) => ({ slug: g.slug, name: g.name, pageCount: g.pageCount }));
 
   const schedule = await prisma.schedule.findUnique({ where: { siteId: site.id } });

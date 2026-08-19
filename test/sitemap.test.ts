@@ -103,9 +103,9 @@ describe('grouping', () => {
     assert.deepEqual(deriveGroup('/blog/2026/post'), { slug: 'blog', name: 'Blog' });
   });
 
-  test('root and top-level pages go to General', () => {
-    assert.deepEqual(deriveGroup('/'), { slug: 'general', name: 'General' });
-    assert.deepEqual(deriveGroup(''), { slug: 'general', name: 'General' });
+  test('the root path goes to Home', () => {
+    assert.deepEqual(deriveGroup('/'), { slug: 'home', name: 'Home' });
+    assert.deepEqual(deriveGroup(''), { slug: 'home', name: 'Home' });
   });
 
   test('title-cases multi-word segments', () => {
@@ -114,8 +114,8 @@ describe('grouping', () => {
     assert.equal(slugify('Case Studies!'), 'case-studies');
   });
 
-  test('a segment that slugifies to nothing falls back to General', () => {
-    assert.deepEqual(deriveGroup('/%20/x'), { slug: 'general', name: 'General' });
+  test('a segment that slugifies to nothing falls back to Home', () => {
+    assert.deepEqual(deriveGroup('/%20/x'), { slug: 'home', name: 'Home' });
   });
 });
 
@@ -186,6 +186,6 @@ describe('crawl + normalize end to end', () => {
     // Only the bare root '/' falls through to General. This is the spec's rule,
     // and it does mean a flat marketing site produces many one-page groups --
     // which is what manual merge in the dashboard exists to fix.
-    assert.deepEqual(groups, ['about', 'blog', 'case-studies', 'features', 'general', 'pricing']);
+    assert.deepEqual(groups, ['about', 'blog', 'case-studies', 'features', 'home', 'pricing']);
   });
 });

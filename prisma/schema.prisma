@@ -79,6 +79,12 @@ model Page {
   lastmod       DateTime?
   lastAuditedAt DateTime?
 
+  // SPEC+: position in the sitemap, 0-based, assigned at ingest.
+  // The sitemap's own order is the site owner's stated priority, so groups and
+  // pages are listed that way rather than by page count -- which is an artefact
+  // of URL structure, not an editorial signal.
+  sitemapIndex Int?
+
   // SPEC+: denormalized pointers. Turn "1000 pages with current scores" from a
   // correlated subquery per row into two plain joins.
   latestResultMobileId  String?
@@ -88,6 +94,7 @@ model Page {
   issues  AuditIssue[]
 
   @@index([siteId, isActive])
+  @@index([siteId, sitemapIndex])
   @@index([groupId, isActive])
 }
 
@@ -170,6 +177,12 @@ model AuditResult {
 
   finalUrl          String?
   lighthouseVersion String?
+
+  // SPEC+: wall-clock milliseconds the PSI call actually took. Recorded so run
+  // estimates come from this site's own measured latency rather than a
+  // hardcoded guess -- pages here average ~60s, while light pages are 11-24s,
+  // so a constant would be wrong by 3x in either direction.
+  durationMs Int?
 
   // Pruned before storage (screenshots/treemap/i18n/timing stripped).
   // Never SELECT * on this table -- use the shared summary select.

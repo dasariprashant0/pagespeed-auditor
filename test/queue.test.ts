@@ -2,6 +2,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { auditJobId, finalizeJobId, planSweepJobId } from '../lib/queue/names.ts';
 import { shouldFinalize, percentComplete, etaSeconds, diffMissingPairs } from '../lib/services/run.service.ts';
+import { throughputPerSecond, medianOf, formatDuration } from '../lib/services/estimate.service.ts';
 
 describe('job ids are legal BullMQ custom ids', () => {
   test('never contain a colon', () => {
@@ -80,5 +81,32 @@ describe('resume', () => {
     const missing = diffMissingPairs(expected, done);
     assert.equal(missing.length, 1);
     assert.deepEqual(missing[0], { pageId: 'a', url: 'u', strategy: 'desktop' });
+  });
+});
+
+describe('run estimates come from measured latency', () => {
+  test('throughput is whichever constraint binds first', () => {
+    // Fast pages: the rate limiter binds (0.75/s), not the 48-worker pool.
+    assert.equal(throughputPerSecond(10_000, 48, 3, 4000).toFixed(2), '0.75');
+
+    // Slow pages: with only 4 workers and 60s calls the POOL binds at 0.067/s.
+    // Missing this is what silently tripled sweep time before.
+    assert.ok(throughputPerSecond(60_000, 4, 3, 4000) < 0.1);
+
+    // 48 workers over 60s calls clears the limiter again.
+    assert.equal(throughputPerSecond(60_000, 48, 3, 4000).toFixed(2), '0.75');
+  });
+
+  test('median ignores outliers a mean would follow', () => {
+    assert.equal(medianOf([10, 20, 30]), 20);
+    assert.equal(medianOf([10, 20, 30, 900]), 25);
+    assert.equal(medianOf([]), null);
+  });
+
+  test('durations are phrased without false precision', () => {
+    assert.equal(formatDuration(37), 'about 35 seconds');
+    assert.equal(formatDuration(300), 'about 5 minutes');
+    assert.equal(formatDuration(3600), 'about 1 hour');
+    assert.equal(formatDuration(5400), 'about 1h 30m');
   });
 });

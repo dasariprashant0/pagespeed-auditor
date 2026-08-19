@@ -36,6 +36,8 @@ export interface ScoreDistribution {
 
 export interface GroupSummaryDTO {
   id: string;
+  /** Earliest sitemap position of any page in the group; null if unknown. */
+  sitemapIndex: number | null;
   slug: string;
   name: string;
   isManual: boolean;
@@ -106,6 +108,17 @@ export interface AuditItemDTO {
   details: AuditDetailTable | null;
 }
 
+/** The run conditions PSI prints under its report, so numbers are interpretable. */
+export interface RunEnvironmentDTO {
+  lighthouseVersion: string | null;
+  userAgent: string | null;
+  /** "Emulated Moto G Power" etc. */
+  device: string | null;
+  networkThrottling: string | null;
+  cpuThrottling: string | null;
+  fetchedAt: string | null;
+}
+
 export interface PageReportDTO {
   page: {
     id: string;
@@ -138,6 +151,14 @@ export interface PageReportDTO {
     opportunities: AuditItemDTO[];
     diagnostics: AuditItemDTO[];
     other: AuditItemDTO[];
+    /** Audits that passed. PSI shows these; without them the report reads as
+     *  a list of complaints rather than an assessment. */
+    passed: AuditItemDTO[];
+    /** Audits that did not apply to this page. */
+    notApplicable: AuditItemDTO[];
+    /** data: URI of the final screenshot, when one survived pruning. */
+    screenshot: string | null;
+    environment: RunEnvironmentDTO;
     markdownReport: string;
   } | null;
   history: Record<'performance' | 'accessibility' | 'bestPractices' | 'seo', SparkPoint[]>;

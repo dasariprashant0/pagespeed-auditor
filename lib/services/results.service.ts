@@ -192,7 +192,13 @@ export async function listGroupsWithAggregates(
     // `unaudited` permanently. Their history stays reachable by page id.
     prisma.page.findMany({
       where: { siteId, isActive: true, groupId: { not: null } },
-      select: { id: true, groupId: true, latestResultMobileId: true, latestResultDesktopId: true },
+      select: {
+        id: true,
+        groupId: true,
+        sitemapIndex: true,
+        latestResultMobileId: true,
+        latestResultDesktopId: true,
+      },
     }),
   ]);
 
@@ -232,8 +238,15 @@ export async function listGroupsWithAggregates(
       null,
     );
 
+    // A group's position is that of its earliest page in the sitemap.
+    const sitemapIndex = groupPages.reduce<number | null>(
+      (acc, p) => (p.sitemapIndex === null ? acc : acc === null ? p.sitemapIndex : Math.min(acc, p.sitemapIndex)),
+      null,
+    );
+
     return {
       id: g.id,
+      sitemapIndex,
       slug: g.slug,
       name: g.name,
       isManual: g.isManual,
@@ -247,7 +260,16 @@ export async function listGroupsWithAggregates(
     } satisfies GroupSummaryDTO;
   });
 
-  summaries.sort((a, b) => b.pageCount - a.pageCount || a.name.localeCompare(b.name));
+  // Sitemap order, not page count. The sitemap is the site owner's stated
+  // priority; page count is an artefact of how URLs happen to be structured,
+  // so ranking by it buries a small but important group under a large
+  // incidental one. Groups with no position (nothing ingested yet) sort last.
+  summaries.sort((a, b) => {
+    if (a.sitemapIndex === null && b.sitemapIndex === null) return a.name.localeCompare(b.name);
+    if (a.sitemapIndex === null) return 1;
+    if (b.sitemapIndex === null) return -1;
+    return a.sitemapIndex - b.sitemapIndex;
+  });
   return summaries;
 }
 
@@ -276,7 +298,9 @@ export async function listPagesInGroup(
       latestResultMobileId: true,
       latestResultDesktopId: true,
     },
-    orderBy: { path: 'asc' },
+    // The sitemap's order is the site owner's stated priority. `path` is only a
+    // tie-break for rows ingested before sitemapIndex existed.
+    orderBy: [{ sitemapIndex: 'asc' }, { path: 'asc' }],
   });
 
   const resultIds = pages

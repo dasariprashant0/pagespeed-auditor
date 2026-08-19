@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { queueAuditAction } from '@/app/actions/audits';
+import { previewEstimateAction, type EstimatePreview } from '@/app/actions/estimate';
 import type { PsiStrategy } from '@/lib/services/types';
 
 /**
@@ -25,7 +26,17 @@ export function RunAuditButton({
 }) {
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<EstimatePreview | null>(null);
   const router = useRouter();
+
+  // Fetched on hover/focus rather than on mount: it is a DB query per button,
+  // and a table of them would fire one each on every page load.
+  const loadPreview = () => {
+    if (preview) return;
+    previewEstimateAction({ kind, ref: target, strategyCount: strategies?.length ?? 2 })
+      .then(setPreview)
+      .catch(() => {});
+  };
 
   return (
     <div className="flex items-center gap-2">
@@ -33,6 +44,16 @@ export function RunAuditButton({
         type="button"
         disabled={pending}
         aria-busy={pending}
+        onMouseEnter={loadPreview}
+        onFocus={loadPreview}
+        title={
+          preview
+            ? `${preview.jobs} PSI calls, ${preview.eta}` +
+              (preview.measured
+                ? ` — based on your last ${preview.sampleSize} audits (median ${preview.medianSeconds}s each)`
+                : ' — estimate, no measured history yet')
+            : undefined
+        }
         onClick={() =>
           start(async () => {
             setError(null);
@@ -45,6 +66,13 @@ export function RunAuditButton({
       >
         {pending ? 'Queueing…' : (label ?? 'Re-run audit')}
       </button>
+
+      {preview && !pending && (
+        <span className="text-[11px] text-[var(--muted)]">
+          {preview.jobs} calls · {preview.eta}
+          {!preview.measured && ' (estimated)'}
+        </span>
+      )}
       {error && (
         <span role="alert" className="text-[11px]" style={{ color: 'var(--score-fail-text)' }}>
           {error}

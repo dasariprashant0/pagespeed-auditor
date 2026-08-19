@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireApiSession } from '@/lib/http/auth-guard';
 import { prisma } from '@/lib/db';
 import { toRunProgress } from '@/lib/services/site.service';
+import { estimateRun } from '@/lib/services/estimate.service';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,8 +25,11 @@ export async function GET() {
     },
   });
 
+  // One measurement shared by every run in the response.
+  const seed = runs.length > 0 ? (await estimateRun(1)).throughputPerSecond : undefined;
+
   return NextResponse.json(
-    { runs: runs.map((r) => toRunProgress(r)) },
+    { runs: runs.map((r) => toRunProgress(r, undefined, seed)) },
     { headers: { 'cache-control': 'no-store' } },
   );
 }

@@ -90,7 +90,7 @@ export async function ingestSitemap(
     if (aliasBySlug.has(slug) || groupIdBySlug.has(slug)) continue;
     const { name } = deriveGroup(`/${slug}`);
     const created = await prisma.group.create({
-      data: { siteId, slug, name: slug === 'general' ? 'General' : name, isManual: false },
+      data: { siteId, slug, name, isManual: false },
       select: { id: true, slug: true },
     });
     groupIdBySlug.set(created.slug, created.id);
@@ -104,6 +104,10 @@ export async function ingestSitemap(
 
   // --- upsert pages -------------------------------------------------------
   const seenUrls = new Set(urls.map((u) => u.url));
+
+  // The sitemap's own order is the site owner's stated priority; capture it so
+  // the UI can list by it rather than by page count.
+  const orderByUrl = new Map(urls.map((u, i) => [u.url, i]));
 
   for (let i = 0; i < urls.length; i += batchSize) {
     const batch = urls.slice(i, i + batchSize);
@@ -129,6 +133,7 @@ export async function ingestSitemap(
                 path: entry.path,
                 groupId: resolveGroupId(entry.path),
                 lastmod: validLastmod,
+                sitemapIndex: orderByUrl.get(entry.url) ?? null,
                 isActive: true,
               },
             });
@@ -139,6 +144,8 @@ export async function ingestSitemap(
           const data: Record<string, unknown> = {
             path: entry.path,
             lastmod: validLastmod,
+            // Re-ingest refreshes the position: the sitemap may have reordered.
+            sitemapIndex: orderByUrl.get(entry.url) ?? null,
             isActive: true,
           };
 

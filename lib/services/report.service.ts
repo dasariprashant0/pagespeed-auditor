@@ -10,6 +10,7 @@ import type {
   FieldDataDTO,
   FieldMetricDTO,
   PageReportDTO,
+  RunEnvironmentDTO,
 } from './types.ts';
 
 /**
@@ -283,6 +284,9 @@ export async function getPageReport(
 
   const descriptions = descriptionsFromRawJson(rawRow?.rawJson ?? null);
   const detailTables = detailsFromRawJson(rawRow?.rawJson ?? null);
+  const { passed, notApplicable } = passedAuditsFromRawJson(rawRow?.rawJson ?? null);
+  const screenshot = screenshotFromRawJson(rawRow?.rawJson ?? null);
+  const environment = environmentFromRawJson(rawRow?.rawJson ?? null);
 
   const items: AuditItemDTO[] = issues.map((i) => ({
     auditId: i.auditId,
@@ -338,6 +342,10 @@ export async function getPageReport(
       opportunities: items.filter((i) => i.kind === 'opportunity'),
       diagnostics: items.filter((i) => i.kind === 'diagnostic'),
       other: items.filter((i) => i.kind === 'other'),
+      passed,
+      notApplicable,
+      screenshot,
+      environment,
       markdownReport: latest.markdownReport,
     },
     history,
@@ -436,4 +444,106 @@ export function detailsFromRawJson(rawJson: unknown): Map<string, AuditDetailTab
   }
 
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// Full-report extras: screenshot, passed audits, run conditions
+// ---------------------------------------------------------------------------
+
+/** The final screenshot as a data: URI, or null if pruning or the run dropped it. */
+export function screenshotFromRawJson(rawJson: unknown): string | null {
+  const shot = (rawJson as { lighthouseResult?: { audits?: Record<string, { details?: { data?: unknown } }> } })
+    ?.lighthouseResult?.audits?.['final-screenshot']?.details?.data;
+  return typeof shot === 'string' && shot.startsWith('data:') ? shot : null;
+}
+
+/**
+ * The audits that PASSED or did not apply.
+ *
+ * These are not in AuditIssue -- that table only holds failures, deliberately,
+ * because it exists to make the site-wide "top issues" aggregate fast. But a
+ * report showing only failures reads as a list of complaints rather than an
+ * assessment, and PSI shows both, so they are recovered from rawJson here. This
+ * is one row for one page, not a list query.
+ */
+export function passedAuditsFromRawJson(rawJson: unknown): {
+  passed: AuditItemDTO[];
+  notApplicable: AuditItemDTO[];
+} {
+  const lr = (rawJson as {
+    lighthouseResult?: {
+      audits?: Record<string, Record<string, unknown>>;
+      categories?: Record<string, { auditRefs?: Array<{ id: string; group?: string }> }>;
+    };
+  })?.lighthouseResult;
+
+  const passed: AuditItemDTO[] = [];
+  const notApplicable: AuditItemDTO[] = [];
+  if (!lr?.audits || !lr.categories) return { passed, notApplicable };
+
+  const seen = new Set<string>();
+  const CATEGORIES = ['performance', 'accessibility', 'best-practices', 'seo'] as const;
+
+  for (const catId of CATEGORIES) {
+    for (const ref of lr.categories[catId]?.auditRefs ?? []) {
+      if (seen.has(ref.id)) continue;
+      const a = lr.audits[ref.id];
+      if (!a) continue;
+
+      const mode = String(a.scoreDisplayMode ?? '');
+      const score = typeof a.score === 'number' ? a.score : null;
+
+      const item: AuditItemDTO = {
+        auditId: ref.id,
+        title: String(a.title ?? ref.id),
+        description: String(a.description ?? ''),
+        category: catId,
+        kind: 'other',
+        score,
+        displayValue: typeof a.displayValue === 'string' ? a.displayValue : null,
+        savingsMs: null,
+        savingsBytes: null,
+        details: null,
+      };
+
+      if (mode === 'notApplicable' || mode === 'manual') {
+        seen.add(ref.id);
+        notApplicable.push(item);
+      } else if (score !== null && score >= 0.9) {
+        seen.add(ref.id);
+        passed.push(item);
+      }
+    }
+  }
+
+  const byTitle = (a: AuditItemDTO, b: AuditItemDTO) => a.title.localeCompare(b.title);
+  return { passed: passed.sort(byTitle), notApplicable: notApplicable.sort(byTitle) };
+}
+
+/** The device, throttling and version the numbers were produced under. */
+export function environmentFromRawJson(rawJson: unknown): RunEnvironmentDTO {
+  const lr = (rawJson as {
+    lighthouseResult?: {
+      lighthouseVersion?: string;
+      userAgent?: string;
+      fetchTime?: string;
+      configSettings?: { formFactor?: string; throttlingMethod?: string; throttling?: Record<string, number> };
+      environment?: { benchmarkIndex?: number };
+    };
+  })?.lighthouseResult;
+
+  const cfg = lr?.configSettings;
+  const th = cfg?.throttling;
+
+  return {
+    lighthouseVersion: lr?.lighthouseVersion ?? null,
+    userAgent: lr?.userAgent ?? null,
+    device: cfg?.formFactor ? (cfg.formFactor === 'mobile' ? 'Emulated mobile' : 'Emulated desktop') : null,
+    networkThrottling:
+      th && typeof th.rttMs === 'number'
+        ? `${th.rttMs} ms TCP RTT, ${Math.round((th.throughputKbps ?? 0) / 1024)} Mbps throughput (${cfg?.throttlingMethod ?? 'simulated'})`
+        : null,
+    cpuThrottling: th && typeof th.cpuSlowdownMultiplier === 'number' ? `${th.cpuSlowdownMultiplier}x slowdown` : null,
+    fetchedAt: lr?.fetchTime ?? null,
+  };
 }

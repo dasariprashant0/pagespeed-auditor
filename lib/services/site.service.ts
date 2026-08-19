@@ -52,9 +52,23 @@ export interface EtaInput {
  * first guess when there is nothing to extrapolate from -- a progress bar with
  * no ETA is honest, one showing "4 hours" after the first job is not.
  */
-export function estimateEtaSeconds(input: EtaInput): number | null {
+/**
+ * Remaining seconds for a run.
+ *
+ * Once a job has finished, the run's OWN observed rate is the best available
+ * signal and is used directly. Before that, `seedRatePerSecond` (the site's
+ * measured median from estimate.service) fills the gap -- otherwise a 60 s
+ * first call means a full minute of "no estimate", which is exactly when
+ * someone is looking at the bar wondering whether it is stuck.
+ */
+export function estimateEtaSeconds(input: EtaInput & { seedRatePerSecond?: number }): number | null {
   const { startedAt, completedJobs, totalJobs } = input;
-  if (!startedAt || completedJobs <= 0 || totalJobs <= 0) return null;
+  if (!startedAt || totalJobs <= 0) return null;
+
+  if (completedJobs <= 0) {
+    const seed = input.seedRatePerSecond;
+    return seed && seed > 0 ? Math.round(totalJobs / seed) : null;
+  }
 
   const remaining = totalJobs - completedJobs;
   if (remaining <= 0) return 0;
@@ -98,7 +112,12 @@ const RUN_SELECT = {
   error: true,
 } as const;
 
-export function toRunProgress(run: RunRow, now?: Date): RunProgressDTO {
+export function toRunProgress(
+  run: RunRow,
+  now?: Date,
+  /** Measured site throughput, used only until the run has a rate of its own. */
+  seedRatePerSecond?: number,
+): RunProgressDTO {
   const status = asRunStatus(run.status);
   return {
     runId: run.id,
@@ -120,6 +139,7 @@ export function toRunProgress(run: RunRow, now?: Date): RunProgressDTO {
             completedJobs: run.completedJobs,
             totalJobs: run.totalJobs,
             now,
+            seedRatePerSecond,
           })
         : null,
     error: run.error,

@@ -66,6 +66,20 @@ export function FieldDataPanel({ field }: { field: FieldDataDTO }) {
               <div className="text-[10px] text-[var(--muted)]">
                 {m ? BUCKET_LABEL[m.bucket] : 'Not enough samples'}
               </div>
+
+              {/* PSI's distribution bar: what share of real visits landed in
+                  each band. The 75th percentile alone hides a bimodal page. */}
+              {m?.distribution && (
+                <div
+                  className="mt-1.5 flex h-1.5 overflow-hidden rounded-full bg-[var(--surface-sunken)]"
+                  role="img"
+                  aria-label={`${Math.round(m.distribution[0] * 100)}% good, ${Math.round(m.distribution[1] * 100)}% needs improvement, ${Math.round(m.distribution[2] * 100)}% poor`}
+                >
+                  <div style={{ width: `${m.distribution[0] * 100}%`, background: 'var(--score-pass)' }} />
+                  <div style={{ width: `${m.distribution[1] * 100}%`, background: 'var(--score-average)' }} />
+                  <div style={{ width: `${m.distribution[2] * 100}%`, background: 'var(--score-fail)' }} />
+                </div>
+              )}
             </div>
           );
         })}

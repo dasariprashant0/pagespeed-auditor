@@ -50,6 +50,8 @@ export async function recordAuditResult(
     fieldJson: unknown;
     markdownReport: string;
     isFailure: boolean;
+    /** Measured PSI wall-clock, used to estimate future runs. */
+    durationMs?: number;
   },
 ): Promise<RecordOutcome> {
   const { runId, pageId, strategy, extracted, isFailure } = args;
@@ -88,6 +90,7 @@ export async function recordAuditResult(
             lighthouseVersion: extracted.lighthouseVersion,
             rawJson: (args.rawJson ?? undefined) as never,
             markdownReport: args.markdownReport,
+            durationMs: args.durationMs ?? null,
           },
           select: { id: true },
         });
@@ -225,6 +228,7 @@ export async function auditPage(
         result: extracted,
       }),
       isFailure: true,
+      durationMs: res.elapsedMs,
     });
     if (res.status === 403) throw new PermanentError(`PSI rejected the API key or quota: ${res.message}`);
     return outcome;
@@ -247,6 +251,7 @@ export async function auditPage(
         result: extracted,
       }),
       isFailure: true,
+      durationMs: res.elapsedMs,
     });
   }
 
@@ -289,5 +294,6 @@ export async function auditPage(
     fieldJson: fieldJsonOf(res.raw),
     markdownReport,
     isFailure: extracted.status === 'error',
+    durationMs: res.elapsedMs,
   });
 }

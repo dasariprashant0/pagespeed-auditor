@@ -11,6 +11,8 @@ import { AuditSection } from '@/components/report/AuditSection';
 import { EmptyState } from '@/components/nav/EmptyState';
 import { ScoreHistory } from '@/components/report/ScoreHistory';
 import { RunAuditButton } from '@/components/runs/RunAuditButton';
+import { RunConditions } from '@/components/report/RunConditions';
+import { Screenshot } from '@/components/report/Screenshot';
 import type { PsiStrategy } from '@/lib/services/types';
 
 export const dynamic = 'force-dynamic';
@@ -44,8 +46,8 @@ export default async function PageReport({
 
   const allGroups = await listGroupsWithAggregates(site.id, { strategy });
   const rail = allGroups
+    // Already in sitemap order from the service; re-sorting here would undo it.
     .filter((g) => g.pageCount > 0)
-    .sort((a, b) => b.pageCount - a.pageCount)
     .map((g) => ({ slug: g.slug, name: g.name, pageCount: g.pageCount }));
 
   const r = report.result;
@@ -128,6 +130,7 @@ export default async function PageReport({
               delta={delta(r.scores.bestPractices, r.previousScores?.bestPractices)} />
             <ScoreGauge score={r.scores.seo} label="SEO" size="lg"
               delta={delta(r.scores.seo, r.previousScores?.seo)} />
+            {r.screenshot && <Screenshot src={r.screenshot} url={report.page.url} />}
             <div className="w-full text-[11px] text-[var(--muted)] sm:ml-auto sm:w-auto sm:self-end sm:text-right">
               {new Date(r.fetchedAt).toLocaleString()}
               {r.lighthouseVersion && <div>Lighthouse {r.lighthouseVersion}</div>}
@@ -170,6 +173,14 @@ export default async function PageReport({
               emptyLabel="No diagnostics flagged." />
             <AuditSection title="Accessibility, Best Practices & SEO" items={r.other}
               emptyLabel="No issues found in these categories." />
+            <AuditSection title="Passed audits" items={r.passed}
+              emptyLabel="Nothing passed — worth checking the page actually rendered." />
+            <AuditSection title="Not applicable" items={r.notApplicable}
+              emptyLabel="Every audit applied to this page." />
+          </div>
+
+          <div className="mt-4">
+            <RunConditions env={r.environment} strategy={strategy} />
           </div>
         </>
       )}

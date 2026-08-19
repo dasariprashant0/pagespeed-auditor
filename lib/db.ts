@@ -22,11 +22,24 @@ function create(): PrismaClient {
 
 const globalForPrisma = globalThis as unknown as { __psaPrisma?: PrismaClient };
 
-export const prisma: PrismaClient = globalForPrisma.__psaPrisma ?? create();
-
-if (process.env.NODE_ENV !== 'production') {
-  globalForPrisma.__psaPrisma = prisma;
+/**
+ * Lazily constructed, for the same reason as the logger: building the client at
+ * module scope means calling getEnv() at IMPORT time, so any unit test that
+ * imports a service -- even to exercise a pure helper in it -- fails on missing
+ * environment. The proxy defers construction to first actual use.
+ */
+function resolve(): PrismaClient {
+  globalForPrisma.__psaPrisma ??= create();
+  return globalForPrisma.__psaPrisma;
 }
+
+export const prisma: PrismaClient = new Proxy({} as PrismaClient, {
+  get(_t, prop) {
+    const client = resolve();
+    const v = Reflect.get(client, prop);
+    return typeof v === 'function' ? v.bind(client) : v;
+  },
+});
 
 /**
  * AuditResult carries a pruned-but-still-large rawJson column. Selecting it by

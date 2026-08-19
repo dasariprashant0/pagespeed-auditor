@@ -17,14 +17,20 @@ import type { PsiResponse } from './types.ts';
  * untouched response for extraction.
  */
 
-/** Audit ids that carry image or debug payloads and nothing we display. */
+/**
+ * Audit ids that carry image or debug payloads we never display.
+ *
+ * `final-screenshot` is deliberately NOT here. It is 5-33 KB and it is the
+ * image pagespeed.web.dev leads with, so dropping it to save a rounding error
+ * costs the report its visual anchor. The filmstrip
+ * (`screenshot-thumbnails`, 259 KB on one measured page) and
+ * `fullPageScreenshot` (43-78 KB, only used for element highlighting) stay
+ * dropped -- those are where the weight actually is.
+ */
 const DROP_AUDITS = [
   'screenshot-thumbnails',
-  'final-screenshot',
-  'full-page-screenshot',
   'script-treemap-data',
   'main-thread-tasks',
-  'network-requests',
   'diagnostics',
 ] as const;
 
@@ -42,6 +48,28 @@ const CAP_ITEMS = 10;
 
 /** Longest string kept inside a details item. DOM snippets dominate the rest. */
 const MAX_ITEM_STRING = 200;
+
+/**
+ * Audits whose items are the evidence a person actually reads, kept deeper than
+ * the default so the report can show a useful table rather than a teaser.
+ */
+const DEEP_ITEM_AUDITS = new Set([
+  'network-requests',
+  'render-blocking-insight',
+  'unused-css-rules',
+  'unused-javascript',
+  'uses-responsive-images',
+  'modern-image-format-insight',
+  'image-delivery-insight',
+  'legacy-javascript-insight',
+  'duplicated-javascript-insight',
+  'third-parties-insight',
+  'font-display-insight',
+  'cache-insight',
+  'lcp-discovery-insight',
+  'cls-culprits-insight',
+]);
+const DEEP_CAP_ITEMS = 30;
 
 /**
  * Shortens the long strings inside one details item.
@@ -95,7 +123,8 @@ export function pruneResponse(input: PsiResponse): { pruned: PsiResponse; stats:
       for (const audit of Object.values(lr.audits)) {
         const items = audit.details?.items;
         if (!Array.isArray(items)) continue;
-        audit.details!.items = items.slice(0, CAP_ITEMS).map(truncateItem);
+        const cap = DEEP_ITEM_AUDITS.has(audit.id ?? '') ? DEEP_CAP_ITEMS : CAP_ITEMS;
+        audit.details!.items = items.slice(0, cap).map(truncateItem);
       }
     }
   }

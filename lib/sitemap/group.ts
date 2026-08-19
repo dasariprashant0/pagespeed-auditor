@@ -11,7 +11,13 @@ export interface DerivedGroup {
   name: string;
 }
 
-export const GENERAL_GROUP: DerivedGroup = { slug: 'general', name: 'General' };
+/**
+ * Where the root URL lands.
+ *
+ * "Home" rather than "General": there is exactly one page with no path segment
+ * and it is the homepage, so naming it after a catch-all misdescribes it.
+ */
+export const ROOT_GROUP: DerivedGroup = { slug: 'home', name: 'Home' };
 
 export function slugify(s: string): string {
   return s
@@ -31,7 +37,7 @@ export function titleCase(slug: string): string {
 
 export function deriveGroup(pathname: string): DerivedGroup {
   const segments = pathname.split('/').filter(Boolean);
-  if (segments.length === 0) return GENERAL_GROUP;
+  if (segments.length === 0) return ROOT_GROUP;
 
   let first: string;
   try {
@@ -42,7 +48,7 @@ export function deriveGroup(pathname: string): DerivedGroup {
 
   const slug = slugify(first);
   // A segment that slugifies to nothing (e.g. "%20") isn't a usable group.
-  if (!slug) return GENERAL_GROUP;
+  if (!slug) return ROOT_GROUP;
 
   return { slug, name: titleCase(slug) };
 }

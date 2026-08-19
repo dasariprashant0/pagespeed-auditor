@@ -50,8 +50,8 @@ export default async function HomePage({
   // see docs/DECISIONS.md 5.1.
   const { primary, small } = splitSmallGroups(groups);
   const rail = groups
+    // Already in sitemap order from the service; re-sorting here would undo it.
     .filter((g) => g.pageCount > 0)
-    .sort((a, b) => b.pageCount - a.pageCount)
     .map((g) => ({ slug: g.slug, name: g.name, pageCount: g.pageCount }));
 
   return (
