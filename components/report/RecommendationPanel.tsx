@@ -1,12 +1,20 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { generateRecommendationAction } from '@/app/actions/recommendation';
+import {
+  generateRecommendationAction,
+  recommendationHistoryAction,
+} from '@/app/actions/recommendation';
+import type { RecommendationVersion } from '@/lib/services/recommendation.service';
 import type { PsiStrategy } from '@/lib/services/types';
 
 /**
  * Generated on demand, not for every page after every sweep: 1,494 generations
  * per sweep would cost more than the audits and almost none would be read.
+ *
+ * Regenerating keeps the old answer. Someone regenerates when they doubt what
+ * they got, and the comparison is the point -- so up to ten are kept per
+ * measurement and reachable from the picker below.
  */
 export function RecommendationPanel({
   pageId,
@@ -15,12 +23,22 @@ export function RecommendationPanel({
 }: {
   pageId: string;
   strategy: PsiStrategy;
-  initial: { content: string; model: string; generatedAt: string } | null;
+  initial: { content: string; model: string; generatedAt: string; version: number } | null;
 }) {
   const [content, setContent] = useState(initial?.content ?? null);
-  const [meta, setMeta] = useState(initial ? { model: initial.model, at: initial.generatedAt } : null);
+  const [meta, setMeta] = useState(
+    initial ? { model: initial.model, at: initial.generatedAt, version: initial.version } : null,
+  );
+  const [history, setHistory] = useState<RecommendationVersion[] | null>(null);
+  const [viewing, setViewing] = useState<number | null>(initial?.version ?? null);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
+
+  const loadHistory = () =>
+    start(async () => {
+      const r = await recommendationHistoryAction({ pageId, strategy });
+      if (r.ok) setHistory(r.versions);
+    });
 
   const run = (force: boolean) =>
     start(async () => {
@@ -28,11 +46,20 @@ export function RecommendationPanel({
       const r = await generateRecommendationAction({ pageId, strategy, force });
       if (r.ok) {
         setContent(r.content);
-        setMeta({ model: r.model, at: new Date().toISOString() });
+        setMeta({ model: r.model, at: r.generatedAt, version: r.version });
+        setViewing(r.version);
+        // The list the picker shows is now one behind.
+        setHistory(null);
       } else {
         setError(r.error);
       }
     });
+
+  const show = (v: RecommendationVersion) => {
+    setContent(v.content);
+    setMeta({ model: v.model, at: v.generatedAt, version: v.version });
+    setViewing(v.version);
+  };
 
   return (
     <section className="rounded-[8px] border border-[var(--border)] bg-[var(--surface)]" aria-busy={pending}>
@@ -40,14 +67,26 @@ export function RecommendationPanel({
         <h3 className="font-[family-name:var(--font-display)] text-[13px] font-medium">
           What to fix first
         </h3>
-        <button
-          type="button"
-          onClick={() => run(Boolean(content))}
-          disabled={pending}
-          className="rounded-[5px] border border-[var(--border-strong)] px-2.5 py-1 text-[12px] font-medium hover:bg-[var(--surface-subtle)] disabled:opacity-50"
-        >
-          {pending ? 'Thinking…' : content ? 'Regenerate' : 'Generate'}
-        </button>
+        <div className="flex items-center gap-2">
+          {content && (
+            <button
+              type="button"
+              onClick={() => (history ? setHistory(null) : loadHistory())}
+              disabled={pending}
+              className="text-[11px] text-[var(--muted)] hover:text-[var(--foreground)] disabled:opacity-50"
+            >
+              {history ? 'Hide earlier answers' : 'Earlier answers'}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => run(Boolean(content))}
+            disabled={pending}
+            className="rounded-[5px] border border-[var(--border-strong)] px-2.5 py-1 text-[12px] font-medium hover:bg-[var(--surface-subtle)] disabled:opacity-50"
+          >
+            {pending ? 'Thinking…' : content ? 'Regenerate' : 'Generate'}
+          </button>
+        </div>
       </div>
 
       {pending && !content && (
@@ -65,12 +104,51 @@ export function RecommendationPanel({
         </p>
       )}
 
+      {history && (
+        <ul className="border-t border-[var(--border)] bg-[var(--surface-subtle)] px-2 py-1.5">
+          {history.length === 0 && (
+            <li className="px-1.5 py-1 text-[11px] text-[var(--muted)]">Nothing saved yet.</li>
+          )}
+          {history.map((v, i) => (
+            <li key={v.version}>
+              <button
+                type="button"
+                onClick={() => show(v)}
+                aria-current={viewing === v.version}
+                className={`flex w-full items-baseline gap-2 rounded-[5px] px-1.5 py-1 text-left text-[11px] ${
+                  viewing === v.version
+                    ? 'bg-[var(--surface-sunken)] font-medium'
+                    : 'text-[var(--muted)] hover:bg-[var(--surface-sunken)]'
+                }`}
+              >
+                <span className="tnum">#{v.version}</span>
+                <span>{new Date(v.generatedAt).toLocaleString()}</span>
+                {i === 0 && <span className="text-[10px] text-[var(--faint)]">latest</span>}
+                <span className="ml-auto shrink-0 text-[10px] text-[var(--faint)]">
+                  {v.model}
+                  {v.durationMs !== null && ` · ${(v.durationMs / 1000).toFixed(1)}s`}
+                </span>
+              </button>
+            </li>
+          ))}
+          <li className="px-1.5 pt-1 text-[10px] text-[var(--faint)]">
+            The last 10 are kept for each measurement.
+          </li>
+        </ul>
+      )}
+
       {content && (
         <div className="border-t border-[var(--border)] px-3.5 py-3">
+          {meta && history && viewing !== history[0]?.version && (
+            <p className="mb-2.5 rounded-[5px] bg-[var(--surface-sunken)] px-2 py-1 text-[11px] text-[var(--muted)]">
+              Showing an earlier answer (#{meta.version}). It reflects the same measurement, not a newer one.
+            </p>
+          )}
           <Prose text={content} />
           {meta && (
             <p className="mt-3 text-[10px] text-[var(--muted)]">
-              {meta.model} · {new Date(meta.at).toLocaleString()} · cached until this page is re-audited
+              #{meta.version} · {meta.model} · {new Date(meta.at).toLocaleString()} · kept until this page is
+              re-audited
             </p>
           )}
         </div>

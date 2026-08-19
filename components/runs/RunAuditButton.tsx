@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { queueAuditAction } from '@/app/actions/audits';
 import { previewEstimateAction, type EstimatePreview } from '@/app/actions/estimate';
+import { Button } from '@/components/ui/Button';
 import type { PsiStrategy } from '@/lib/services/types';
 
 /**
@@ -18,11 +19,16 @@ export function RunAuditButton({
   target,
   label,
   strategies,
+  hint,
+  variant = 'secondary',
 }: {
   kind: 'page' | 'group';
   target: string;
   label?: string;
   strategies?: PsiStrategy[];
+  /** Shown in the tooltip until the measured estimate arrives. */
+  hint?: string;
+  variant?: 'primary' | 'secondary';
 }) {
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -40,7 +46,8 @@ export function RunAuditButton({
 
   return (
     <div className="flex items-center gap-2">
-      <button
+      <Button
+        variant={variant}
         type="button"
         disabled={pending}
         aria-busy={pending}
@@ -52,7 +59,7 @@ export function RunAuditButton({
               (preview.measured
                 ? ` — based on your last ${preview.sampleSize} audits (median ${preview.medianSeconds}s each)`
                 : ' — estimate, no measured history yet')
-            : undefined
+            : hint
         }
         onClick={() =>
           start(async () => {
@@ -62,10 +69,9 @@ export function RunAuditButton({
             else router.refresh();
           })
         }
-        className="rounded-[5px] border border-[var(--border-strong)] bg-[var(--surface)] px-2.5 py-1 text-[12px] font-medium hover:bg-[var(--surface-subtle)] disabled:opacity-50"
       >
-        {pending ? 'Queueing…' : (label ?? 'Re-run audit')}
-      </button>
+        {pending ? 'Starting…' : (label ?? 'Measure again')}
+      </Button>
 
       {preview && !pending && (
         <span className="text-[11px] text-[var(--muted)]">

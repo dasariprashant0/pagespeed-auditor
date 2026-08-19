@@ -14,6 +14,46 @@ export type ActionResult = { ok: true } | { ok: false; error: string };
  * reach them. Passing an empty list clears every override and returns the site
  * to sitemap order.
  */
+export async function reorderGroupsAction(slugsInOrder: string[]): Promise<ActionResult> {
+  const ctx = await requireCapability('groups:manage');
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      // Scoped to this organisation: an unscoped updateMany keyed on slug would
+      // reorder another tenant's sections, since slugs are only unique per site.
+      const owned = await tx.group.findMany({
+        where: { slug: { in: slugsInOrder }, site: { organizationId: ctx.organizationId } },
+        select: { id: true, slug: true },
+      });
+      const idBySlug = new Map(owned.map((g) => [g.slug, g.id]));
+
+      for (const [i, slug] of slugsInOrder.entries()) {
+        const id = idBySlug.get(slug);
+        if (id) await tx.group.update({ where: { id }, data: { priority: i } });
+      }
+    });
+    revalidatePath('/', 'layout');
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not save the order.' };
+  }
+}
+
+/** Drops every manual position, returning to the sitemap's own order. */
+export async function resetGroupOrderAction(): Promise<ActionResult> {
+  const ctx = await requireCapability('groups:manage');
+  try {
+    await prisma.group.updateMany({
+      where: { site: { organizationId: ctx.organizationId } },
+      data: { priority: null },
+    });
+    revalidatePath('/', 'layout');
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not reset the order.' };
+  }
+}
+
 export async function setGroupPriorityAction(slugsInOrder: string[]): Promise<ActionResult> {
   await requireCapability('groups:manage');
 

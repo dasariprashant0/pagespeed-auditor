@@ -3,29 +3,40 @@
 /*
  * Two things are deliberately NOT ours to invent: Lighthouse's three score
  * colours and its <50 / 50-89 / 90+ bands. The team reads PSI reports daily and
- * pattern-matches on them, so deviating there costs accuracy. Everything else --
- * type, density, surfaces -- is this tool's own. See docs/PLAN.md.
+ * pattern-matches on them, so deviating there costs accuracy.
+ *
+ * Everything else is this tool's own, and it is built around one idea: the
+ * chrome is an instrument bezel and the content is the screen. Chrome is cool,
+ * quiet and slightly recessed; readings sit on a bright field. Score colour is
+ * the only saturated thing anywhere, so nothing else can be mistaken for a
+ * measurement. See docs/DECISIONS.md 10.
  */
 :root {
-  /* Graphite, not stone-warm: this is an instrument, and a cream cast makes
-     measurements read as editorial. */
-  --background: #fbfbfa;
-  --foreground: #17171a;
-  --muted: #6f6f78;
-  --faint: #9a9aa4;
+  /* Neutrals carry a cool cast so Lighthouse's warm red and orange read as
+     signal against them rather than as part of the furniture. */
+  --background: #fbfbfc;
+  --foreground: #13151a;
+  --muted: #656d7b;
+  --faint: #949cab;
 
-  /* The chrome is deliberately colourless. Score colour is the only saturated
-     thing on screen, so a coloured button cannot be mistaken for a reading.
-     --danger exists solely for destructive confirmations. */
   --danger: #b42318;
 
   --surface: #ffffff;
-  --surface-subtle: #f6f6f5;
-  --surface-sunken: #eeeeec;
-  --border: #e6e6e3;
-  --border-strong: #d2d2ce;
-  /* One shadow, used only where something genuinely floats. */
-  --lift: 0 1px 2px rgb(23 23 26 / 0.04), 0 4px 12px rgb(23 23 26 / 0.04);
+  --surface-subtle: #f5f6f8;
+  --surface-sunken: #eceef2;
+  /* The rail and top bar. Recessed rather than raised: navigation should sit
+     behind the data, not float over it. */
+  --chrome: #f7f8fa;
+  --border: #e6e8ed;
+  --border-strong: #d0d4dc;
+
+  /* Three steps, used sparingly and consistently.
+     flat = hairline only, raised = a card you can pick out, over = true overlay. */
+  --shadow-raised: 0 1px 2px rgb(19 21 26 / 0.04);
+  --shadow-lift: 0 1px 2px rgb(19 21 26 / 0.04), 0 4px 12px rgb(19 21 26 / 0.05);
+  --shadow-over: 0 4px 8px rgb(19 21 26 / 0.06), 0 16px 40px rgb(19 21 26 / 0.12);
+  /* Kept: older components reference it. */
+  --lift: var(--shadow-lift);
 
   /* Lighthouse's own gauge colours. */
   --score-fail: #ff4e42;
@@ -43,29 +54,46 @@
 
   --score-none: #a8a29e;
   --score-none-tint: rgb(168 162 158 / 0.12);
-  --gauge-track: #e7e5e4;
+  --gauge-track: #e7e9ee;
 
   --info: #0369a1;
-  --radius: 8px;
+  --info-tint: rgb(3 105 161 / 0.08);
+
   --radius-sm: 5px;
-  --rail-w: 15rem;
+  --radius: 8px;
+  --radius-lg: 12px;
+  --rail-w: 15.5rem;
+  --topbar-h: 3rem;
+
+  /* One easing and three durations, so nothing in the app animates on a
+     timing nobody chose. The curve is a gentle decelerate -- interface motion
+     should arrive, not bounce. */
+  --ease: cubic-bezier(0.32, 0.72, 0, 1);
+  --t-fast: 110ms;
+  --t-base: 180ms;
+  --t-slow: 320ms;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --background: #0b0b0d;
-    --foreground: #f4f4f5;
-    --muted: #9c9ca6;
-    --faint: #6b6b76;
+    --background: #0a0b0d;
+    --foreground: #f2f3f5;
+    --muted: #949cab;
+    --faint: #656d7b;
     --danger: #f87171;
 
-    --surface: #141417;
-    --surface-subtle: #1c1c20;
-    --surface-sunken: #0f0f12;
-    --border: #26262b;
-    --border-strong: #3a3a41;
-    --gauge-track: #26262b;
-    --lift: 0 1px 2px rgb(0 0 0 / 0.4), 0 4px 12px rgb(0 0 0 / 0.3);
+    --surface: #131519;
+    --surface-subtle: #1a1d22;
+    --surface-sunken: #0e1013;
+    --chrome: #101216;
+    --border: #24272e;
+    --border-strong: #383c45;
+    --gauge-track: #24272e;
+
+    --shadow-raised: 0 1px 2px rgb(0 0 0 / 0.4);
+    --shadow-lift: 0 1px 2px rgb(0 0 0 / 0.4), 0 4px 12px rgb(0 0 0 / 0.35);
+    --shadow-over: 0 4px 8px rgb(0 0 0 / 0.4), 0 16px 40px rgb(0 0 0 / 0.55);
+    --lift: var(--shadow-lift);
 
     /* Arcs stay bright so the PSI recognition survives... */
     --score-fail: #ff5f52;
@@ -82,6 +110,7 @@
     --score-none: #78716c;
     --score-none-tint: rgb(120 113 108 / 0.18);
     --info: #38bdf8;
+    --info-tint: rgb(56 189 248 / 0.12);
   }
 }
 
@@ -94,6 +123,7 @@
   --color-surface: var(--surface);
   --color-surface-subtle: var(--surface-subtle);
   --color-surface-sunken: var(--surface-sunken);
+  --color-chrome: var(--chrome);
   --color-border: var(--border);
   --color-border-strong: var(--border-strong);
   --color-fail: var(--score-fail);
@@ -115,19 +145,20 @@ body {
   font-size: 0.8125rem;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
-/*
- * Type scale.
+/* ---------------------------------------------------------------------------
+ * Type scale
  *
- * The whole hierarchy is carried by SIZE and WEIGHT rather than colour, because
+ * The hierarchy is carried by SIZE and WEIGHT rather than colour, because
  * colour is reserved for scores. Labels are small, letterspaced and quiet;
  * measurements are large and set in the display face.
- */
+ * ------------------------------------------------------------------------ */
 .eyebrow {
   font-size: 0.625rem;
-  font-weight: 500;
-  letter-spacing: 0.07em;
+  font-weight: 600;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--faint);
 }
@@ -135,34 +166,117 @@ body {
   font-family: var(--font-display);
   font-variant-numeric: tabular-nums;
   font-weight: 500;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.03em;
   line-height: 1;
+}
+.title-xl {
+  font-family: var(--font-display);
+  font-size: 1.75rem;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
 }
 .title-lg {
   font-family: var(--font-display);
   font-size: 1.375rem;
   font-weight: 600;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.022em;
   line-height: 1.15;
 }
 .title-md {
   font-family: var(--font-display);
   font-size: 0.9375rem;
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.012em;
 }
-.panel {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 10px;
+.title-sm {
+  font-family: var(--font-display);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: -0.008em;
 }
 
 /* Columns of numbers only read as columns when the digits align. */
 td, th, .tnum { font-variant-numeric: tabular-nums; }
 
+/* ---------------------------------------------------------------------------
+ * Surfaces
+ * ------------------------------------------------------------------------ */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+.panel-flush {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+/* A panel that responds to the pointer. Only for panels that are links. */
+.panel-interactive {
+  transition:
+    border-color var(--t-base) var(--ease),
+    box-shadow var(--t-base) var(--ease),
+    transform var(--t-base) var(--ease);
+}
+.panel-interactive:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-lift);
+  transform: translateY(-1px);
+}
+.panel-interactive:active { transform: translateY(0); }
+
+/* ---------------------------------------------------------------------------
+ * Focus
+ *
+ * One ring, everywhere, including inside SVG. A tool that reports
+ * accessibility scores has to pass its own audit.
+ * ------------------------------------------------------------------------ */
 :focus-visible {
   outline: 2px solid var(--info);
   outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* ---------------------------------------------------------------------------
+ * Motion
+ *
+ * Entrances only, and only for content that has just arrived from the server.
+ * Nothing loops, nothing bounces, nothing animates on scroll. The point is to
+ * make streaming legible -- you should see WHICH part of the page filled in.
+ * ------------------------------------------------------------------------ */
+@keyframes rise {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes shimmer {
+  from { background-position: 200% 0; }
+  to   { background-position: -200% 0; }
+}
+@keyframes indeterminate {
+  from { transform: translateX(-100%) scaleX(0.4); }
+  to   { transform: translateX(400%) scaleX(0.6); }
+}
+
+.animate-rise { animation: rise var(--t-slow) var(--ease) both; }
+.animate-fade { animation: fade var(--t-base) var(--ease) both; }
+
+/* Skeletons shimmer rather than pulse: a pulse reads as "broken/retrying",
+   a directional sweep reads as "loading". */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--surface-sunken) 25%,
+    color-mix(in oklab, var(--surface-sunken) 60%, var(--surface)) 50%,
+    var(--surface-sunken) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
   border-radius: var(--radius-sm);
 }
 
@@ -170,6 +284,44 @@ td, th, .tnum { font-variant-numeric: tabular-nums; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
+  .skeleton { animation: none; background: var(--surface-sunken); }
+}
+
+/* Scrollbars in the rail should not add visual noise to a list of 68 rows. */
+.thin-scroll { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
+.thin-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+.thin-scroll::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 99px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+.thin-scroll::-webkit-scrollbar-track { background: transparent; }
+
+/* ---------------------------------------------------------------------------
+ * Autofill
+ *
+ * Chrome paints a pale blue over any field it has filled, which overrides the
+ * field's own background and makes a signed-in-before user's login form look
+ * like a different design from the one everyone else sees. There is no
+ * background-color property that wins here -- the accepted fix is a very long
+ * inset shadow in the colour we actually want.
+ * ------------------------------------------------------------------------ */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-text-fill-color: var(--foreground);
+  -webkit-box-shadow: 0 0 0 1000px var(--surface) inset;
+  box-shadow: 0 0 0 1000px var(--surface) inset;
+  caret-color: var(--foreground);
+  transition: background-color 100000s ease-in-out 0s;
+}
+input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px var(--surface) inset, 0 0 0 3px var(--info-tint);
+  box-shadow: 0 0 0 1000px var(--surface) inset, 0 0 0 3px var(--info-tint);
 }

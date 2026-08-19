@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import { prisma } from '@/lib/db';
 import { AcceptInviteForm } from '@/components/auth/AcceptInviteForm';
-import { AuthCard } from '@/components/auth/AuthCard';
+import { AuthCard, AuthLink } from '@/components/auth/AuthCard';
+import { ButtonLink } from '@/components/ui/Button';
 import { isRole } from '@/lib/auth/roles';
 
 export const dynamic = 'force-dynamic';
@@ -13,7 +14,17 @@ export default async function InvitePage({
 }) {
   const { token } = await searchParams;
   if (!token) {
-    return <AuthCard title="Invalid invitation"><p className="text-[12px] text-[var(--muted)]">That link is missing its token.</p></AuthCard>;
+    return (
+      <AuthCard
+        title="This invitation link is incomplete"
+        subtitle="The link is missing its token — it was probably cut short by an email client. Ask whoever invited you to send it again."
+        footer={<AuthLink href="/login">Back to sign in</AuthLink>}
+      >
+        <ButtonLink href="/login" variant="primary" className="h-9 w-full text-[13px]">
+          Go to sign in
+        </ButtonLink>
+      </AuthCard>
+    );
   }
 
   // Only the hash is stored, so the link itself is the credential.
@@ -35,8 +46,14 @@ export default async function InvitePage({
 
   if (problem || !invite) {
     return (
-      <AuthCard title="Invitation unavailable">
-        <p className="text-[12px] text-[var(--muted)]">{problem}</p>
+      <AuthCard
+        title="This invitation can't be used"
+        subtitle={problem}
+        footer={<AuthLink href="/login">Back to sign in</AuthLink>}
+      >
+        <ButtonLink href="/login" variant="primary" className="h-9 w-full text-[13px]">
+          Go to sign in
+        </ButtonLink>
       </AuthCard>
     );
   }

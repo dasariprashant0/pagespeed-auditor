@@ -1,7 +1,7 @@
-import Link from 'next/link';
 import { inspectResetToken } from '@/lib/services/account.service';
 import { ResetForm } from '@/components/auth/ResetForm';
-import { AuthCard } from '@/components/auth/AuthCard';
+import { AuthCard, AuthLink } from '@/components/auth/AuthCard';
+import { ButtonLink } from '@/components/ui/Button';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,11 +15,14 @@ export default async function ResetPage({
 
   if (!info.valid || !token) {
     return (
-      <AuthCard title="Link unavailable">
-        <p className="text-[12px] text-[var(--muted)]">{info.reason}</p>
-        <p className="mt-3 text-[12px]">
-          <Link href="/forgot" className="underline">Request a new one</Link>
-        </p>
+      <AuthCard
+        title="That link has expired"
+        subtitle={info.reason}
+        footer={<><AuthLink href="/login">Back to sign in</AuthLink></>}
+      >
+        <ButtonLink href="/forgot" variant="primary" className="h-9 w-full text-[13px]">
+          Send me a new link
+        </ButtonLink>
       </AuthCard>
     );
   }

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { RunProgressDTO } from '@/lib/services/types';
+import { RunControls } from './RunControls';
 
 const TERMINAL = new Set(['completed', 'failed', 'cancelled', 'skipped']);
 
@@ -89,9 +90,12 @@ function RunRow({ run: r }: { run: RunProgressDTO }) {
     tail = '';
   }
 
-  const text = `${r.completedJobs} of ${r.totalJobs} audits complete${
-    r.failedJobs > 0 ? `, ${r.failedJobs} failed` : ''
-  }${tail}`;
+  const held = r.status === 'paused';
+  const text = held
+    ? `Held at ${r.completedJobs} of ${r.totalJobs}. Nothing is lost — continue when you are ready.`
+    : `${r.completedJobs} of ${r.totalJobs} audits complete${
+        r.failedJobs > 0 ? `, ${r.failedJobs} failed` : ''
+      }${tail}`;
 
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 sm:px-4">
@@ -120,13 +124,19 @@ function RunRow({ run: r }: { run: RunProgressDTO }) {
             width: `${r.percentComplete}%`,
             // Amber while waiting on a retry, so a paused run does not look
             // like a healthy one that has simply gone quiet.
-            background: allRemainingRetrying ? 'var(--score-average)' : 'var(--info)',
+            background: held
+              ? 'var(--faint)'
+              : allRemainingRetrying
+                ? 'var(--score-average)'
+                : 'var(--info)',
           }}
         />
       </div>
 
       {/* The same string the bar announces, so nothing is read out that isn't visible. */}
       <span className="tnum text-[11px] text-[var(--muted)]">{text}</span>
+
+      <RunControls runId={r.runId} status={r.status} compact />
     </div>
   );
 }

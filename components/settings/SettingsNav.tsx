@@ -13,7 +13,7 @@ export function SettingsNav({ role, active }: { role: Role; active: string }) {
     { href: '/settings/profile', label: 'Profile', show: true },
     { href: '/settings/team', label: 'Teammates', show: can(role, 'members:manage') },
     { href: '/settings/site', label: 'Site', show: can(role, 'site:manage') },
-    { href: '/settings', label: 'Automation', show: can(role, 'automation:manage') },
+    { href: '/settings/automation', label: 'Automation', show: can(role, 'automation:manage') },
   ].filter((t) => t.show);
 
   return (

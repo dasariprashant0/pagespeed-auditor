@@ -124,8 +124,13 @@ export async function historyOverview(siteId: string): Promise<{
       _min: { createdAt: true },
     }),
     prisma.auditRun.count({ where: { siteId } }),
+    // pg_column_size reads the STORED (compressed, possibly out-of-line) size
+    // rather than materialising the value. LENGTH("rawJson"::text) had to
+    // detoast and cast every stored PSI response -- ~90 MB of decompression on
+    // this site -- which is why opening Settings took over three seconds and
+    // got slower with every sweep.
     prisma.$queryRaw<Array<{ bytes: bigint | null }>>`
-      SELECT SUM(COALESCE(LENGTH("rawJson"::text), 0) + LENGTH("markdownReport")) AS bytes
+      SELECT SUM(pg_column_size(r."rawJson") + pg_column_size(r."markdownReport")) AS bytes
       FROM "AuditResult" r JOIN "Page" p ON p.id = r."pageId"
       WHERE p."siteId" = ${siteId}
     `,
@@ -136,6 +141,8 @@ export async function historyOverview(siteId: string): Promise<{
     totalResults: agg._count.id,
     distinctRuns: runs,
     oldest: agg._min.createdAt,
+    // On-disk, after Postgres compresses the JSON. Smaller than the raw
+    // payload, and the honest number for "how much space is this costing".
     storageBytes: Number(storage[0]?.bytes ?? 0),
   };
 }

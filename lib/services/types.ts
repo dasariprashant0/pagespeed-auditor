@@ -164,7 +164,14 @@ export interface PageReportDTO {
     markdownReport: string;
   } | null;
   history: Record<'performance' | 'accessibility' | 'bestPractices' | 'seo', SparkPoint[]>;
-  recommendation: { content: string; model: string; generatedAt: string } | null;
+  recommendation: {
+    content: string;
+    model: string;
+    generatedAt: string;
+    /** Which regeneration this is. 1 is the first answer ever produced. */
+    version: number;
+    durationMs: number | null;
+  } | null;
 }
 
 export interface TopIssueDTO {
@@ -177,7 +184,7 @@ export interface TopIssueDTO {
   totalSavingsMs: number | null;
 }
 
-export type RunStatus = 'queued' | 'running' | 'completed' | 'failed' | 'skipped';
+export type RunStatus = 'queued' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled' | 'skipped';
 
 export interface RunProgressDTO {
   runId: string;

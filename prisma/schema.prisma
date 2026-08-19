@@ -298,7 +298,8 @@ model AuditResult {
 
   createdAt DateTime @default(now())
 
-  recommendation Recommendation?
+  /// Newest first at read time; a regeneration appends rather than replaces.
+  recommendations Recommendation[]
   issues         AuditIssue[]
 
   // SPEC+ and load-bearing: the durable idempotency guarantee. BullMQ's jobId
@@ -347,19 +348,31 @@ model AuditIssue {
 
 model Recommendation {
   id            String      @id @default(cuid())
-  auditResultId String      @unique
+  auditResultId String
   auditResult   AuditResult @relation(fields: [auditResultId], references: [id], onDelete: Cascade)
+
+  // SPEC+: regenerating keeps the old answer instead of overwriting it. A
+  // person regenerates precisely when they disagree with what they got, and
+  // losing the previous take means they cannot compare the two. Capped at
+  // RECOMMENDATION_KEEP_VERSIONS (10) per result -- see retention.service.ts.
+  version Int
 
   content String @default("")
   model   String @default("")
 
-  // SPEC+: makes the create-then-read pattern an atomic lock (ON CONFLICT DO
-  // NOTHING), so two tabs opening the same report generate exactly once.
+  // The unique pair below is what makes the create an atomic claim: two tabs
+  // both computing version N+1 will race on the same insert, and Postgres lets
+  // exactly one win (ON CONFLICT DO NOTHING). No advisory lock needed.
   status    String   @default("generating") // "generating" | "complete" | "failed"
   error     String?
   startedAt DateTime @default(now())
+  /** Measured, not estimated: how long the model actually took. */
+  durationMs Int?
 
   generatedAt DateTime @default(now())
+
+  @@unique([auditResultId, version])
+  @@index([auditResultId, version(sort: Desc)])
 }
 
 model Schedule {

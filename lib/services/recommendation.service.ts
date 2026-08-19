@@ -7,89 +7,143 @@ import { getPageReport } from './report.service.ts';
 import type { PsiStrategy } from '../psi/types.ts';
 
 /**
- * On-demand, cached AI recommendations.
+ * On-demand, versioned AI recommendations.
  *
- * Generated when a report is first opened rather than for every page after
- * every sweep: 1,494 generations per sweep would cost far more than the audits
- * and almost none of them would be read.
+ * Generated when a report is opened rather than for every page after every
+ * sweep: 1,494 generations per sweep would cost more than the audits and almost
+ * none of them would be read.
+ *
+ * Regenerating APPENDS a version instead of overwriting. Someone regenerates
+ * precisely when they doubt the answer they got, and comparing the two is the
+ * whole point of doing it again -- so the old one has to survive. History is
+ * capped per audit result; see KEEP_VERSIONS.
  */
+
+/** Ten regenerations per result. Beyond that, the oldest are dropped. */
+export const KEEP_VERSIONS = 10;
 
 export interface RecommendationResult {
   content: string;
   model: string;
   generatedAt: string;
+  version: number;
+  durationMs: number | null;
   cached: boolean;
 }
 
+export interface RecommendationVersion {
+  version: number;
+  model: string;
+  generatedAt: string;
+  durationMs: number | null;
+  status: string;
+  content: string;
+}
+
 const STALE_GENERATING_MS = 3 * 60 * 1000;
+
+async function resultIdFor(pageId: string, strategy: PsiStrategy) {
+  const report = await getPageReport(pageId, strategy);
+  const result = report.result;
+  if (!result) throw new Error('This page has not been audited on this strategy yet.');
+  if (result.status !== 'ok') throw new Error('The last audit failed, so there is nothing to analyse.');
+  return { report, auditResultId: result.id };
+}
+
+/** Every saved answer for this page and strategy, newest first. */
+export async function listRecommendations(
+  pageId: string,
+  strategy: PsiStrategy,
+): Promise<RecommendationVersion[]> {
+  const page = await prisma.page.findUnique({
+    where: { id: pageId },
+    select: { latestResultMobileId: true, latestResultDesktopId: true },
+  });
+  const auditResultId =
+    strategy === 'mobile' ? page?.latestResultMobileId : page?.latestResultDesktopId;
+  if (!auditResultId) return [];
+
+  const rows = await prisma.recommendation.findMany({
+    where: { auditResultId, status: 'complete' },
+    orderBy: { version: 'desc' },
+    select: { version: true, model: true, generatedAt: true, durationMs: true, status: true, content: true },
+  });
+
+  return rows.map((r) => ({
+    version: r.version,
+    model: r.model,
+    generatedAt: r.generatedAt.toISOString(),
+    durationMs: r.durationMs,
+    status: r.status,
+    content: r.content,
+  }));
+}
 
 export async function getOrCreateRecommendation(
   pageId: string,
   strategy: PsiStrategy,
   opts: { force?: boolean } = {},
 ): Promise<RecommendationResult> {
-  const report = await getPageReport(pageId, strategy);
-  const result = report.result;
-  if (!result) throw new Error('This page has not been audited on this strategy yet.');
-  if (result.status !== 'ok') throw new Error('The last audit failed, so there is nothing to analyse.');
+  const { report, auditResultId } = await resultIdFor(pageId, strategy);
 
-  const auditResultId = result.id;
+  const latest = await prisma.recommendation.findFirst({
+    where: { auditResultId },
+    orderBy: { version: 'desc' },
+  });
 
-  // createMany + skipDuplicates compiles to ON CONFLICT DO NOTHING, which is a
-  // real atomic lock rather than a check-then-act race. Two tabs opening the
-  // same report therefore generate exactly once.
-  if (!opts.force) {
-    // ON CONFLICT DO NOTHING: `count === 1` means THIS caller inserted the row
-    // and therefore owns the lock. Without that distinction the creator blocks
-    // on its own lock and nothing is ever generated.
-    const claimed = await prisma.recommendation.createMany({
-      data: [{ auditResultId, status: 'generating', model: '', content: '' }],
-      skipDuplicates: true,
-    });
+  if (!opts.force && latest?.status === 'complete' && latest.content) {
+    return {
+      content: latest.content,
+      model: latest.model,
+      generatedAt: latest.generatedAt.toISOString(),
+      version: latest.version,
+      durationMs: latest.durationMs,
+      cached: true,
+    };
+  }
 
-    if (claimed.count === 0) {
-      const existing = await prisma.recommendation.findUnique({ where: { auditResultId } });
-      if (existing?.status === 'complete' && existing.content) {
-        return {
-          content: existing.content,
-          model: existing.model,
-          generatedAt: existing.generatedAt.toISOString(),
-          cached: true,
-        };
-      }
+  // Someone else is mid-generation. A crash would otherwise hold the slot
+  // forever, so a stale claim is taken over rather than waited on.
+  if (
+    latest?.status === 'generating' &&
+    Date.now() - latest.startedAt.getTime() < STALE_GENERATING_MS
+  ) {
+    throw new Error('A recommendation is already being generated for this audit. Try again shortly.');
+  }
 
-      // Someone else is mid-generation. A crash would otherwise hold this row
-      // forever, so a stale claim is taken over rather than waited on.
-      if (
-        existing?.status === 'generating' &&
-        Date.now() - existing.startedAt.getTime() < STALE_GENERATING_MS
-      ) {
-        throw new Error('A recommendation is already being generated for this audit. Try again shortly.');
-      }
-
-      await prisma.recommendation.update({
-        where: { auditResultId },
-        data: { status: 'generating', startedAt: new Date(), error: null },
-      });
-    }
+  // The claim. Two tabs both compute the same next version and race on the
+  // same insert; ON CONFLICT DO NOTHING (skipDuplicates) lets exactly one
+  // through, so `count === 1` means THIS caller owns the generation. Without
+  // that distinction the creator blocks on its own claim and nothing is ever
+  // produced.
+  const version = (latest?.version ?? 0) + 1;
+  const claimed = await prisma.recommendation.createMany({
+    data: [{ auditResultId, version, status: 'generating', model: '', content: '' }],
+    skipDuplicates: true,
+  });
+  if (claimed.count === 0) {
+    throw new Error('Another tab just started this one. Give it a moment and reload.');
   }
 
   const provider = resolveProvider();
-  const prompt = buildRecommendationPrompt(report);
+  const previous = latest?.status === 'complete' ? latest.content : null;
+  const prompt = buildRecommendationPrompt(report, { previous });
+  const startedAt = Date.now();
 
   try {
     const content = await provider.generate(prompt);
     if (!content) throw new Error('The model returned nothing.');
+    const durationMs = Date.now() - startedAt;
 
     const saved = await prisma.$transaction(async (tx) => {
-      const rec = await tx.recommendation.upsert({
-        where: { auditResultId },
-        update: { content, model: provider.model, status: 'complete', error: null, generatedAt: new Date() },
-        create: { auditResultId, content, model: provider.model, status: 'complete' },
+      const rec = await tx.recommendation.update({
+        where: { auditResultId_version: { auditResultId, version } },
+        data: { content, model: provider.model, status: 'complete', error: null, generatedAt: new Date(), durationMs },
       });
 
-      // Keep the stored markdown report in step, so the dashboard and the MCP
-      // `get_report` tool never disagree about what this page's advice is.
+      // Keep the stored markdown in step with the newest answer, so the
+      // dashboard, the .md export and the MCP `get_report` tool never disagree
+      // about what this page's advice is.
       const row = await tx.auditResult.findUniqueOrThrow({
         where: { id: auditResultId },
         select: { markdownReport: true },
@@ -99,18 +153,38 @@ export async function getOrCreateRecommendation(
         data: { markdownReport: upsertAiSection(row.markdownReport, content) },
       });
 
+      // Trim inside the same transaction: a separate pass could be skipped by a
+      // crash and let history grow without bound.
+      const keep = await tx.recommendation.findMany({
+        where: { auditResultId },
+        orderBy: { version: 'desc' },
+        skip: KEEP_VERSIONS,
+        select: { id: true },
+      });
+      if (keep.length > 0) {
+        await tx.recommendation.deleteMany({ where: { id: { in: keep.map((k) => k.id) } } });
+      }
+
       return rec;
     });
 
-    logger.info({ pageId, strategy, provider: provider.name }, 'recommendation generated');
-    return { content: saved.content, model: saved.model, generatedAt: saved.generatedAt.toISOString(), cached: false };
+    logger.info({ pageId, strategy, version, durationMs, provider: provider.name }, 'recommendation generated');
+    return {
+      content: saved.content,
+      model: saved.model,
+      generatedAt: saved.generatedAt.toISOString(),
+      version: saved.version,
+      durationMs,
+      cached: false,
+    };
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
-    await prisma.recommendation.upsert({
-      where: { auditResultId },
-      update: { status: 'failed', error: message },
-      create: { auditResultId, status: 'failed', error: message, content: '', model: provider.model },
-    });
+    // Release the claim by marking it failed, so the next attempt is not told
+    // that a generation is already running.
+    await prisma.recommendation.update({
+      where: { auditResultId_version: { auditResultId, version } },
+      data: { status: 'failed', error: message, durationMs: Date.now() - startedAt },
+    }).catch(() => { /* the row may already be gone with its result */ });
     throw new Error(`Could not generate a recommendation: ${message}`);
   }
 }

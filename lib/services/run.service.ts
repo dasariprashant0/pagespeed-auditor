@@ -33,8 +33,9 @@ export const BOTH_STRATEGIES: PsiStrategy[] = ['mobile', 'desktop'];
  * and are round-trip tested.
  */
 export interface RunScope {
-  kind: 'site' | 'group' | 'page';
-  /** Group slug, or page id. Null for a whole-site sweep. */
+  /** `retry` re-measures exactly the pages another run recorded an error for. */
+  kind: 'site' | 'group' | 'page' | 'retry';
+  /** Group slug, page id, or -- for `retry` -- the run being retried. */
   ref: string | null;
   strategies: PsiStrategy[];
 }
@@ -168,7 +169,9 @@ export async function findActiveRun(
   type?: RunType,
 ): Promise<{ id: string; type: string; startedAt: Date } | null> {
   return prisma.auditRun.findFirst({
-    where: { siteId, status: { in: ['queued', 'running'] }, ...(type ? { type } : {}) },
+    // 'paused' counts as active: the jobs are still queued, and letting a
+    // second sweep start alongside them would double the quota spend.
+    where: { siteId, status: { in: ['queued', 'running', 'paused'] }, ...(type ? { type } : {}) },
     select: { id: true, type: true, startedAt: true },
     orderBy: { startedAt: 'desc' },
   });
@@ -237,7 +240,10 @@ export async function finalizeRun(prisma: PrismaClient, runId: string): Promise<
   });
   if (!run) throw new NotFoundError(`run ${runId}`);
 
-  if (run.status === 'completed' || run.status === 'failed' || run.status === 'skipped') {
+  // 'cancelled' is terminal too: the in-flight jobs finish after a stop, and
+  // the last of them would otherwise finalize the run back to 'completed' and
+  // erase the fact that someone stopped it.
+  if (['completed', 'failed', 'skipped', 'cancelled'].includes(run.status)) {
     return run.status as RunStatus;
   }
 
@@ -283,6 +289,13 @@ export async function expandScope(
   siteId: string,
   scope: RunScope,
 ): Promise<AuditPair[]> {
+  // A retry is not a query over pages -- it is a replay of a specific list of
+  // (page, strategy) pairs, and it must not silently widen if the sitemap has
+  // changed since. Handled before the page query for that reason.
+  if (scope.kind === 'retry') {
+    return failedPairsForRun(prisma, scope.ref ?? '');
+  }
+
   const where =
     scope.kind === 'page'
       ? { id: scope.ref ?? '' }
@@ -306,6 +319,65 @@ export async function expandScope(
   return pages.flatMap((p) =>
     scope.strategies.map((strategy) => ({ pageId: p.id, url: p.url, strategy })),
   );
+}
+
+export interface FailedResult {
+  pageId: string;
+  path: string;
+  url: string;
+  strategy: PsiStrategy;
+  /** Lighthouse's own code, or RETRIES_EXHAUSTED when PSI never answered. */
+  error: string;
+  at: string;
+}
+
+/**
+ * The pages a run could not measure.
+ *
+ * These are real rows, not absences: a job that exhausts its attempts writes an
+ * AuditResult with status 'error' and null scores, precisely so the run can
+ * still reach totalJobs and finalize. Without that a sweep containing one
+ * unmeasurable page would sit at "running" forever.
+ */
+export async function failedResultsForRun(
+  prisma: PrismaClient,
+  runId: string,
+): Promise<FailedResult[]> {
+  const rows = await prisma.auditResult.findMany({
+    where: { auditRunId: runId, status: 'error' },
+    select: {
+      pageId: true,
+      strategy: true,
+      runtimeError: true,
+      createdAt: true,
+      page: { select: { path: true, url: true } },
+    },
+    orderBy: [{ createdAt: 'asc' }],
+  });
+
+  return rows.map((r) => ({
+    pageId: r.pageId,
+    path: r.page.path,
+    url: r.page.url,
+    strategy: r.strategy as PsiStrategy,
+    error: r.runtimeError ?? 'unknown',
+    at: r.createdAt.toISOString(),
+  }));
+}
+
+async function failedPairsForRun(prisma: PrismaClient, runId: string): Promise<AuditPair[]> {
+  const failed = await failedResultsForRun(prisma, runId);
+  // Only pages that still exist and are still in the sitemap. Re-measuring a
+  // page that has since been dropped would spend quota on a 404.
+  const alive = await prisma.page.findMany({
+    where: { id: { in: failed.map((f) => f.pageId) }, isActive: true },
+    select: { id: true, url: true },
+  });
+  const urlById = new Map(alive.map((p) => [p.id, p.url]));
+
+  return failed
+    .filter((f) => urlById.has(f.pageId))
+    .map((f) => ({ pageId: f.pageId, url: urlById.get(f.pageId)!, strategy: f.strategy }));
 }
 
 export interface ResumeSummary {
@@ -487,4 +559,104 @@ export function scopeLink(
     return { scopeHref: `/p/${scope.ref}`, scopeName: 'one page' };
   }
   return { scopeHref: '/', scopeName: 'whole site' };
+}
+
+// ---------------------------------------------------------------------------
+// Pause / resume / stop
+// ---------------------------------------------------------------------------
+
+/**
+ * Holding a sweep without losing it.
+ *
+ * Pausing pauses the QUEUE, not individual jobs -- BullMQ has no per-job hold,
+ * and the overlap guard already means at most one sweep is in flight, so the
+ * two amount to the same thing here. Two consequences to be honest about in the
+ * UI rather than hide:
+ *
+ *  - Jobs already handed to a worker run to completion. Up to WORKER_CONCURRENCY
+ *    more results will land after the pause. Killing them mid-flight would burn
+ *    the quota they already spent and produce nothing.
+ *  - Everything queued stays queued. Nothing is lost, and resuming continues
+ *    from where it stopped rather than starting over.
+ *
+ * Stopping is different from failing: the run keeps every result it collected
+ * and is marked `cancelled`, because "someone stopped this" and "this broke"
+ * need to look different in the run history a month later.
+ */
+
+export type RunControl = 'pause' | 'resume' | 'stop';
+
+export interface RunControlResult {
+  status: RunStatus;
+  /** Jobs still queued at the moment of the change. */
+  pending: number;
+  /** Jobs a worker had already picked up and will finish regardless. */
+  inFlight: number;
+}
+
+const PAUSABLE: RunStatus[] = ['queued', 'running'];
+
+export async function controlRun(
+  prisma: PrismaClient,
+  runId: string,
+  action: RunControl,
+  queue: {
+    pause: () => Promise<void>;
+    resume: () => Promise<void>;
+    getWaitingCount: () => Promise<number>;
+    getDelayedCount: () => Promise<number>;
+    getActiveCount: () => Promise<number>;
+    drain: (delayed?: boolean) => Promise<void>;
+  },
+): Promise<RunControlResult> {
+  const run = await prisma.auditRun.findUnique({
+    where: { id: runId },
+    select: { id: true, status: true, completedJobs: true, totalJobs: true },
+  });
+  if (!run) throw new NotFoundError(`run ${runId}`);
+
+  const status = run.status as RunStatus;
+
+  if (action === 'pause' && !PAUSABLE.includes(status)) {
+    throw new Error(`This run is ${status}, so there is nothing to pause.`);
+  }
+  if (action === 'resume' && status !== 'paused') {
+    throw new Error(`This run is ${status}, not paused.`);
+  }
+  if (action === 'stop' && !['queued', 'running', 'paused'].includes(status)) {
+    throw new Error(`This run already finished as ${status}.`);
+  }
+
+  if (action === 'pause') {
+    await queue.pause();
+    await prisma.auditRun.update({ where: { id: runId }, data: { status: 'paused' } });
+  } else if (action === 'resume') {
+    await prisma.auditRun.update({ where: { id: runId }, data: { status: 'running' } });
+    // Order matters: mark running BEFORE unpausing, or a job can finish and
+    // try to finalize a run the database still calls paused.
+    await queue.resume();
+  } else {
+    // Drain first so nothing new starts, then unpause -- a drained-but-paused
+    // queue would block the NEXT run too.
+    await queue.drain(true);
+    await queue.resume();
+    await prisma.auditRun.update({
+      where: { id: runId },
+      data: {
+        status: 'cancelled',
+        finishedAt: new Date(),
+        error: `Stopped after ${run.completedJobs} of ${run.totalJobs} pages. The results collected are kept.`,
+      },
+    });
+  }
+
+  const [waiting, delayed, active] = await Promise.all([
+    queue.getWaitingCount(),
+    queue.getDelayedCount(),
+    queue.getActiveCount(),
+  ]);
+
+  const next: RunStatus = action === 'pause' ? 'paused' : action === 'resume' ? 'running' : 'cancelled';
+  logger.info({ runId, action, waiting, active }, 'run control');
+  return { status: next, pending: waiting + delayed, inFlight: active };
 }

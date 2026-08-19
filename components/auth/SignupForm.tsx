@@ -1,32 +1,47 @@
 'use client';
 
 import { useActionState } from 'react';
-import Link from 'next/link';
 import { signupAction, type AuthResult } from '@/app/actions/auth';
-import { AuthCard, Field, SubmitButton, FormError } from './AuthCard';
+import { AuthCard, Field, SubmitButton, FormError, AuthLink } from './AuthCard';
 
 export function SignupForm() {
   const [state, action, pending] = useActionState<AuthResult | null, FormData>(signupAction, null);
+  const error = state && !state.ok ? state.error : null;
 
   return (
     <AuthCard
-      title="Create an account"
-      subtitle="You will be the admin of a new organisation, and can invite your team afterwards."
+      title="Create your account"
+      subtitle="You'll be the admin of a new organisation, and can invite your team once you're in."
       footer={
         <>
-          Already have one? <Link href="/login" className="underline">Sign in</Link>
+          Already have an account? <AuthLink href="/login">Sign in</AuthLink>
         </>
       }
     >
-      <form action={action} className="space-y-3">
-        <Field label="Organisation" name="organizationName" autoComplete="organization"
-          hint="Your company or team. You can add several sites to it." />
+      <form action={action} className="space-y-4">
+        <Field
+          label="Organisation"
+          name="organizationName"
+          autoComplete="organization"
+          autoFocus
+          hint="Your company or team. You can track several sites under it."
+        />
         <Field label="Your name" name="name" required={false} autoComplete="name" />
-        <Field label="Email" name="email" type="email" autoComplete="username" />
-        <Field label="Password" name="password" type="password" autoComplete="new-password"
-          hint="At least 12 characters." />
-        <FormError message={state && !state.ok ? state.error : null} />
-        <SubmitButton pending={pending}>Create account</SubmitButton>
+        <Field label="Email" name="email" type="email" autoComplete="username" invalid={Boolean(error)} />
+        <Field
+          label="Password"
+          name="password"
+          type="password"
+          autoComplete="new-password"
+          hint="At least 12 characters."
+          invalid={Boolean(error)}
+        />
+
+        <FormError message={error} />
+
+        <SubmitButton pending={pending} pendingLabel="Creating your account…">
+          Create account
+        </SubmitButton>
       </form>
     </AuthCard>
   );

@@ -1,9 +1,8 @@
 'use client';
 
 import { useActionState } from 'react';
-import Link from 'next/link';
 import { requestResetAction, type ResetRequestResult } from '@/app/actions/auth';
-import { AuthCard, Field, SubmitButton, FormError } from './AuthCard';
+import { AuthCard, Field, SubmitButton, FormError, AuthLink } from './AuthCard';
 
 export function ForgotForm() {
   const [state, action, pending] = useActionState<ResetRequestResult | null, FormData>(requestResetAction, null);
@@ -12,16 +11,16 @@ export function ForgotForm() {
     <AuthCard
       title="Reset your password"
       subtitle="We will email you a link to choose a new one."
-      footer={<Link href="/login" className="underline">Back to sign in</Link>}
+      footer={<AuthLink href="/login">Back to sign in</AuthLink>}
     >
-      <form action={action} className="space-y-3">
+      <form action={action} className="space-y-4">
         <Field label="Email" name="email" type="email" autoComplete="username" />
         <FormError message={state && !state.ok ? state.error : null} />
         <SubmitButton pending={pending}>Send reset link</SubmitButton>
       </form>
 
       {state?.ok && (
-        <div className="mt-3 rounded-[6px] bg-[var(--surface-subtle)] p-3">
+        <div className="mt-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-subtle)] p-3">
           <p className="text-[12px]">{state.message}</p>
           {/* Without a mail transport the link is unreachable, which in a
               self-hosted install means nobody can ever get back in. */}

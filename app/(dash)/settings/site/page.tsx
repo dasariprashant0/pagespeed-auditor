@@ -1,8 +1,8 @@
+import { PageHeader } from '@/components/ui/PageHeader';
 import { requireCapability } from '@/lib/http/auth-guard';
 import { listSites } from '@/lib/services/tenant.service';
 import { listGroupsWithAggregates } from '@/lib/services/results.service';
 import { historyOverview } from '@/lib/services/retention.service';
-import { AppShell } from '@/components/shell/AppShell';
 import { SettingsNav } from '@/components/settings/SettingsNav';
 import { AddSiteForm, EditSiteForm, PsiKeyForm } from '@/components/settings/SiteForms';
 import { IngestButton } from '@/components/settings/IngestButton';
@@ -36,12 +36,11 @@ export default async function SiteSettingsPage() {
     site ? listGroupsWithAggregates(site.id, { strategy: 'mobile' }) : Promise.resolve([]),
     site ? historyOverview(site.id) : Promise.resolve(null),
   ]);
-  const rail = groups.filter((g) => g.pageCount > 0).map((g) => ({ slug: g.slug, name: g.name, pageCount: g.pageCount }));
   const pageCount = groups.reduce((n, g) => n + g.pageCount, 0);
 
   return (
-    <AppShell orgName={ctx.organizationName} siteName={site?.name} groups={rail} breadcrumb="Settings / Site">
-      <h1 className="title-lg mb-4">Settings</h1>
+    <>
+      <PageHeader crumbs={[{ label: 'Overview', href: '/' }, { label: 'Settings' }]} title="Site" subtitle="What gets measured" />
       <SettingsNav role={ctx.role} active="/settings/site" />
 
       <div className="max-w-2xl space-y-3">
@@ -92,6 +91,6 @@ export default async function SiteSettingsPage() {
           </>
         )}
       </div>
-    </AppShell>
+    </>
   );
 }

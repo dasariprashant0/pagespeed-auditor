@@ -171,8 +171,13 @@ const REPORT_RESULT_SELECT = {
   fieldTtfb: true,
   fieldJson: true,
   markdownReport: true,
-  recommendation: {
-    select: { content: true, model: true, status: true, generatedAt: true },
+  // Newest complete answer only. The rest of the history is loaded separately
+  // by the panel, so a report render never carries ten bodies it will not show.
+  recommendations: {
+    where: { status: 'complete' },
+    orderBy: { version: 'desc' },
+    take: 1,
+    select: { content: true, model: true, status: true, generatedAt: true, version: true, durationMs: true },
   },
 } as const;
 
@@ -302,7 +307,7 @@ export async function getPageReport(
   }));
 
   const ok = latest.status === 'ok';
-  const rec = latest.recommendation;
+  const rec = latest.recommendations[0] ?? null;
 
   return {
     ...base,
@@ -353,7 +358,13 @@ export async function getPageReport(
     // body rendered as advice is worse than none.
     recommendation:
       rec && rec.status === 'complete'
-        ? { content: rec.content, model: rec.model, generatedAt: rec.generatedAt.toISOString() }
+        ? {
+            content: rec.content,
+            model: rec.model,
+            generatedAt: rec.generatedAt.toISOString(),
+            version: rec.version,
+            durationMs: rec.durationMs,
+          }
         : null,
   };
 }

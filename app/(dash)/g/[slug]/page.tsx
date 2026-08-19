@@ -1,12 +1,15 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { requireSession } from '@/lib/http/auth-guard';
 import { defaultSite, requireGroupAccess } from '@/lib/services/tenant.service';
-import { listGroupsWithAggregates, listPagesInGroup } from '@/lib/services/results.service';
-import { AppShell } from '@/components/shell/AppShell';
-import { PageTable } from '@/components/nav/PageTable';
+import { listPagesInGroup } from '@/lib/services/results.service';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { StrategyTabs } from '@/components/ui/StrategyTabs';
+import { DownloadMarkdown } from '@/components/report/DownloadMarkdown';
+import { PageTable, type PageRow } from '@/components/nav/PageTable';
 import { EmptyState } from '@/components/nav/EmptyState';
 import { RunAuditButton } from '@/components/runs/RunAuditButton';
+import { SpectrumRibbon } from '@/components/score/SpectrumRibbon';
+import { formatDuration } from '@/lib/services/estimate.service';
 import type { PsiStrategy } from '@/lib/services/types';
 
 export const dynamic = 'force-dynamic';
@@ -26,82 +29,97 @@ export default async function GroupPage({
   const site = await defaultSite(ctx.organizationId);
   if (!site) notFound();
 
-  // Resolved against the organisation, not just the slug: group slugs are only
-  // unique within a site, so an unscoped lookup could land on another tenant's.
-  let group;
-  try {
-    group = await requireGroupAccess(ctx.organizationId, slug, site.id);
-  } catch {
-    notFound();
-  }
+  // Slugs appear in URLs, so ownership is checked rather than assumed.
+  const group = await requireGroupAccess(ctx.organizationId, slug).catch(() => null);
+  if (!group) notFound();
 
-  const [pages, allGroups] = await Promise.all([
-    listPagesInGroup(group.id, { strategy }),
-    listGroupsWithAggregates(site.id, { strategy }),
+  const pages = await listPagesInGroup(group.id, { strategy });
+
+  // Tuples, not objects: on a 324-page section the repeated field names were
+  // most of a 4.3 MB payload. The table expands them on the client.
+  const rows: PageRow[] = pages.map((p) => [
+    p.id,
+    p.path,
+    p.url,
+    p.scores.performance,
+    p.scores.accessibility,
+    p.scores.bestPractices,
+    p.scores.seo,
+    p.lcp,
+    p.cls,
+    p.hasError ? 1 : 0,
   ]);
 
-  const rail = allGroups
-    // Already in sitemap order from the service; re-sorting here would undo it.
-    .filter((g) => g.pageCount > 0)
-    .map((g) => ({ slug: g.slug, name: g.name, pageCount: g.pageCount }));
+  const measured = pages
+    .map((p) => p.scores.performance)
+    .filter((s): s is number => s !== null);
+  const average = measured.length
+    ? Math.round(measured.reduce((a, b) => a + b, 0) / measured.length)
+    : null;
+
+  // Both strategies, at the sustained PSI rate.
+  const rerunSeconds = Math.ceil((pages.length * 2) / 0.75);
 
   return (
-    <AppShell
-      orgName={ctx.organizationName}
-      siteName={site.name}
-      groups={rail}
-      activeSlug={slug}
-      breadcrumb={
-        <>
-          <Link href="/" className="hover:text-[var(--foreground)]">Overview</Link>
-          <span className="mx-1.5">/</span>
-          <span className="text-[var(--foreground)]">{group.name}</span>
-        </>
-      }
-      actions={
-        <div className="flex items-center gap-2">
-        <RunAuditButton kind="group" target={slug} label={`Audit all ${pages.length}`} />
-        <a
-          href={`/api/reports/bulk?group=${slug}&strategy=${strategy}`}
-          download
-          className="rounded-[5px] border border-[var(--border)] px-2.5 py-1 text-[12px] text-[var(--muted)] hover:bg-[var(--surface-subtle)]"
-          title="Every audited page in this group as one markdown file, for handing to a coding agent."
-        >
-          Download .md
-        </a>
-        <div role="tablist" aria-label="Report strategy" className="flex rounded-[5px] border border-[var(--border)] p-0.5">
-          {(['mobile', 'desktop'] as const).map((s) => (
-            <Link
-              key={s}
-              role="tab"
-              aria-selected={s === strategy}
-              href={`/g/${slug}?strategy=${s}`}
-              className={`rounded-[3px] px-2.5 py-1 text-[12px] capitalize ${
-                s === strategy ? 'bg-[var(--surface-sunken)] font-medium' : 'text-[var(--muted)]'
-              }`}
+    <>
+      <PageHeader
+        crumbs={[{ label: 'Overview', href: '/' }, { label: group.name }]}
+        title={group.name}
+        subtitle={
+          <>
+            {pages.length} {pages.length === 1 ? 'page' : 'pages'}
+            {measured.length < pages.length && ` · ${measured.length} measured`}
+            {average !== null && ` · ${average} average`}
+          </>
+        }
+        actions={
+          <>
+            <RunAuditButton
+              kind="group"
+              target={slug}
+              label={`Measure all ${pages.length}`}
+              hint={`Both mobile and desktop — about ${formatDuration(rerunSeconds)}.`}
+            />
+            <DownloadMarkdown
+              href={`/api/reports/bulk?group=${slug}`}
+              currentStrategy={strategy}
+              hint="Every measured page in this section as one markdown file, for handing to a coding agent."
+            />
+            <StrategyTabs active={strategy} basePath={`/g/${slug}`} />
+          </>
+        }
+      >
+        {measured.length > 3 && (
+          // The section's own distribution. On a 324-page section the average
+          // above says almost nothing; the shape says where the work is.
+          <div className="panel-flush relative mt-5">
+            {/* The 90 line, so a wall of orange is visibly a wall of orange
+                BELOW the passing mark rather than just a coloured stripe. */}
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute left-0 right-0 z-10 flex items-center"
+              style={{ top: '10%' }}
             >
-              {s}
-            </Link>
-          ))}
-        </div>
-        </div>
-      }
-    >
-      <div className="mb-4">
-        <h1 className="font-[family-name:var(--font-display)] text-lg font-semibold tracking-tight">
-          {group.name}
-        </h1>
-        <p className="mt-0.5 text-[12px] text-[var(--muted)]">
-          {pages.length} {pages.length === 1 ? 'page' : 'pages'} · {strategy} · re-running audits
-          both strategies at ~{Math.max(1, Math.ceil((pages.length * 2) / 0.75 / 60))} min
-        </p>
-      </div>
+              <span className="tnum shrink-0 pl-2.5 pr-1.5 text-[9px] text-[var(--faint)]">90</span>
+              <span className="flex-1 border-t border-dashed border-[var(--border-strong)] opacity-60" />
+            </span>
+            <SpectrumRibbon
+              scores={measured}
+              height={52}
+              label={`Performance across ${measured.length} measured pages in ${group.name}, worst to best.`}
+            />
+          </div>
+        )}
+      </PageHeader>
 
       {pages.length === 0 ? (
-        <EmptyState title="No pages in this group" body="Every page here has been removed from the sitemap, or moved to another group." />
+        <EmptyState
+          title="Nothing here to measure"
+          body="Every page in this section has been dropped from the sitemap or moved elsewhere. Its history is kept — nothing was deleted."
+        />
       ) : (
-        <PageTable pages={pages} strategy={strategy} />
+        <PageTable rows={rows} strategy={strategy} />
       )}
-    </AppShell>
+    </>
   );
 }

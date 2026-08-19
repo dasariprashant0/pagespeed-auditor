@@ -18,7 +18,12 @@ export async function GET() {
   const runs = await prisma.auditRun.findMany({
     // Scoped: an unfiltered poll would leak another tenant's activity, and
     // their scope labels name their pages.
-    where: { status: { in: ['queued', 'running'] }, site: { organizationId: session.organizationId } },
+    where: {
+      // A paused run stays on the bar -- that is where the button to resume it
+      // lives, and a sweep that vanished from the UI would look abandoned.
+      status: { in: ['queued', 'running', 'paused'] },
+      site: { organizationId: session.organizationId },
+    },
     orderBy: { startedAt: 'desc' },
     take: 3,
     select: {

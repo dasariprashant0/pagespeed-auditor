@@ -1,8 +1,7 @@
+import { PageHeader } from '@/components/ui/PageHeader';
 import { requireCapability } from '@/lib/http/auth-guard';
 import { prisma } from '@/lib/db';
 import { defaultSite } from '@/lib/services/tenant.service';
-import { listGroupsWithAggregates } from '@/lib/services/results.service';
-import { AppShell } from '@/components/shell/AppShell';
 import { SettingsNav } from '@/components/settings/SettingsNav';
 import { TeamManager, type MemberRow, type InviteRow } from '@/components/settings/TeamManager';
 import { isRole } from '@/lib/auth/roles';
@@ -29,9 +28,6 @@ export default async function TeamPage() {
     defaultSite(ctx.organizationId),
   ]);
 
-  const groups = site ? await listGroupsWithAggregates(site.id, { strategy: 'mobile' }) : [];
-  const rail = groups.filter((g) => g.pageCount > 0).map((g) => ({ slug: g.slug, name: g.name, pageCount: g.pageCount }));
-
   const members: MemberRow[] = memberships.map((m) => ({
     userId: m.user.id,
     email: m.user.email,
@@ -46,8 +42,8 @@ export default async function TeamPage() {
   }));
 
   return (
-    <AppShell orgName={ctx.organizationName} siteName={site?.name} groups={rail} breadcrumb="Settings / Teammates">
-      <h1 className="title-lg mb-4">Settings</h1>
+    <>
+      <PageHeader crumbs={[{ label: 'Overview', href: '/' }, { label: 'Settings' }]} title="Teammates" subtitle="Who can see and change things" />
       <SettingsNav role={ctx.role} active="/settings/team" />
       <div className="max-w-2xl">
         <TeamManager
@@ -56,6 +52,6 @@ export default async function TeamPage() {
           adminCount={members.filter((m) => m.role === 'admin').length}
         />
       </div>
-    </AppShell>
+    </>
   );
 }

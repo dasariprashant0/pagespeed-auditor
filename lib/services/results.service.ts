@@ -503,7 +503,8 @@ export async function getPageRunHistory(
       lcp: true,
       cls: true,
       auditRun: { select: { id: true, type: true, triggeredBy: true } },
-      recommendation: { select: { id: true, status: true } },
+      // Just enough to show the "has advice" dot; the bodies are large.
+      recommendations: { where: { status: 'complete' }, select: { id: true }, take: 1 },
     },
   });
 
@@ -535,6 +536,6 @@ export async function getPageRunHistory(
     performanceDelta: deltas.get(r.id) ?? null,
     lcp: r.lcp,
     cls: r.cls,
-    hasRecommendation: r.recommendation?.status === 'complete',
+    hasRecommendation: r.recommendations.length > 0,
   }));
 }

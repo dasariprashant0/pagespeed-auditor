@@ -22,7 +22,10 @@ export async function GET(req: Request) {
 
   const url = new URL(req.url);
   const groupSlug = url.searchParams.get('group');
-  const strategy = (url.searchParams.get('strategy') === 'desktop' ? 'desktop' : 'mobile') as PsiStrategy;
+  const asked = url.searchParams.get('strategy');
+  const wanted: PsiStrategy[] =
+    asked === 'both' ? ['mobile', 'desktop'] : asked === 'desktop' ? ['desktop'] : ['mobile'];
+  const strategy = wanted[0];
   // Capped: a whole-site export would be megabytes and blow any agent's context.
   const limit = Math.min(Number(url.searchParams.get('limit') ?? 25), 50);
 
@@ -48,18 +51,28 @@ export async function GET(req: Request) {
 
   const reports = await Promise.all(
     pages.map(async (p) => {
-      try {
-        return buildAgentReport(await getPageReport(p.id, strategy));
-      } catch {
-        return `# ${p.path}\n\nCould not build a report for this page.`;
+      const sections: string[] = [];
+      for (const s of wanted) {
+        try {
+          const report = await getPageReport(p.id, s);
+          if (!report.result) continue;
+          sections.push(
+            wanted.length > 1
+              ? `## ${p.path} — ${s === 'mobile' ? 'mobile' : 'desktop'}\n\n${buildAgentReport(report)}`
+              : buildAgentReport(report),
+          );
+        } catch {
+          sections.push(`# ${p.path}\n\nCould not build a ${s} report for this page.`);
+        }
       }
+      return sections.join('\n\n');
     }),
   );
 
   const header = [
     `# PageSpeed fixes — ${site.name}${groupSlug ? ` / ${groupSlug}` : ''}`,
     '',
-    `${pages.length} page${pages.length === 1 ? '' : 's'}, tested as ${strategy}. Generated ${new Date().toISOString()}.`,
+    `${pages.length} page${pages.length === 1 ? '' : 's'}, tested as ${wanted.length > 1 ? 'mobile and desktop' : strategy}. Generated ${new Date().toISOString()}.`,
     '',
     'Each page below is a separate report. Before working page by page, read across',
     'them: a problem that appears on most pages is one shared fix (a template, a',
@@ -73,7 +86,7 @@ export async function GET(req: Request) {
   return new NextResponse(header + reports.join('\n\n---\n\n'), {
     headers: {
       'content-type': 'text/markdown; charset=utf-8',
-      'content-disposition': `attachment; filename="pagespeed-${slug}-${strategy}.md"`,
+      'content-disposition': `attachment; filename="pagespeed-${slug}-${wanted.length > 1 ? 'mobile-and-desktop' : strategy}.md"`,
       'cache-control': 'no-store',
     },
   });

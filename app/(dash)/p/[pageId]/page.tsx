@@ -1,10 +1,12 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { requireSession } from '@/lib/http/auth-guard';
 import { defaultSite, requirePageAccess } from '@/lib/services/tenant.service';
 import { getPageReport } from '@/lib/services/report.service';
-import { listGroupsWithAggregates } from '@/lib/services/results.service';
+import { toRailGroups } from '@/lib/view/rail';
+import { DownloadMarkdown } from '@/components/report/DownloadMarkdown';
 import { AppShell } from '@/components/shell/AppShell';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { StrategyTabs } from '@/components/ui/StrategyTabs';
 import { ScoreGauge } from '@/components/score/ScoreGauge';
 import { CWVGrid } from '@/components/report/CWVGrid';
 import { FieldDataPanel } from '@/components/report/FieldDataPanel';
@@ -45,93 +47,61 @@ export default async function PageReport({
 
   // Page ids appear in URLs. Without this check, pasting another tenant's id
   // would render their report.
-  let report;
-  try {
-    await requirePageAccess(ctx.organizationId, pageId);
-    report = await getPageReport(pageId, strategy);
-  } catch {
-    notFound();
-  }
+  // Only the ownership check maps to "not found". Wrapping the report build in
+  // the same catch turned every transient DB error into a bare 404 claiming the
+  // page does not exist -- including for pages linked from our own table. A
+  // real failure belongs in error.tsx, where it can be retried.
+  const owned = await requirePageAccess(ctx.organizationId, pageId).then(
+    () => true,
+    () => false,
+  );
+  if (!owned) notFound();
 
-  const [allGroups, regressions] = await Promise.all([
-    listGroupsWithAggregates(site.id, { strategy }),
-    regressionsForPage(pageId, strategy),
-  ]);
-  const rail = allGroups
-    // Already in sitemap order from the service; re-sorting here would undo it.
-    .filter((g) => g.pageCount > 0)
-    .map((g) => ({ slug: g.slug, name: g.name, pageCount: g.pageCount }));
+  const report = await getPageReport(pageId, strategy);
+
+  const regressions = await regressionsForPage(pageId, strategy);
 
   const r = report.result;
 
   return (
-    <AppShell
-      orgName={ctx.organizationName}
-      siteName={site.name}
-      groups={rail}
-      activeSlug={report.page.groupSlug ?? undefined}
-      breadcrumb={
-        <>
-          <Link href="/" className="hover:text-[var(--foreground)]">Overview</Link>
-          <span className="mx-1.5">/</span>
-          {report.page.groupSlug && (
-            <>
-              <Link href={`/g/${report.page.groupSlug}`} className="hover:text-[var(--foreground)]">
-                {report.page.groupName}
-              </Link>
-              <span className="mx-1.5">/</span>
-            </>
-          )}
-          <span className="truncate text-[var(--foreground)]">{report.page.path}</span>
-        </>
-      }
-      actions={
-        <div className="flex items-center gap-2">
-        <RunAuditButton kind="page" target={pageId} label="Re-run this page" />
-        <a
-          href={`/api/reports/${pageId}?strategy=${strategy}`}
-          download
-          className="rounded-[5px] border border-[var(--border)] px-2.5 py-1 text-[12px] text-[var(--muted)] hover:bg-[var(--surface-subtle)]"
-          title="Markdown written for a coding agent: the actual failing resources, selectors and measured savings. Hand it to Cursor, Claude or Codex."
-        >
-          Download .md
-        </a>
-        <div role="tablist" aria-label="Report strategy" className="flex rounded-[5px] border border-[var(--border)] p-0.5">
-          {(['mobile', 'desktop'] as const).map((s) => (
-            <Link
-              key={s}
-              role="tab"
-              aria-selected={s === strategy}
-              href={`/p/${pageId}?strategy=${s}`}
-              className={`rounded-[3px] px-2.5 py-1 text-[12px] capitalize ${
-                s === strategy ? 'bg-[var(--surface-sunken)] font-medium' : 'text-[var(--muted)]'
-              } ${!report.availability[s] ? 'opacity-50' : ''}`}
-            >
-              {s}
-              {!report.availability[s] && <span className="ml-1 text-[10px]">—</span>}
-            </Link>
-          ))}
-        </div>
-        </div>
-      }
-    >
-      <div className="mb-5">
-        <h1 className="font-[family-name:var(--font-display)] text-lg font-semibold tracking-tight">
-          {report.page.path}
-        </h1>
-        <a
-          href={report.page.url}
-          target="_blank"
-          rel="noreferrer"
-          className="text-[12px] text-[var(--muted)] hover:underline"
-        >
-          {report.page.url} ↗
-        </a>
-      </div>
+    <>
+      <PageHeader
+        crumbs={[
+          { label: 'Overview', href: '/' },
+          ...(report.page.groupSlug
+            ? [{ label: report.page.groupName ?? report.page.groupSlug, href: `/g/${report.page.groupSlug}` }]
+            : []),
+          { label: report.page.path },
+        ]}
+        title={report.page.path}
+        subtitle={
+          <a
+            href={report.page.url}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 rounded-[3px] transition-colors hover:text-[var(--foreground)]"
+          >
+            {report.page.url}
+            <span aria-hidden="true" className="text-[10px]">↗</span>
+            <span className="sr-only">(opens in a new tab)</span>
+          </a>
+        }
+        actions={
+          <>
+            <RunAuditButton kind="page" target={pageId} label="Measure again" />
+            <DownloadMarkdown
+              href={`/api/reports/${pageId}`}
+              currentStrategy={strategy}
+              hint="Markdown written for a coding agent: the actual failing resources, selectors and measured savings. Hand it to Cursor, Claude or Codex."
+            />
+            <StrategyTabs active={strategy} basePath={`/p/${pageId}`} />
+          </>
+        }
+      />
 
       {regressions.length > 0 && (
         <section className="mb-5" aria-label="Regressions">
-          <h2 className="mb-2 text-[11px] font-medium uppercase tracking-wide text-[var(--muted)]">
+          <h2 className="eyebrow mb-2">
             Regressions
           </h2>
           <RegressionBadge regressions={regressions} />
@@ -151,39 +121,42 @@ export default async function PageReport({
         />
       ) : (
         <>
-          <section aria-label="Scores" className="mb-6 flex flex-wrap items-start gap-5 rounded-[8px] border border-[var(--border)] bg-[var(--surface)] px-4 py-4 sm:gap-6 sm:px-5">
-            <ScoreGauge score={r.scores.performance} label="Performance" size="lg"
-              delta={delta(r.scores.performance, r.previousScores?.performance)} />
-            <ScoreGauge score={r.scores.accessibility} label="Accessibility" size="lg"
-              delta={delta(r.scores.accessibility, r.previousScores?.accessibility)} />
-            <ScoreGauge score={r.scores.bestPractices} label="Best Practices" size="lg"
-              delta={delta(r.scores.bestPractices, r.previousScores?.bestPractices)} />
-            <ScoreGauge score={r.scores.seo} label="SEO" size="lg"
-              delta={delta(r.scores.seo, r.previousScores?.seo)} />
-            {r.screenshot && <Screenshot src={r.screenshot} url={report.page.url} />}
-            <div className="w-full text-[11px] text-[var(--muted)] sm:ml-auto sm:w-auto sm:self-end sm:text-right">
-              {new Date(r.fetchedAt).toLocaleString()}
-              {r.lighthouseVersion && <div>Lighthouse {r.lighthouseVersion}</div>}
+          <section aria-label="Scores" className="mb-6">
+            <div className="panel grid grid-cols-2 items-start gap-x-4 gap-y-5 px-4 py-4 sm:flex sm:flex-wrap sm:gap-x-8 sm:px-5">
+              {SCORE_KEYS.map(({ key, label }) => (
+                <ScoreGauge
+                  key={key}
+                  score={r.scores[key]}
+                  label={label}
+                  size="lg"
+                  delta={delta(r.scores[key], r.previousScores?.[key])}
+                />
+              ))}
+              {r.screenshot && <Screenshot src={r.screenshot} url={report.page.url} />}
+              <div className="col-span-2 text-[11px] text-[var(--muted)] sm:ml-auto sm:self-end sm:text-right">
+                <div>{new Date(r.fetchedAt).toLocaleString()}</div>
+                {r.lighthouseVersion && <div className="text-[var(--faint)]">Lighthouse {r.lighthouseVersion}</div>}
+              </div>
             </div>
           </section>
 
           {/* Field data first, matching PSI: real-user data is the one that matters. */}
           <section className="mb-6">
-            <h2 className="mb-2 text-[11px] font-medium uppercase tracking-wide text-[var(--muted)]">
+            <h2 className="eyebrow mb-2">
               Field data — real users, 28 days
             </h2>
             <FieldDataPanel field={r.field} />
           </section>
 
           <section className="mb-6">
-            <h2 className="mb-2 text-[11px] font-medium uppercase tracking-wide text-[var(--muted)]">
+            <h2 className="eyebrow mb-2">
               Lab metrics
             </h2>
             <CWVGrid lab={r.lab} />
           </section>
 
           <section className="mb-6">
-            <h2 className="mb-2 text-[11px] font-medium uppercase tracking-wide text-[var(--muted)]">
+            <h2 className="eyebrow mb-2">
               History
             </h2>
             <div className="grid gap-4 rounded-[8px] border border-[var(--border)] bg-[var(--surface)] p-4 sm:grid-cols-2">
@@ -222,7 +195,7 @@ export default async function PageReport({
           </div>
         </>
       )}
-    </AppShell>
+    </>
   );
 }
 

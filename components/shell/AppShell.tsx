@@ -1,27 +1,28 @@
 import Link from 'next/link';
 import { logoutAction } from '@/app/actions/auth';
 import { ActiveRunBar } from '@/components/runs/ActiveRunBar';
+import { GroupRail, type RailGroup } from './GroupRail';
+import { RailActiveMark } from './RailActiveMark';
 
-export interface RailGroup {
-  slug: string;
-  name: string;
-  pageCount: number;
-}
+export type { RailGroup };
 
 /**
- * The persistent frame: a left rail of groups plus a thin top bar.
+ * The persistent frame: a recessed left rail and a thin top bar.
  *
- * pagespeed.web.dev has neither, because it is a one-report-at-a-time tool.
- * This one is a console over ~750 pages, so moving between groups should not
+ * Rendered once from app/(dash)/layout.tsx and kept mounted across every
+ * navigation -- see the note there. Nothing in here may depend on which route
+ * is showing, because it does not re-render when the route changes. The rail
+ * gets the active section from usePathname on the client instead.
+ *
+ * pagespeed.web.dev has neither rail nor bar, because it is a one-report tool.
+ * This one is a console over ~750 pages, so moving between sections should not
  * round-trip through the home page.
  */
 export function AppShell({
   orgName,
   siteName,
   groups,
-  activeSlug,
-  breadcrumb,
-  actions,
+  canReorder = false,
   children,
 }: {
   /** The tenant. Always shown, because a person can belong to several. */
@@ -29,103 +30,89 @@ export function AppShell({
   /** The site whose sections the rail lists. Null before one is added. */
   siteName?: string | null;
   groups: RailGroup[];
-  activeSlug?: string;
-  breadcrumb?: React.ReactNode;
-  actions?: React.ReactNode;
+  canReorder?: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-[var(--background)]">
+    <div className="min-h-dvh bg-[var(--background)]">
       <a
         href="#main"
-        className="sr-only focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-50 focus:rounded focus:bg-[var(--surface)] focus:px-3 focus:py-2"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-50 focus:rounded-[var(--radius)] focus:bg-[var(--surface)] focus:px-3 focus:py-2 focus:shadow-[var(--shadow-over)]"
       >
         Skip to content
       </a>
 
       <div className="flex">
+        {/* The rail itself does NOT scroll. Only the section list inside it
+            does. When the whole 2,200px rail was one scroll container, wheeling
+            anywhere near the left edge scrolled the rail instead of the page
+            and the app felt like it would not reach the bottom. Now the brand,
+            the search box and the account links are pinned, and the bounded
+            list is the only thing that moves. */}
         <nav
-          aria-label="Groups"
-          className="sticky top-0 hidden h-screen w-[var(--rail-w)] shrink-0 overflow-y-auto border-r border-[var(--border)] bg-[var(--surface-subtle)] px-3 py-4 lg:block"
+          aria-label="Sections"
+          className="sticky top-0 hidden h-dvh w-[var(--rail-w)] shrink-0 flex-col overflow-hidden border-r border-[var(--border)] bg-[var(--chrome)] px-3 py-3.5 lg:flex"
         >
           {/* Organisation above, site below. Passing one or the other made the
               sidebar label change between screens for no reason the reader
               could see. */}
-          <Link href="/" className="mb-5 block px-2">
+          <Link
+            href="/"
+            className="mb-4 block shrink-0 rounded-[var(--radius)] px-2 py-1.5 transition-colors hover:bg-[var(--surface-sunken)]"
+          >
             <div className="eyebrow mb-0.5 truncate">{orgName}</div>
-            <div className="title-md truncate">{siteName ?? 'No site yet'}</div>
+            <div className="title-sm truncate">{siteName ?? 'No site yet'}</div>
           </Link>
 
-          <div className="eyebrow mb-1.5 px-2">Sections</div>
-          <ul className="space-y-px">
-            {groups.map((g) => (
-              <li key={g.slug}>
-                <Link
-                  href={`/g/${g.slug}`}
-                  aria-current={g.slug === activeSlug ? 'page' : undefined}
-                  className={`group flex items-center justify-between gap-2 rounded-[6px] px-2 py-[5px] text-[12px] transition-colors ${
-                    g.slug === activeSlug
-                      ? 'bg-[var(--surface-sunken)] font-medium text-[var(--foreground)]'
-                      : 'text-[var(--muted)] hover:bg-[var(--surface-sunken)] hover:text-[var(--foreground)]'
-                  }`}
-                >
-                  <span className="truncate">{g.name}</span>
-                  <span className="tnum shrink-0 text-[10px] text-[var(--faint)]">{g.pageCount}</span>
-                </Link>
-              </li>
-            ))}
-          </ul>
+          <GroupRail groups={groups} canReorder={canReorder} />
+
+          <div className="mt-3 shrink-0 space-y-px border-t border-[var(--border)] pt-3">
+            <RailActiveMark href="/settings/profile" match="/settings" label="Settings" />
+            <form action={logoutAction}>
+              <button
+                type="submit"
+                className="w-full rounded-[var(--radius)] px-2 py-[5px] text-left text-[12px] text-[var(--muted)] transition-colors hover:bg-[var(--surface-sunken)] hover:text-[var(--foreground)]"
+              >
+                Sign out
+              </button>
+            </form>
+          </div>
         </nav>
 
-        <div className="min-w-0 flex-1">
-          <header className="sticky top-0 z-10 border-b border-[var(--border)] bg-[var(--background)]/85 backdrop-blur-md">
-            <div className="flex min-h-12 flex-wrap items-center justify-between gap-x-4 gap-y-1 px-3 py-2 sm:px-4">
-              <div className="min-w-0 flex-1 truncate text-[12px] text-[var(--muted)]">{breadcrumb}</div>
-              <div className="flex shrink-0 items-center gap-3">
-                {actions}
-                <Link
-                  href="/settings/profile"
-                  className="text-[12px] text-[var(--muted)] transition-colors hover:text-[var(--foreground)]"
-                >
-                  Settings
-                </Link>
-                <form action={logoutAction}>
-                  <button
-                    type="submit"
-                    className="text-[12px] text-[var(--muted)] transition-colors hover:text-[var(--foreground)]"
-                  >
-                    Sign out
-                  </button>
-                </form>
+        <div className="flex min-w-0 flex-1 flex-col">
+          {/* Below lg the rail is hidden, so the section list and the account
+              controls move into a disclosure here rather than disappearing. */}
+          <header className="sticky top-0 z-20 border-b border-[var(--border)] bg-[var(--background)]/85 backdrop-blur-md lg:hidden">
+            <details className="group">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5">
+                <span className="min-w-0">
+                  <span className="eyebrow block truncate">{orgName}</span>
+                  <span className="title-sm block truncate">{siteName ?? 'No site yet'}</span>
+                </span>
+                <span className="shrink-0 text-[11px] text-[var(--muted)]">
+                  {groups.length} sections
+                  <span aria-hidden="true" className="ml-1.5 inline-block transition-transform group-open:rotate-180">▾</span>
+                </span>
+              </summary>
+              <div className="border-t border-[var(--border)] bg-[var(--chrome)] px-3 py-3">
+                <GroupRail groups={groups} canReorder={canReorder} variant="compact" />
+                <div className="mt-3 flex items-center gap-3 border-t border-[var(--border)] pt-3 text-[12px]">
+                  <Link href="/settings/profile" className="text-[var(--muted)] hover:text-[var(--foreground)]">
+                    Settings
+                  </Link>
+                  <form action={logoutAction}>
+                    <button type="submit" className="text-[var(--muted)] hover:text-[var(--foreground)]">
+                      Sign out
+                    </button>
+                  </form>
+                </div>
               </div>
-            </div>
+            </details>
           </header>
 
           <ActiveRunBar />
 
-          {/* Below lg the rail is hidden, so the group list moves here rather
-              than becoming unreachable on a phone. */}
-          <details className="border-b border-[var(--border)] bg-[var(--surface-subtle)] lg:hidden">
-            <summary className="cursor-pointer list-none px-3 py-2 text-[12px] text-[var(--muted)]">
-              Groups ({groups.length})
-            </summary>
-            <ul className="grid grid-cols-2 gap-1 px-3 pb-3 sm:grid-cols-3">
-              {groups.map((g) => (
-                <li key={g.slug}>
-                  <Link
-                    href={`/g/${g.slug}`}
-                    aria-current={g.slug === activeSlug ? 'page' : undefined}
-                    className="flex items-center justify-between gap-2 rounded-[5px] px-2 py-1.5 text-[12px] hover:bg-[var(--surface-sunken)]"
-                  >
-                    <span className="truncate">{g.name}</span>
-                    <span className="tnum shrink-0 text-[11px] text-[var(--muted)]">{g.pageCount}</span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </details>
-
-          <main id="main" className="mx-auto max-w-[1400px] px-4 py-6 sm:px-6">
+          <main id="main" className="mx-auto w-full max-w-[1440px] flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
             {children}
           </main>
         </div>

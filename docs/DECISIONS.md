@@ -302,3 +302,214 @@ keeps the spec's locked rule genuinely intact rather than nominally intact.
 Merge candidates visible in the real data, for whenever someone wants them:
 `ebooks` (26) + `ebook` (5); and `author`, `blog-topic`, `event-type` look like
 taxonomy pages rather than content.
+
+---
+
+## 9. Ordering, run control and answer history (20 Aug 2026)
+
+### 9.1 One section list, not primary + collapsed tail
+
+Splitting the overview into a grid of large sections and a `<details>` of small
+ones made the visible order differ from the sweep order, which would have made
+dragging a card meaningless. One list, numbered by position.
+
+Rejected: keeping the split and putting the drag handle only on the primary
+grid. That leaves 42 of 68 sections unorderable on this site — precisely the
+long tail somebody would want to push to the back.
+
+### 9.2 Manual order lives in `Group.priority`, sitemap position is the default
+
+`priority` non-null wins; otherwise `sitemapIndex`. A site owner's sitemap order
+is already a statement of priority, so the default should follow it and manual
+ordering should be an override, not a requirement.
+
+`reorderGroupsAction` resolves slugs to ids **within the caller's organisation**
+before writing. Slugs are unique per site, not globally, so an `updateMany`
+keyed on slug would silently reorder another tenant's sections.
+
+### 9.3 Dragging is disabled while sorted or filtered
+
+Reordering a list that is currently sorted by score would persist an order the
+reader cannot see, and the next page load would look like the change was
+discarded. Under a sort or a search, the drag affordance and the ↑ ↓ buttons are
+withheld rather than left to misbehave.
+
+Every draggable row also carries ↑ ↓ buttons. This order decides what a
+34-minute job measures first; drag-only would put that out of reach of anyone
+not using a mouse.
+
+### 9.4 Pause pauses the queue, not the run
+
+BullMQ has no per-job hold, and the overlap guard already allows only one sweep
+in flight, so pausing the queue and pausing the run are the same thing here.
+
+Two consequences are surfaced in the UI rather than hidden:
+- Jobs already dispatched finish. Up to `WORKER_CONCURRENCY` more results land
+  after the hold. Aborting them would burn the quota they had already spent and
+  return nothing for it.
+- Queued jobs stay queued, so Continue resumes rather than restarts.
+
+### 9.5 Stopped is `cancelled`, not `failed`
+
+A run that someone stopped and a run that broke need to look different in the
+history a month later. `cancelled` keeps every result collected and records how
+far it got.
+
+Two guards make this stick:
+- `finalizeRun` treats `cancelled` as terminal. Without it the last in-flight
+  job crosses the completion threshold after the stop and finalizes the run back
+  to `completed`, erasing the fact that it was stopped.
+- `findActiveRun` counts `paused` as active, so a second sweep cannot start
+  beside a held one and double the quota spend.
+
+### 9.6 Recommendations version instead of overwrite
+
+`Recommendation` was `auditResultId @unique`. Someone regenerates precisely when
+they disagree with what they got, and comparing old against new is the point of
+doing it again — overwriting destroyed exactly the thing they wanted.
+
+Now `@@unique([auditResultId, version])`, last ten kept per measurement.
+
+The atomic claim survived without an extra lock table: two callers both compute
+the same next version and race on the same insert; `skipDuplicates` (ON CONFLICT
+DO NOTHING) lets exactly one through, and `count === 1` means this caller owns
+the generation. Trimming to ten runs inside the write transaction so a crash
+cannot skip it.
+
+Rejected: a separate `RecommendationClaim` table. It would need its own cleanup
+and its own stale-claim policy, for a mutex the unique index already provides.
+
+### 9.7 Chart payload is columnar
+
+`{ performance: 84, accessibility: 91, … }` per page is mostly field names, and
+this site has ~1,500 pages appearing in both the HTML and the RSC flight data.
+Tuples with an interned section table took the overview from 682 KB to 556 KB.
+
+A tool that reports page weight does not get to ship a bloated page.
+
+### 9.8 Chart preferences via `useSyncExternalStore`, not an effect
+
+`localStorage` read in an effect means one render with the default chart, then a
+swap — a visible flash on every load, plus a lint rule against setState in an
+effect that exists for good reason. The server snapshot is null, so the first
+client render matches the HTML and the saved choice applies on the next one. The
+getSnapshot cache is load-bearing: returning a fresh object each call re-renders
+forever.
+
+### 9.9 Both-device markdown is one file
+
+An agent handed mobile and desktop separately has to correlate them; handed one
+document it can see immediately which findings are device-specific (an image
+size, a viewport-conditional script) and which are the page itself.
+
+---
+
+## 10. The interface rebuild (20 Aug 2026)
+
+### 10.1 The shell belongs to the layout, not to every page
+
+This is the one that mattered. Every page called `<AppShell>` itself, so each
+navigation re-ran `listGroupsWithAggregates` over ~1,500 results, re-serialised
+~200 KB of sidebar into the RSC payload, remounted the rail — throwing away its
+search text, sort choice and scroll position — and restarted the run poller.
+
+App Router preserves a layout across navigation between its children. Moving the
+shell into `app/(dash)/layout.tsx` is what makes the app feel like an
+application rather than a series of documents. Measured after: a 25-page section
+opens in **293 ms** on a client navigation, and the rail's search box still
+holds what you typed.
+
+The cost is that the shell can no longer receive per-route props. `GroupRail`
+and `RailActiveMark` read the active route from `usePathname` instead, and
+page-specific chrome moved into `<PageHeader>`, which each page renders as its
+first block. That is a better place for it anyway: actions belong beside the
+content they act on.
+
+### 10.2 Loading, error and not-found boundaries are not optional
+
+There were none. Without a `loading.tsx` there is no route-level Suspense
+boundary, so a click leaves the previous page on screen with no acknowledgement
+until the server answers — 530 ms on the overview, 3.3 s on Settings. That dead
+interval was the entire "it doesn't feel smooth" complaint.
+
+Skeletons match the shape of what is arriving, so the layout does not jump.
+
+### 10.3 A tenant miss is a 404; a broken report is not
+
+`app/(dash)/p/[pageId]` wrapped both `requirePageAccess` and `getPageReport` in
+one `catch { notFound() }`, so any failure inside the report builder rendered
+the framework's unstyled 404 claiming the page did not exist — for pages linked
+from our own table. Only the ownership check maps to "not found" now; everything
+else reaches `error.tsx`, which keeps the shell and offers a retry.
+
+### 10.4 Nested scrollers: only the list scrolls
+
+The rail was `overflow-y-auto` over its whole 2,213px height inside a 900px
+viewport, so wheeling anywhere near the left edge scrolled the rail instead of
+the page. 3,600px of wheel input moved the page 2,100px. The rail is now
+`overflow-hidden` with the brand, search and account links pinned, and only the
+bounded section list scrolls.
+
+### 10.5 Tuples on the wire for large lists
+
+`/g/blog` shipped **4.3 MB** of HTML for 324 rows and took 1.7 s. Rows now cross
+as a tuple array and the table renders 50 at a time: **691 KB and 277 ms**. The
+same reasoning as the chart payload in 9.7 — repeated JSON field names dominate
+at this row count, on the one tool that has no business shipping a heavy page.
+
+### 10.6 Top Issues ranks by impact, not by reach
+
+`pagesAffected / max` was 100% on every row, because on this site nearly every
+issue affects nearly every page — so every bar was full width and the ranking
+carried no information. It now ranks and bars by Lighthouse's estimated saving
+*per page*, and states reach as a percentage in words. Reach decides whether a
+fix is a template change; impact decides whether it is worth making.
+
+### 10.7 Score gauges, not naked numerals
+
+The overview showed four bare numbers. The arc gauge is the one piece of
+Lighthouse's visual language the team reads without thinking, so the overview is
+the wrong place to be original — `ScoreTiles` reuses the same `ScoreGauge` the
+report uses.
+
+### 10.8 The signed-out screens are one set
+
+`AuthCard` rendered its own `<main>` inside `app/(auth)/layout.tsx`'s `<main>`:
+two nested mains, two competing centring contexts, and a sign-in form squeezed
+to about 180px wide. The layout now owns the page and the card owns only the
+card. The h1 is the task ("Sign in"), never the product name — the product name
+lives in the layout so it stays put between screens.
+
+The left panel exists because a form alone tells a first-time visitor nothing
+about what they are signing in to. `BrandTrace` is explicitly an illustration —
+no numbers, no axis, `aria-hidden` — so it can never be read as a measurement of
+anyone's site.
+
+### 10.9 Chrome autofill
+
+Chrome paints its own pale blue over any field it filled, so a returning user
+saw a visibly different form from everyone else. No `background-color` wins;
+the fix is a 1000px inset shadow in the colour we actually want.
+
+### 10.10 Not React Query
+
+Considered and rejected. This app's reads are Server Components calling the
+service layer directly, and its writes are Server Actions — there is no HTTP
+API for a client cache to sit in front of, and building one would mean
+duplicating every DTO, turning data-heavy Server Components into client
+components, and shipping their rows twice. On a tool that reports page weight
+that is the wrong trade.
+
+The two places it would genuinely fit — the run progress poller and the active
+run bar — already have an adaptive poller with backoff, visibility handling and
+abort-on-unmount, which is most of what React Query would provide for them.
+
+### 10.11 CWV columns carry their own severity
+
+A 12-second LCP rendered in the same grey as a 1-second one. The table now
+colours LCP and CLS against Google's published thresholds (2.5s/4s and
+0.1/0.25). Those numbers are not ours to invent either.
+
+The path cell no longer uses `direction: rtl` to clip long URLs — that reorders
+the separators in a Latin string. Paths split into a quiet parent and an
+emphasised final segment, which is the part that actually differs.

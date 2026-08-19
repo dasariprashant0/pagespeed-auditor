@@ -798,3 +798,167 @@ rather than handed a control that will reject them.
 
 Sign up → add site → store key → read sitemap (747 pages, 68 sections) →
 measure a section (8 audits, 0 failures) using the site's own key.
+
+---
+
+## 20 Aug 2026 — ordering, charts, run control, answer history
+
+### Sections are one list you can reorder
+
+The overview used to show a big grid of "primary" sections plus a collapsed
+`<details>` of small ones. That split made the order you could see different
+from the order the sweep actually ran in, which meant dragging a card would
+have been meaningless. Both are now one `SectionGrid`, in sweep order, with the
+position numbered on each card.
+
+Order is stored in `Group.priority` and read back by
+`listGroupsWithAggregates` (explicit priority first, then sitemap position).
+`reorderGroupsAction` writes it inside a transaction, scoped to the caller's
+organisation — an `updateMany` keyed on slug alone would have reordered another
+tenant's sections, because slugs are only unique per site.
+
+The same list is the sidebar, via `GroupRail`, so a drag in either place moves
+both. Dragging is disabled while a search or a non-custom sort is active: saving
+an order you cannot see would look like the change was thrown away on reload.
+Every draggable row also has ↑/↓ buttons — this list decides what a 34-minute
+job measures first, so it cannot be mouse-only.
+
+The "Sections" label above the rail is gone; a search box and a sort selector
+sit there instead. 68 sections is well past the point where scanning works.
+
+### The overview chart is interactive and switchable
+
+`OverviewCharts` replaces the static `ScoreSpectrum` with four views over the
+same rows — every page, the ten-point spread, section averages, and load time
+against score — plus a metric selector and a section filter. Hover for the page
+and its number, click to open its report. The choice is remembered per browser.
+
+Still hand-rolled SVG. A charting library is ~100 KB gzipped to draw bars, on
+the page that reports page weight.
+
+The payload is columnar (`[id, path, sectionIndex, …]` with section names
+interned) because spelling `{ "performance": 84 }` out 1,500 times costs 40 KB
+of the word "performance" in both the HTML and the RSC flight data. Overview
+HTML went 682 KB → 556 KB on this site.
+
+Preferences are read with `useSyncExternalStore`, not an effect: the server
+snapshot is null, so the first client render matches the HTML and the saved
+choice lands on the next one — no flash of the default chart, and no setState
+inside an effect.
+
+### A run can be held, continued or stopped
+
+`controlRun()` plus `RunControls`, on the live progress bar and in the recent
+checks list. Two things are stated in the UI rather than hidden:
+
+- Pausing pauses the **queue**. Jobs already handed to a worker run to
+  completion, so up to `WORKER_CONCURRENCY` more results land after the hold.
+  Killing them would burn quota they had already spent and produce nothing.
+- Stopping is `cancelled`, not `failed`, and keeps every result collected. A
+  month later, "someone stopped this" and "this broke" must not look the same.
+
+`finalizeRun` treats `cancelled` as terminal — otherwise the last in-flight job
+would finalize the run back to `completed` and erase the stop. `findActiveRun`
+counts `paused` as active, so a second sweep cannot start alongside a held one
+and double the quota spend. Four tests pin the transition table.
+
+### Recommendations keep their history
+
+`Recommendation` was 1:1 with `AuditResult`, so regenerating overwrote the
+previous answer. Someone regenerates precisely when they doubt what they got,
+and the comparison is the point — so it now appends a `version`, keeps the last
+ten per measurement, and the panel has an "Earlier answers" picker.
+
+The atomic claim survived the change without an extra lock table: two tabs both
+compute the same next version and race on the same `@@unique([auditResultId,
+version])` insert, and `skipDuplicates` lets exactly one through. Trimming to
+ten happens in the same transaction as the write, so a crash cannot skip it.
+
+The prompt was rewritten for accuracy: audit ids, up to four evidence rows per
+finding with their numbers (not just the first column), the previous
+measurement's scores, and — on a regenerate — the answer being replaced, with
+an instruction to go deeper rather than rephrase. The system prompt now leads
+with the accuracy rules: use only the evidence given, never invent a filename
+or number, never guess the stack, never present lab data as real-user data, and
+say what to measure next when the data does not support a call.
+
+### Markdown export asks which device
+
+`Download .md` is a menu: this device, the other one, or both in one file.
+Both-in-one is a single document rather than two downloads, because an agent
+that can see mobile and desktop side by side can tell a device-specific problem
+from a page-wide one. Strategies the page was never measured on are skipped
+instead of emitted as empty sections.
+
+---
+
+## 20 Aug 2026 (later) — the interface rebuild
+
+Triggered by "route transitions feel janky and the UI is average at best".
+It was not a styling problem. Measurements before and after, warm, in dev:
+
+| Route | Before | After | Payload |
+|---|---|---|---|
+| `/` | 530 ms | 611 ms | 714 → 712 KB |
+| `/g/about` | 188 ms | 190 ms | 311 → 300 KB |
+| `/g/blog` | 1,665 ms | **277 ms** | 4,358 → **691 KB** |
+| `/g/platform` | 256 ms | 255 ms | 608 → 363 KB |
+| `/settings/site` | 3,296 ms | **223 ms** | 340 → 344 KB |
+| `/settings/automation` | 260 ms | 212 ms | 381 KB |
+
+A client-side navigation to a 25-page section is now **293 ms**, and the rail
+keeps its search text across the route change — it used to be wiped.
+
+### What was actually wrong
+
+- `AppShell` was called from every page instead of living in the layout, so the
+  whole shell re-rendered and re-queried on every click. See DECISIONS 10.1.
+- No `loading.tsx`, no `error.tsx`, no `not-found.tsx`, no `Suspense` anywhere.
+- `/settings/site` summed `LENGTH("rawJson"::text)`, detoasting ~154 MB of
+  stored PSI responses on every page load. `pg_column_size` reads the stored
+  size instead: **6 ms**.
+- `/g/blog` server-rendered all 324 rows as objects.
+- The rail was a 2,213px scroll container competing with the page for the wheel.
+- The report route turned every error into a bare framework 404.
+
+### New
+
+`components/ui/`: `Button`, `Panel`, `PageHeader`, `Skeleton`, `StrategyTabs` —
+one definition each, replacing eleven hand-rolled button strings, three separate
+`Panel` helpers and three copies of the strategy toggle.
+
+`SpectrumRibbon` is the signature: the whole site's distribution, on the
+overview as an interactive chart and on a section as a strip with the 90 line
+drawn. `ScoreTiles` puts PSI's arc gauges on the overview, which showed four
+naked numerals before.
+
+Tokens gained an elevation scale, motion tokens (one curve, three durations),
+`title-xl`/`title-sm`, and shimmer skeletons.
+
+### Fixed while in there
+
+- Report pages linked from our own table returned a bare 404 (DECISIONS 10.3).
+- Top Issues bars were 100% on every row and meant nothing (10.6).
+- The spectrum's median line looked like a rendering artefact; it is a labelled
+  annotation now, over a drawn axis.
+- Long paths were clipped with `direction: rtl`, which reorders the slashes.
+- Chrome autofill repainted login fields pale blue (10.9).
+- Grid children lacked `min-w-0`, so a long section name pushed the mobile
+  layout 235px past the viewport.
+- Gauges wrapped 3+1 on mobile; they are a 2×2 grid now.
+- Copy says **Mobile**, never "Phone", everywhere.
+
+### Failures are visible and retryable
+
+The scheduled sweep finished 1,494/1,494 with 8 error rows, and there was no way
+to see or re-run them. `failedResultsForRun` plus a `retry` scope pinned to that
+run's failed pairs — so a retry cannot widen into a second full sweep — and a
+`FailedPages` panel in Settings → Automation that names each page, explains the
+Lighthouse code in words, and states the real attempt count from
+`PSI_MAX_ATTEMPTS` (5, not 20).
+
+### Verified
+
+`npx tsc --noEmit` clean. `npm run lint` 0 errors. `npm test` 141/141.
+21 route × breakpoint combinations (desktop 1440, tablet 834, mobile 390)
+checked for horizontal overflow, runtime errors and missing headings: all clean.

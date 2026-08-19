@@ -25,7 +25,7 @@ export function AcceptInviteForm({
       title={`Join ${organizationName}`}
       subtitle={`You have been invited as a ${ROLE_LABEL[role]}. ${ROLE_DESCRIPTION[role]}`}
     >
-      <form action={action} className="space-y-3">
+      <form action={action} className="space-y-4">
         <input type="hidden" name="token" value={token} />
         {/* Read-only: the invited address is what was authorised. Letting it be
             changed would turn an intercepted link into a way to join as

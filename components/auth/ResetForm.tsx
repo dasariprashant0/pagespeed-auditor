@@ -9,7 +9,7 @@ export function ResetForm({ token, email }: { token: string; email: string }) {
 
   return (
     <AuthCard title="Choose a new password" subtitle={`For ${email}`}>
-      <form action={action} className="space-y-3">
+      <form action={action} className="space-y-4">
         <input type="hidden" name="token" value={token} />
         <Field label="New password" name="password" type="password" autoComplete="new-password"
           hint="At least 12 characters." />

@@ -1,29 +1,22 @@
-import Link from 'next/link';
 import { requireSession } from '@/lib/http/auth-guard';
 import { defaultSite } from '@/lib/services/tenant.service';
 import { onboardingState } from '@/lib/services/onboarding.service';
 import { SetupChecklist } from '@/components/onboarding/SetupChecklist';
 import { can } from '@/lib/auth/roles';
-import { listGroupsWithAggregates, splitSmallGroups } from '@/lib/services/results.service';
+import { listGroupsWithAggregates } from '@/lib/services/results.service';
 import { getTopIssues } from '@/lib/services/issues.service';
 import { getSiteSummary } from '@/lib/services/site.service';
-import { AppShell } from '@/components/shell/AppShell';
-import { GroupCard } from '@/components/nav/GroupCard';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { StrategyTabs } from '@/components/ui/StrategyTabs';
+import { ScoreTiles } from '@/components/score/ScoreTiles';
+import { SectionGrid } from '@/components/nav/SectionGrid';
 import { TopIssuesWidget } from '@/components/nav/TopIssuesWidget';
 import { EmptyState } from '@/components/nav/EmptyState';
-import { ScorePill } from '@/components/score/ScorePill';
-import { ScoreSpectrum } from '@/components/score/ScoreSpectrum';
+import { OverviewCharts, type ChartData } from '@/components/charts/OverviewCharts';
 import { listPagesInGroup } from '@/lib/services/results.service';
 import type { PsiStrategy } from '@/lib/services/types';
 
 export const dynamic = 'force-dynamic';
-
-const SCORE_COLUMNS = [
-  { key: 'performance', short: 'Perf', full: 'Performance' },
-  { key: 'accessibility', short: 'A11y', full: 'Accessibility' },
-  { key: 'bestPractices', short: 'BP', full: 'Best Practices' },
-  { key: 'seo', short: 'SEO', full: 'SEO' },
-] as const;
 
 export default async function HomePage({
   searchParams,
@@ -39,22 +32,19 @@ export default async function HomePage({
   const site = await defaultSite(ctx.organizationId);
   const setup = await onboardingState(ctx.organizationId);
   const canManage = can(ctx.role, 'site:manage');
+  const canReorderGroups = can(ctx.role, 'groups:manage');
 
   if (!site) {
     return (
-      <AppShell orgName={ctx.organizationName} groups={[]} breadcrumb="Getting started">
-        <header className="mb-6">
-          <div className="eyebrow">Welcome</div>
-          <h1 className="title-lg mt-1">Let&rsquo;s measure your site</h1>
-          <p className="mt-1 max-w-lg text-[12px] text-[var(--muted)]">
-            Point this at a sitemap and it will check every page on it — on phone and desktop —
-            and keep the results so you can see what improves and what slips.
-          </p>
-        </header>
+      <>
+        <PageHeader
+          title="Let's measure your site"
+          subtitle="Point this at a sitemap and it will check every page on it — on mobile and desktop — and keep the results so you can see what improves and what slips."
+        />
         <div className="max-w-2xl">
           <SetupChecklist state={setup} canManage={canManage} />
         </div>
-      </AppShell>
+      </>
     );
   }
 
@@ -64,66 +54,58 @@ export default async function HomePage({
     getTopIssues({ siteId: site.id, strategy, limit: 8 }),
   ]);
 
-  // Every page in one strip. This is the view the tool exists for -- PSI can
-  // only ever show one page at a time.
-  const spectrum = (
-    await Promise.all(
-      groups.filter((g) => g.auditedCount > 0).map((g) => listPagesInGroup(g.id, { strategy })),
-    )
-  )
-    .flat()
-    .map((p) => ({ id: p.id, path: p.path, score: p.scores.performance }));
+  // Every measured page, with its section, so the charts can group, filter and
+  // drill down without a second round trip. Sent columnar -- see ChartData.
+  const charted = groups.filter((g) => g.auditedCount > 0);
+  const chartData: ChartData = {
+    sections: charted.map((g) => [g.name, g.slug] as [string, string]),
+    pages: (
+      await Promise.all(
+        charted.map(async (g, gi) => {
+          const pages = await listPagesInGroup(g.id, { strategy });
+          return pages.map(
+            (p) =>
+              [p.id, p.path, gi, p.scores.performance, p.scores.accessibility, p.scores.bestPractices, p.scores.seo, p.lcp] as ChartData['pages'][number],
+          );
+        }),
+      )
+    ).flat(),
+  };
 
-  // 42 of this site's 68 groups hold a single page. Rendering 68 cards is not a
-  // usable home screen, so the tail collapses. The data model is untouched --
-  // see docs/DECISIONS.md 5.1.
-  const { primary, small } = splitSmallGroups(groups);
-  const rail = groups
-    // Already in sitemap order from the service; re-sorting here would undo it.
-    .filter((g) => g.pageCount > 0)
-    .map((g) => ({ slug: g.slug, name: g.name, pageCount: g.pageCount }));
 
   return (
-    <AppShell
-      orgName={ctx.organizationName}
-      siteName={site.name}
-      groups={rail}
-      breadcrumb="Overview"
-      actions={<StrategyLinks active={strategy} basePath="/" />}
-    >
-      <header className="mb-6">
-        <div className="eyebrow">Overview</div>
-        <h1 className="title-lg mt-1">{site.name}</h1>
-        <p className="mt-1 text-[12px] text-[var(--muted)]">
-          {summary.activePageCount} pages across {summary.groupCount} sections ·{' '}
-          {summary.auditedCount} measured
-          {summary.lastSweepAt && ` · last check ${new Date(summary.lastSweepAt).toLocaleDateString()}`}
-        </p>
-
+    <>
+      <PageHeader
+        title={site.name}
+        subtitle={
+          <>
+            {summary.activePageCount} pages across {summary.groupCount} sections ·{' '}
+            {summary.auditedCount} measured
+            {summary.lastSweepAt &&
+              ` · last checked ${new Date(summary.lastSweepAt).toLocaleDateString(undefined, {
+                day: 'numeric',
+                month: 'short',
+              })}`}
+          </>
+        }
+        actions={<StrategyTabs active={strategy} basePath="/" />}
+      >
         {summary.auditedCount > 0 && (
-          <div className="mt-5 grid gap-3 sm:grid-cols-[repeat(4,minmax(0,auto))_1fr] sm:items-end">
-            {SCORE_COLUMNS.map(({ key, short, full }) => {
-              const v = summary.siteAverage[key];
-              const band = v === null ? null : v < 50 ? 'fail' : v < 90 ? 'average' : 'pass';
-              return (
-                <div key={key} title={full}>
-                  <div
-                    className="metric text-[34px]"
-                    style={{
-                      color: band
-                        ? `var(--score-${band}-text)`
-                        : 'var(--faint)',
-                    }}
-                  >
-                    {v ?? '—'}
-                  </div>
-                  <div className="eyebrow mt-1">{short}</div>
-                </div>
-              );
-            })}
+          <div className="mt-5">
+            <ScoreTiles
+              scores={summary.siteAverage}
+              size="md"
+              caption={
+                <>
+                  Averaged across the {summary.auditedCount} pages measured so far, on{' '}
+                  {strategy === 'mobile' ? 'mobile' : 'desktop'}. Open a section to see which
+                  pages are pulling it down.
+                </>
+              }
+            />
           </div>
         )}
-      </header>
+      </PageHeader>
 
       <SetupChecklist state={setup} canManage={canManage} />
 
@@ -135,8 +117,7 @@ export default async function HomePage({
       ) : (
         <>
           <section className="mb-7">
-            <h2 className="eyebrow mb-2">Every page, worst to best</h2>
-            <ScoreSpectrum pages={spectrum} />
+            <OverviewCharts data={chartData} strategy={strategy} />
           </section>
 
           <section className="mb-7">
@@ -144,60 +125,13 @@ export default async function HomePage({
             <TopIssuesWidget issues={topIssues} />
           </section>
 
-          <section>
-            <h2 className="eyebrow mb-2">Sections</h2>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {primary.map((g) => (
-                <GroupCard key={g.id} group={g} />
-              ))}
-            </div>
-
-            {small.length > 0 && (
-              <details className="panel mt-3">
-                <summary className="cursor-pointer list-none px-4 py-3 text-[12px] text-[var(--muted)] hover:text-[var(--foreground)]">
-                  {small.length} smaller sections — fewer than 3 pages each
-                </summary>
-                <div className="grid gap-1 border-t border-[var(--border)] p-2 sm:grid-cols-2 lg:grid-cols-3">
-                  {small.map((g) => (
-                    <Link
-                      key={g.id}
-                      href={`/g/${g.slug}`}
-                      className="flex items-center justify-between rounded-[5px] px-2 py-1.5 text-[12px] hover:bg-[var(--surface-subtle)]"
-                    >
-                      <span className="truncate">{g.name}</span>
-                      <span className="ml-2 flex shrink-0 items-center gap-1.5">
-                        <span className="tnum text-[11px] text-[var(--muted)]">{g.pageCount}</span>
-                        <ScorePill score={g.aggregate.performance} />
-                      </span>
-                    </Link>
-                  ))}
-                </div>
-              </details>
-            )}
-          </section>
+          {/* One list, not a big grid plus a collapsed tail. Splitting them
+              meant the visible order was not the order things ran in, which
+              made dragging pointless. */}
+          <SectionGrid groups={groups} canReorder={canReorderGroups} />
         </>
       )}
-    </AppShell>
+    </>
   );
 }
 
-/** Links, not buttons: the strategy stays shareable and server-rendered. */
-function StrategyLinks({ active, basePath }: { active: PsiStrategy; basePath: string }) {
-  return (
-    <div role="tablist" aria-label="Report strategy" className="flex rounded-[5px] border border-[var(--border)] p-0.5">
-      {(['mobile', 'desktop'] as const).map((s) => (
-        <Link
-          key={s}
-          role="tab"
-          aria-selected={s === active}
-          href={`${basePath}?strategy=${s}`}
-          className={`rounded-[3px] px-2.5 py-1 text-[12px] capitalize ${
-            s === active ? 'bg-[var(--surface-sunken)] font-medium' : 'text-[var(--muted)]'
-          }`}
-        >
-          {s}
-        </Link>
-      ))}
-    </div>
-  );
-}
