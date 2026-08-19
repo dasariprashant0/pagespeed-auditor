@@ -68,16 +68,30 @@ export function ActiveRunBar() {
 }
 
 function RunRow({ run: r }: { run: RunProgressDTO }) {
-  const eta =
-    r.etaSeconds === null
-      ? null
-      : r.etaSeconds > 90
-        ? `~${Math.round(r.etaSeconds / 60)} min left`
-        : `~${r.etaSeconds}s left`;
+  const remaining = r.totalJobs - r.completedJobs;
+
+  /*
+   * When everything left is backing off after a PSI failure, the observed-rate
+   * ETA is meaningless -- it keeps promising seconds while a job sits on a
+   * multi-minute retry, which reads as a hang rather than as the retry policy
+   * doing its job. Say what is actually happening instead.
+   */
+  const allRemainingRetrying = r.retryingJobs > 0 && r.retryingJobs >= remaining;
+
+  let tail: string;
+  if (allRemainingRetrying) {
+    const s = r.nextRetryInSeconds;
+    const when = s === null ? '' : s > 90 ? ` — next attempt in ~${Math.round(s / 60)} min` : ` — retrying in ${s}s`;
+    tail = `, ${remaining} retrying after a failed request${when}`;
+  } else if (r.etaSeconds !== null) {
+    tail = r.etaSeconds > 90 ? `, ~${Math.round(r.etaSeconds / 60)} min left` : `, ~${r.etaSeconds}s left`;
+  } else {
+    tail = '';
+  }
 
   const text = `${r.completedJobs} of ${r.totalJobs} audits complete${
     r.failedJobs > 0 ? `, ${r.failedJobs} failed` : ''
-  }${eta ? `, ${eta}` : ''}`;
+  }${tail}`;
 
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 sm:px-4">
@@ -102,7 +116,12 @@ function RunRow({ run: r }: { run: RunProgressDTO }) {
       >
         <div
           className="h-full rounded-full transition-[width] duration-500"
-          style={{ width: `${r.percentComplete}%`, background: 'var(--info)' }}
+          style={{
+            width: `${r.percentComplete}%`,
+            // Amber while waiting on a retry, so a paused run does not look
+            // like a healthy one that has simply gone quiet.
+            background: allRemainingRetrying ? 'var(--score-average)' : 'var(--info)',
+          }}
         />
       </div>
 

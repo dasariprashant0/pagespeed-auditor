@@ -151,6 +151,8 @@ export async function getRunProgress(
     completedJobs: run.completedJobs,
     failedJobs: run.failedJobs,
     percentComplete: percentComplete(run.completedJobs, run.totalJobs),
+    retryingJobs: 0,
+    nextRetryInSeconds: null,
     startedAt: run.startedAt?.toISOString() ?? null,
     finishedAt: run.finishedAt?.toISOString() ?? null,
     etaSeconds:
@@ -330,13 +332,45 @@ export async function resumeRun(prisma: PrismaClient, runId: string): Promise<Re
   if (!run) throw new NotFoundError(`run ${runId}`);
 
   const scope = parseScopeLabel(run.scopeLabel);
-  const expected = await expandScope(prisma, run.siteId, scope);
+  const expanded = await expandScope(prisma, run.siteId, scope);
 
   const existing = await prisma.auditResult.findMany({
     where: { auditRunId: runId },
     select: { pageId: true, strategy: true, status: true },
   });
 
+  /*
+   * A run's committed work is FIXED at creation. Re-expanding its scope on
+   * resume is only a recovery hint, never a new plan.
+   *
+   * This bit them for real: a 50-page canary was created with a site-wide
+   * scope label, and resuming it re-expanded that label into all 747 pages --
+   * turning a deliberately bounded 100-call run into a 1,494-call sweep, which
+   * is precisely the thing the whole design forbids doing on demand.
+   *
+   * Growth is therefore refused outright. Shrinkage is fine and expected: a
+   * page deactivated mid-run legitimately reduces the work, and keeping the
+   * old larger total would leave the run permanently short of finalizing.
+   */
+  if (expanded.length > run.totalJobs) {
+    await prisma.auditRun.update({
+      where: { id: runId },
+      data: {
+        status: 'failed',
+        error:
+          `Cannot resume: the scope now expands to ${expanded.length} jobs but the run committed to ` +
+          `${run.totalJobs}. Refusing to silently enlarge it — start a new run instead.`,
+        finishedAt: new Date(),
+      },
+    });
+    logger.error(
+      { auditRunId: runId, committed: run.totalJobs, expanded: expanded.length },
+      'resume refused: scope expanded beyond the committed work',
+    );
+    return { runId, expected: run.totalJobs, alreadyDone: existing.length, reEnqueued: 0, finalizedImmediately: false };
+  }
+
+  const expected = expanded;
   const missing = diffMissingPairs(expected, existing);
   const failedJobs = existing.filter((e) => e.status === 'error').length;
 
@@ -346,9 +380,8 @@ export async function resumeRun(prisma: PrismaClient, runId: string): Promise<Re
       status: 'running',
       completedJobs: existing.length,
       failedJobs,
-      // A page deactivated mid-run shrinks the scope; keeping the old, larger
-      // total would leave the run permanently one job short of finalizing.
-      totalJobs: Math.max(expected.length, existing.length),
+      // Only ever shrinks. Growth was refused above.
+      totalJobs: Math.min(run.totalJobs, Math.max(expected.length, existing.length)),
       finishedAt: null,
       completedAt: null,
       error: null,

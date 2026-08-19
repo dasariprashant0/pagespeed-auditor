@@ -6,9 +6,9 @@ import { prisma } from '../db.ts';
 import { backoffMs } from '../psi/client.ts';
 import { reconcileStaleRuns } from '../services/run.service.ts';
 import { advanceSchedule, dueSchedules } from '../services/schedule.service.ts';
-import { enqueuePlanSweep } from './producers.ts';
 import { QUEUE_AUDIT, QUEUE_CONTROL, JOB_FINALIZE_RUN, JOB_PLAN_SWEEP } from './names.ts';
 import { getRedis, auditJobOptions, closeQueues } from './queues.ts';
+import { enqueueFinalizeRun, enqueuePlanSweep } from './producers.ts';
 import { processAuditPage } from './processors/auditPage.processor.ts';
 import { processFinalizeRun } from './processors/finalizeRun.processor.ts';
 import { processPlanSweep } from './processors/planSweep.processor.ts';
@@ -23,6 +23,28 @@ import type { AuditPageJobData, ControlJobData, FinalizeRunJobData, PlanSweepJob
  * Run it via tsx -- `next build` does not build this file, and plain `node`
  * would not resolve the TypeScript.
  */
+
+/**
+ * If every (page, strategy) pair for a run now has a result -- including error
+ * rows -- make sure the run actually gets finalized.
+ */
+async function reconcileRunIfComplete(runId: string): Promise<void> {
+  try {
+    const run = await prisma.auditRun.findUnique({
+      where: { id: runId },
+      select: { status: true, totalJobs: true },
+    });
+    if (!run || run.status !== 'running') return;
+
+    const done = await prisma.auditResult.count({ where: { auditRunId: runId } });
+    if (done >= run.totalJobs) {
+      logger.warn({ runId, done, total: run.totalJobs }, 'run complete but unfinalized — finalizing');
+      await enqueueFinalizeRun(runId);
+    }
+  } catch (e) {
+    logger.error({ runId, err: e instanceof Error ? e.message : String(e) }, 'reconcile check failed');
+  }
+}
 
 async function main() {
   const env = getEnv();
@@ -79,9 +101,16 @@ async function main() {
     ['audit', auditWorker],
     ['control', controlWorker],
   ] as const) {
-    w.on('failed', (job, err) =>
-      logger.error({ queue: name, jobId: job?.id, attempts: job?.attemptsMade, err: err.message }, 'job failed'),
-    );
+    w.on('failed', (job, err) => {
+      logger.error({ queue: name, jobId: job?.id, attempts: job?.attemptsMade, err: err.message }, 'job failed');
+
+      // Backstop. The processor records an error row on its final attempt, but
+      // if a job ever dies by a path that skips that (an unexpected throw, a
+      // hard kill), the run would sit forever one job short of finalizing.
+      // reconcileStaleRuns eventually rescues it; this makes it prompt.
+      const runId = (job?.data as { runId?: string } | undefined)?.runId;
+      if (name === 'audit' && runId) void reconcileRunIfComplete(runId);
+    });
     w.on('error', (err) => logger.error({ queue: name, err: err.message }, 'worker error'));
   }
 

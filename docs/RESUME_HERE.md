@@ -16,7 +16,7 @@ Nothing needed to continue lives outside this repo.
 
 ## State as of the last commit
 
-Milestones **M0–M4 are complete and committed**. 96 tests pass.
+**All stages (M0–M10) are complete and committed.** 145 tests pass.
 
 ```
 git log --oneline
@@ -33,7 +33,14 @@ display decision".
 | Typecheck / lint | Both clean |
 | Throughput gate | **PASSED** — 0.695 req/s, ~33 min for a full 1,494-call sweep |
 
-## What is running RIGHT NOW (may have finished)
+## Everything is built
+
+Stages 1–6 plus the canary are done: ingestion, PSI, queue, dashboard,
+scheduling, notifications, regressions, AI recommendations, and MCP. What
+remains is operational — schedule the sweep, and decide whether the AI provider
+should stay on the Claude Code CLI or move to an API key.
+
+## Historical note: the multi-agent workflow (finished)
 
 A background multi-agent workflow (`psa-stages-5-8`) building three lanes in
 parallel, each adversarially verified, then integrated:

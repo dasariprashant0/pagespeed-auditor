@@ -48,8 +48,8 @@ Milestone definitions and their verification steps are in `docs/PLAN.md`
 | M6 | Services for the dashboard | **done** (from the workflow) |
 | M7 | Auth + routes | **done** (from the workflow) |
 | M8 | Dashboard | **done** — all four routes rendering real data |
-| M9 | Real 50-page canary | **next** |
-| M10 | SITE.md | not started |
+| M9 | Real 50-page canary | **done** |
+| M10 | SITE.md | **done** |
 
 **M3 is the gate.** It validates the ~0.75 req/s sustained-throughput assumption
 that every duration estimate in the plan depends on. If it fails, stop and
@@ -638,3 +638,78 @@ Worth flagging to the team: the homepage scores **56** with an **8.0 s LCP**, an
   fault, but it is worth recognising rather than debugging the route.
 - `SITE_NAME` is now `Zuddl` in both `.env` and the database.
 - A login password is set. Change it with `npm run set-password -- '...'`.
+
+
+## Stages 3-6 and M9 complete
+
+### Defects the user found that code review would not have
+
+Six issues were reported after using the tool. Four were real defects; two were
+questions. All are fixed or answered.
+
+1. **No way to re-run an audit.** Added on-demand re-run for a page or a group,
+   always queued rather than inline -- at ~50 s per call even one page in both
+   strategies is a two-minute request no HTTP call should hold open.
+2. **Audit details were invisible.** Descriptions were fetched behind an opt-in
+   flag the page never passed, and the evidence tables were never extracted at
+   all. Both now render, with Lighthouse's heading-shape drift flattened in the
+   service and pruning-truncated tables labelled as such.
+3. **"Why only mobile scores?"** The PSI API returns ONE strategy per call --
+   pagespeed.web.dev shows both tabs because it makes two calls. The design
+   always budgeted 2 per page; only my ad-hoc script defaulted to mobile.
+   Everything now runs both by default.
+4. **Not responsive.** The group rail collapses into a disclosure below `lg`,
+   headers stack, gauges wrap, and tables scroll inside their own container.
+5. **"Where is the data and how do I see history?"** Postgres, and every audit
+   was already an immutable row -- what was missing was the UI. Added per-score
+   history sparklines with the two PSI thresholds drawn in.
+6. **No progress or ordering control.** Added live progress polled on every
+   screen, linked to whatever it is auditing, plus a sweep-priority list.
+
+### Estimates are measured, never invented
+
+A `durationMs` column records the real PSI wall-clock of every call. Estimates
+use this site's own rolling median -- currently **53 s**, against the 11-24 s
+that light test pages suggested. A constant would have been wrong by ~3x.
+
+Throughput models BOTH constraints, the rate limiter and concurrency/latency,
+because ignoring the second is what made an earlier configuration silently
+three times slower.
+
+### Stage 3 -- scheduling and notifications
+Cron in Postgres, ticked by the worker once a minute. Validation rejects
+anything under an hour apart, since a sweep takes ~35 minutes and more frequent
+schedules would mostly be skipped by the overlap guard. Email and Slack fire on
+sweeps only and fail independently.
+
+### Stage 4 -- regressions
+Requires a 10+ point drop persisting across two audits, a 20+ single-run drop,
+or a CWV band change that sticks. Twelve tests, most of which assert the rule
+does NOT fire: simulated throttling makes single-run dips ordinary, and a flag
+that cries wolf gets ignored.
+
+### Stage 5 -- AI recommendations
+On-demand and cached. Two providers; this machine has no API key but does have
+Claude Code signed in, so the CLI adapter runs on the subscription. Verified
+against the real homepage: 55 s, and it correctly named the blocking
+stylesheets and identified Webflow's single-stylesheet model as the real
+ceiling rather than listing micro-optimisations around it.
+
+A self-inflicted bug worth remembering: the `createMany` + `skipDuplicates`
+lock is a genuine atomic claim, but the caller that inserted the row was then
+blocking on its own lock, so nothing ever generated. The insert count
+distinguishes owning the claim from finding someone else's.
+
+### Stage 6 -- MCP
+Nine tools at `/api/mcp`, in-process. The v2 spec is stateless, so the
+session-affinity reason for a separate service is gone. No `run_full_sweep`,
+and `run_group_audit`'s description says so, because an agent will otherwise
+loop over every group to imitate one. Verified: 401 without a token, nine tools
+enumerate, real data returned.
+
+### PSI parity
+Screenshot restored (pruning was discarding the image PSI leads with, to save
+5-33 KB while the real weight was the 259 KB filmstrip), passed and
+not-applicable audit sections recovered from rawJson, CrUX distribution bars,
+and a run-conditions panel -- a mobile score is a score under 4x CPU throttling,
+and comparing it to desktop without that is meaningless.

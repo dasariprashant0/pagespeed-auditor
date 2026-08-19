@@ -131,6 +131,8 @@ export function toRunProgress(
     completedJobs: run.completedJobs,
     failedJobs: run.failedJobs,
     percentComplete: percentComplete(run.completedJobs, run.totalJobs, status),
+    retryingJobs: 0,
+    nextRetryInSeconds: null,
     startedAt: run.startedAt ? run.startedAt.toISOString() : null,
     finishedAt: run.finishedAt ? run.finishedAt.toISOString() : null,
     // Only a live run has an ETA worth showing.

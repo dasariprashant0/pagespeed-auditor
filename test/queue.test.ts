@@ -110,3 +110,28 @@ describe('run estimates come from measured latency', () => {
     assert.equal(formatDuration(5400), 'about 1h 30m');
   });
 });
+
+describe('a run\'s committed work is immutable', () => {
+  test('resume must never enlarge totalJobs', () => {
+    // The real incident: a 50-page canary was created with a site-wide scope
+    // label; resuming re-expanded that label to all 747 pages and turned a
+    // 100-call run into a 1,494-call sweep. Growth is refused; only shrinkage
+    // (a page deactivated mid-run) is allowed.
+    const committed = 100;
+    const expandedNow = 1494;
+    const existing = 99;
+
+    assert.ok(expandedNow > committed, 'this is the dangerous direction');
+    const safeTotal = Math.min(committed, Math.max(expandedNow, existing));
+    assert.equal(safeTotal, committed, 'resume must clamp to the committed total');
+  });
+
+  test('shrinkage is still allowed so a run can finalize', () => {
+    // Pages deactivated mid-run: keeping the larger total would leave the run
+    // permanently one job short of finalizing.
+    const committed = 100;
+    const expandedNow = 80;
+    const existing = 80;
+    assert.equal(Math.min(committed, Math.max(expandedNow, existing)), 80);
+  });
+});

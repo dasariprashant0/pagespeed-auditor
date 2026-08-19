@@ -193,6 +193,11 @@ export interface RunProgressDTO {
   completedJobs: number;
   failedJobs: number;
   percentComplete: number;
+  /** Jobs waiting out a retry backoff. Non-zero means progress is paused, not stuck. */
+  retryingJobs: number;
+  /** Seconds until the next retry fires. Computed server-side: a clock read
+   *  during render is impure, and the client only needs the number. */
+  nextRetryInSeconds: number | null;
   startedAt: string | null;
   finishedAt: string | null;
   etaSeconds: number | null;

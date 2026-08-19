@@ -18,9 +18,9 @@ Everything needed to continue this work is in the repo. If the plan and the code
 disagree, the plan is probably right and the code is behind — check the Session
 Log in `docs/BUILD_LOG.md` before assuming otherwise.
 
-**Current scope: stages 1–2** (ingestion, PSI, queue, storage, dashboard).
-Scheduling, notifications, trends, AI recommendations, and the MCP server are
-deliberately out of scope until this pass is reviewed.
+**All six stages are built**: ingestion, PSI integration, the rate-limited
+queue, the dashboard, scheduling, notifications, regression detection, on-demand
+AI recommendations, and the MCP server.
 
 ## Setup
 
@@ -62,6 +62,10 @@ Without this Prisma silently has no engine and fails at first use.
 | `npm test` | `node --test` with native TS stripping — no jest/vitest |
 | `npm run lint` / `typecheck` | ESLint (incl. the architecture boundary) / tsc |
 | `npm run throughput-dryrun` | Validates the ~0.75 req/s sweep assumption without spending quota |
+| `npm run audit:queue -- <group>` | Queue a group through the worker |
+| `npm run canary -- 50` | Bounded real slice before ever scheduling a full sweep |
+| `npm run set-password -- '...'` | Set the login password (writes to .env) |
+| `npm run inspect-sitemap` | Crawl/normalize/group report, writes nothing |
 
 ## Two rules worth knowing before you edit
 
@@ -88,3 +92,22 @@ MCP server ───┘         │
 Full sweeps are **schedule-only** by design — 1,000–2,000 PSI calls at a
 sustainable ~0.75 req/s takes 30 minutes to a few hours. There is no "audit
 everything now" button and no `run_full_sweep` MCP tool.
+
+
+## Agent access (MCP)
+
+Nine read/write tools at `/api/mcp`, authenticated by `MCP_BEARER_TOKEN` from
+`.env`. Point a Claude client at it:
+
+```json
+{
+  "pagespeed-auditor": {
+    "url": "http://localhost:3000/api/mcp",
+    "headers": { "Authorization": "Bearer <MCP_BEARER_TOKEN>" }
+  }
+}
+```
+
+There is deliberately no `run_full_sweep` tool — sweeps are schedule-only, and
+`run_group_audit`'s description says so, because an agent will otherwise loop
+over every group to imitate one.

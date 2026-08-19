@@ -3,7 +3,8 @@ import { UnrecoverableError, Worker } from 'bullmq';
 import { prisma } from '../../db.ts';
 import { PermanentError, RetryableError } from '../../errors.ts';
 import { jobLogger } from '../../logger.ts';
-import { auditPage } from '../../services/audit.service.ts';
+import { auditPage, errorResultFor, recordAuditResult } from '../../services/audit.service.ts';
+import { buildMarkdownReport } from '../../report/markdown.ts';
 import { getAuditQueue, getPsiRateLimiter } from '../queues.ts';
 import { enqueueFinalizeRun } from '../producers.ts';
 import type { AuditPageJobData } from '../jobs.ts';
@@ -36,6 +37,29 @@ export async function processAuditPage(job: Job<AuditPageJobData>): Promise<void
     }
   } catch (e) {
     if (e instanceof RetryableError) {
+      // LAST ATTEMPT. Letting BullMQ simply fail the job here is what hung a
+      // run at 99/100: no result row is written, so completedJobs can never
+      // reach totalJobs and the run never finalizes. Record the failure as a
+      // result instead -- an unreachable page is a real finding, and the run
+      // has to be able to end.
+      const attempts = job.opts.attempts ?? 1;
+      if (job.attemptsMade >= attempts - 1) {
+        log.error({ attempts, message: e.message }, 'retries exhausted — recording an error row');
+        const extracted = errorResultFor('RETRIES_EXHAUSTED');
+        const outcome = await recordAuditResult(prisma, {
+          runId, pageId, url, strategy,
+          extracted,
+          rawJson: null,
+          fieldJson: null,
+          markdownReport: buildMarkdownReport({
+            url, strategy, generatedAt: new Date(), result: extracted,
+          }),
+          isFailure: true,
+        });
+        if (outcome.readyToFinalize) await enqueueFinalizeRun(runId);
+        return;
+      }
+
       const wait = e.retryAfterMs;
       if (wait !== undefined) {
         // Pause every worker on this queue, then re-queue without consuming an
