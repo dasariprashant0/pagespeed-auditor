@@ -44,10 +44,10 @@ Milestone definitions and their verification steps are in `docs/PLAN.md`
 | M2 | Markdown report (pure) | **done** — 17 tests |
 | M3 | PSI client + rate limiter + throughput dry-run | **done** — gate PASSED |
 | M4 | Sitemap ingestion | **done** — 747 real pages ingested, invariants verified |
-| M5 | Queue, idempotency, resumability | **next** |
-| M6 | Services for the dashboard | not started |
-| M7 | Auth + routes | not started |
-| M8 | Dashboard | not started |
+| M5 | Queue, idempotency, resumability | **done** — audit path verified against the live API |
+| M6 | Services for the dashboard | **done** (from the workflow) |
+| M7 | Auth + routes | **done** (from the workflow) |
+| M8 | Dashboard | **next** |
 | M9 | Real 50-page canary | not started |
 | M10 | SITE.md | not started |
 
@@ -462,3 +462,73 @@ npx tsc --noEmit && npx eslint . && npm test
 
 The last fully green commit is `057c6b6`. If the workflow output cannot be made
 green, `git checkout -- . && git clean -fd` from there is a safe reset.
+
+
+### The multi-agent workflow: what it produced, and why it was stopped
+
+**Stopped deliberately.** The journal showed 8 `started` entries and ZERO
+completions: agents were doing real work, dying before returning their
+structured result, and being respawned on the same cache key. Because nothing
+was ever cached, each resume re-ran everything. Three generations of the same
+three lanes ran without converging, so it was killed rather than left to churn.
+
+Worth recording as a process lesson: background work writing files is not the
+same as background work *completing*. The journal (`journal.jsonl` in the
+workflow transcript dir) is the authoritative progress record and should be
+checked early, not assumed.
+
+What it did produce was good, and was kept:
+- **M6 read services** — `results`, `issues`, `site`, `report` (~1,100 lines)
+- **M7 auth** — password, session, `lib/http/*`, `proxy.ts`, login page, actions
+- **M5 partial** — `lib/queue/{names,jobs,queues,producers}.ts` and a thorough
+  `run.service.ts` (425 lines: run lifecycle, resume, reconcile, pure helpers)
+- Test count went 96 -> 121, all passing
+
+Finished by hand afterwards: `lib/services/audit.service.ts` (the write path),
+the three processors, and `lib/queue/worker.ts`.
+
+Two API details the lane agents had wrong, both caught by typecheck:
+`Worker.RateLimitError()` is static on Worker, not Job; and `worker.rateLimit()`
+is deprecated in BullMQ v6 in favour of `queue.rateLimit()`.
+
+### M5 complete — verified against the live API
+
+`npm run verify:audit` makes one real PSI call and checks 17 invariants.
+16 passed first time. Real result for the homepage:
+
+| | |
+|---|---|
+| Performance | **56** |
+| Accessibility | 87 |
+| Best Practices | 77 |
+| SEO | 92 |
+| LCP | 8.0 s |
+| Issues extracted | 16 `AuditIssue` rows |
+
+Confirmed by that run: lab INP is null while TBT is populated and NOT copied
+into it; field CLS is a real value rather than x100; the markdown report and its
+AI sentinel are generated; `Page.latestResult*Id` pointers are set; **a replayed
+job writes no second row and does not increment `completedJobs`**; and finalize
+is idempotent.
+
+### Two findings from the real run that changed the configuration
+
+**1. `rawJson` was under-pruned.** The one failing assertion. 50 items per audit
+was too generous against a real marketing page — `target-size` alone was 36 KB
+across only 28 items, because each item embeds a DOM node snippet. The item
+*count* was never the problem; the per-item payload was. Prune now caps items at
+10 and truncates strings inside them to 200 chars. Result: 157 KB per row,
+~229 MB per sweep, ~1.1 GB steady state at 5-run retention.
+
+**2. Real PSI latency is ~60 s, not the 11–24 s measured against test sites.**
+This matters more. Little's Law says in-flight must equal rate x latency, so at
+60 s the requirement is 0.75 x 60 = 45 concurrent, not 19. **At the old
+concurrency of 20 the ceiling would have been 20/60 = 0.33 req/s — a 75-minute
+sweep instead of 33, with the pool silently throttling and nothing in the logs
+to say so.** This is the same failure mode corrected during planning, resurfacing
+because the original latency figure came from light test pages rather than the
+real site.
+
+`WORKER_CONCURRENCY` is now **48**. Raising it does not hit PSI harder — the
+Redis token bucket caps the request rate regardless; it only allows more calls
+to be waiting at once.

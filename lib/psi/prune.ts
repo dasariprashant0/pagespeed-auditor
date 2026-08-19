@@ -31,8 +31,44 @@ const DROP_AUDITS = [
 /** Top-level lighthouseResult keys that are large and unused. */
 const DROP_LH_KEYS = ['fullPageScreenshot', 'timing', 'entities', 'i18n', 'stackPacks'] as const;
 
-/** Audits whose details.items lists can run to thousands of rows. */
-const CAP_ITEMS = 50;
+/**
+ * Audits whose details.items lists can run to thousands of rows.
+ *
+ * 50 was too generous against a real marketing page: `target-size` alone was
+ * 36 KB across only 28 items, because each item embeds a DOM node snippet.
+ * The item COUNT was never the problem -- the per-item payload was.
+ */
+const CAP_ITEMS = 10;
+
+/** Longest string kept inside a details item. DOM snippets dominate the rest. */
+const MAX_ITEM_STRING = 200;
+
+/**
+ * Shortens the long strings inside one details item.
+ *
+ * Lighthouse embeds full DOM snippets, selectors and explanations per item;
+ * those are what make a 28-item audit weigh 36 KB. We keep enough to identify
+ * the element and drop the rest -- the markdown report only ever shows a
+ * handful of rows anyway.
+ */
+function truncateItem(item: unknown): Record<string, unknown> {
+  if (typeof item !== 'object' || item === null) return item as Record<string, unknown>;
+
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(item as Record<string, unknown>)) {
+    if (typeof v === 'string') {
+      out[k] = v.length > MAX_ITEM_STRING ? `${v.slice(0, MAX_ITEM_STRING)}…` : v;
+    } else if (v && typeof v === 'object' && !Array.isArray(v)) {
+      // Nested node objects carry snippet/selector/explanation -- same treatment.
+      out[k] = truncateItem(v);
+    } else if (Array.isArray(v)) {
+      out[k] = v.slice(0, CAP_ITEMS).map(truncateItem);
+    } else {
+      out[k] = v;
+    }
+  }
+  return out;
+}
 
 export interface PruneStats {
   beforeBytes: number;
@@ -58,9 +94,8 @@ export function pruneResponse(input: PsiResponse): { pruned: PsiResponse; stats:
 
       for (const audit of Object.values(lr.audits)) {
         const items = audit.details?.items;
-        if (Array.isArray(items) && items.length > CAP_ITEMS) {
-          audit.details!.items = items.slice(0, CAP_ITEMS);
-        }
+        if (!Array.isArray(items)) continue;
+        audit.details!.items = items.slice(0, CAP_ITEMS).map(truncateItem);
       }
     }
   }
