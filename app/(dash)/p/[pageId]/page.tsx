@@ -13,6 +13,8 @@ import { ScoreHistory } from '@/components/report/ScoreHistory';
 import { RunAuditButton } from '@/components/runs/RunAuditButton';
 import { RunConditions } from '@/components/report/RunConditions';
 import { Screenshot } from '@/components/report/Screenshot';
+import { RegressionBadge } from '@/components/report/RegressionBadge';
+import { regressionsForPage } from '@/lib/services/regression.service';
 import type { PsiStrategy } from '@/lib/services/types';
 
 export const dynamic = 'force-dynamic';
@@ -44,7 +46,10 @@ export default async function PageReport({
     notFound();
   }
 
-  const allGroups = await listGroupsWithAggregates(site.id, { strategy });
+  const [allGroups, regressions] = await Promise.all([
+    listGroupsWithAggregates(site.id, { strategy }),
+    regressionsForPage(pageId, strategy),
+  ]);
   const rail = allGroups
     // Already in sitemap order from the service; re-sorting here would undo it.
     .filter((g) => g.pageCount > 0)
@@ -107,6 +112,15 @@ export default async function PageReport({
           {report.page.url} ↗
         </a>
       </div>
+
+      {regressions.length > 0 && (
+        <section className="mb-5" aria-label="Regressions">
+          <h2 className="mb-2 text-[11px] font-medium uppercase tracking-wide text-[var(--muted)]">
+            Regressions
+          </h2>
+          <RegressionBadge regressions={regressions} />
+        </section>
+      )}
 
       {!r ? (
         <EmptyState
