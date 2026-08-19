@@ -69,7 +69,7 @@ export async function loginAction(_prev: LoginResult | null, formData: FormData)
       return {
         ok: false,
         error:
-          'No password is configured for this deployment. Run `npm run hash-password -- \'your-password\'` and put the result in AUTH_PASSWORD_HASH.',
+          'No password is configured for this deployment. Run `npm run set-password -- \'your-password\'`, then restart the server.',
       };
     }
     return { ok: false, error: GENERIC_FAILURE };

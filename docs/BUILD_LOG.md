@@ -532,3 +532,52 @@ real site.
 `WORKER_CONCURRENCY` is now **48**. Raising it does not hit PSI harder — the
 Redis token bucket caps the request rate regardless; it only allows more calls
 to be waiting at once.
+
+
+### Throughput re-verified at REAL latency — gate still passes
+
+The earlier gate used 11-24 s latency measured against light test pages. Re-run
+at the ~60 s the real site actually takes, 240 jobs, concurrency 48:
+
+| | |
+|---|---|
+| Steady-state | **0.724 req/s** (target 0.750) |
+| Peak in flight | 48 of 48 |
+| Projected 2000-call sweep | **46 min** (so ~34 min for this site's 1,494) |
+
+Peak sitting exactly at the concurrency ceiling means there is no headroom left;
+if page latency creeps above 60 s, raise `WORKER_CONCURRENCY` again. The token
+bucket caps the request rate regardless, so raising it never hits PSI harder.
+
+### Login: a real bug found by testing it, not by reading it
+
+Login silently failed with "No password is configured" even though `.env`
+contained a valid 60-character bcrypt hash that `dotenv` parsed correctly.
+
+**Cause: Next loads `.env` through `dotenv-expand`, which treats `$` as variable
+interpolation.** A bcrypt hash is `$2b$12$...`, so `$2b` and `$12` were expanded
+to empty strings and the hash arrived as **29 characters instead of 60**.
+Confirmed directly against `@next/env`:
+
+```
+@next/env sees length: 29
+value: ".O0qeV5oCNHng4HJQwSsQOX9oHBlK"
+```
+
+Meanwhile the worker and every `tsx` script use plain `dotenv`, which does no
+expansion and saw the correct value -- so the same `.env` behaved differently in
+two halves of the same system. That is exactly the kind of bug that survives
+code review: every individual file is correct.
+
+**Fix:** the hash is stored escaped (`\$2b\$12\$...`). dotenv-expand unescapes
+it; `lib/env.ts` unescapes it for everyone else. Both paths converge on the same
+value, and a hand-pasted unescaped hash still works. `npm run set-password`
+writes the escaped form directly into `.env` so there is nothing to copy by hand.
+
+**Verified end to end in a real browser** (Playwright, not curl -- a Server
+Action needs Next's own POST protocol, so the earlier curl test was meaningless):
+`/` redirects to `/login?next=%2F`, correct credentials redirect back to `/`,
+and a wrong password is rejected with a generic message.
+
+Note for M8: after login you currently land on the Ship Studio placeholder page,
+because the dashboard is the remaining milestone.

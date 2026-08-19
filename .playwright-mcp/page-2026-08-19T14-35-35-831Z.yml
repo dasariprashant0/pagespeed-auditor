@@ -1,0 +1,93 @@
+- generic [active] [ref=f3e1]:
+  - main [ref=f3e2]:
+    - generic [ref=f3e3]:
+      - generic [ref=f3e4]:
+        - heading "PageSpeed Auditor" [level=1] [ref=f3e5]
+        - paragraph [ref=f3e6]: Company Site
+      - generic [ref=f3e8]:
+        - generic [ref=f3e9]:
+          - generic [ref=f3e10]: Username
+          - textbox "Username" [invalid] [ref=f3e11]
+        - generic [ref=f3e12]:
+          - generic [ref=f3e13]: Password
+          - textbox "Password" [invalid] [ref=f3e14]
+        - alert [ref=f3e36]: "No password is configured for this deployment. Run `npm run hash-password -- 'your-password'` and put the result in AUTH_PASSWORD_HASH."
+        - button "Sign in" [ref=f3e15]
+      - paragraph [ref=f3e16]: Shared credentials. Ask whoever set this up, or read the Auth section of the README.
+  - button "Open Next.js Dev Tools" [ref=f3e22] [cursor=pointer]
+  - alert [ref=f3e26]
+  - button [ref=f3e28] [cursor=pointer]:
+    - generic:
+      - generic:
+        - button
+      - generic:
+        - button
+      - generic:
+        - button [disabled]
+      - generic:
+        - button [disabled]
+      - generic:
+        - button [disabled]
+      - generic:
+        - button [disabled]
+      - generic:
+        - button
+      - generic:
+        - button
+    - generic:
+      - generic:
+        - generic:
+          - generic:
+            - link:
+              - /url: https://agentation.com
+            - paragraph: v3.0.1
+            - button "Switch to light mode"
+          - generic:
+            - generic:
+              - generic: Output Detail
+              - button "Standard"
+            - generic:
+              - generic: React Components
+              - generic:
+                - checkbox [checked]
+            - generic:
+              - generic: Hide Until Restart
+              - generic:
+                - checkbox
+          - generic:
+            - generic: Marker Color
+            - generic:
+              - button "Indigo"
+              - button "Blue"
+              - button "Cyan"
+              - button "Green"
+              - button "Yellow"
+              - button "Orange"
+              - button "Red"
+          - generic:
+            - generic:
+              - generic:
+                - checkbox "Clear on copy/send"
+              - generic: Clear on copy/send
+            - generic:
+              - generic:
+                - checkbox "Block page interactions" [checked]
+              - generic: Block page interactions
+          - button "Manage MCP & Webhooks"
+        - generic:
+          - button "Manage MCP & Webhooks"
+          - generic:
+            - generic: MCP Connection
+            - paragraph:
+              - text: MCP connection allows agents to receive and act on annotations.
+              - link "Learn more":
+                - /url: https://agentation.dev/mcp
+          - generic:
+            - generic:
+              - generic: Webhooks
+              - generic:
+                - generic: Auto-Send
+                - generic:
+                  - checkbox "Auto-Send" [checked] [disabled]
+            - paragraph: The webhook URL will receive live annotation changes and annotation data.
+            - textbox "Webhook URL"

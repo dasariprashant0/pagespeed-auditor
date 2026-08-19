@@ -51,7 +51,23 @@ const schema = z.object({
   SYNC_GROUP_PAGE_LIMIT: int(15),
 
   AUTH_USERNAME: z.string().default('admin'),
-  AUTH_PASSWORD_HASH: z.string().default(''),
+
+  /**
+   * A bcrypt hash is full of `$`, and Next loads .env through dotenv-expand,
+   * which reads `$2b` and `$12` as variable references and expands them to
+   * nothing -- a 60-character hash arrives as 29 and login fails with no
+   * useful error. Plain `dotenv` (the worker and scripts) does no expansion.
+   *
+   * So the hash is stored escaped as `\$2b\$12\$...`, which dotenv-expand
+   * unescapes for us, and this transform unescapes it for everyone else. Both
+   * paths end up with the same value. `npm run set-password` writes the
+   * escaped form; an unescaped hash pasted by hand still works under plain
+   * dotenv and is repaired here for Next.
+   */
+  AUTH_PASSWORD_HASH: z
+    .string()
+    .default('')
+    .transform((v) => v.replace(/\\\$/g, '$')),
   SESSION_SECRET: z.string().default(''),
   SESSION_TTL_DAYS: int(30),
 

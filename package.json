@@ -21,7 +21,8 @@
     "inspect-sitemap": "tsx scripts/inspect-sitemap.ts",
     "ingest": "tsx scripts/ingest.ts",
     "verify:ingest": "tsx scripts/verify-ingest-invariants.ts",
-    "verify:audit": "tsx scripts/verify-audit-path.ts"
+    "verify:audit": "tsx scripts/verify-audit-path.ts",
+    "set-password": "tsx scripts/set-password.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.9.1",

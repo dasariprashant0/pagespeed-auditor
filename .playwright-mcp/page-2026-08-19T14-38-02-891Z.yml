@@ -1,0 +1,128 @@
+- generic [active] [ref=f5e1]:
+  - button "Open Next.js Dev Tools" [ref=f5e22] [cursor=pointer]
+  - alert [ref=f5e26]: Ship Studio
+  - button [ref=f5e28] [cursor=pointer]:
+    - generic:
+      - generic:
+        - button
+      - generic:
+        - button
+      - generic:
+        - button [disabled]
+      - generic:
+        - button [disabled]
+      - generic:
+        - button [disabled]
+      - generic:
+        - button [disabled]
+      - generic:
+        - button
+      - generic:
+        - button
+    - generic:
+      - generic:
+        - generic:
+          - generic:
+            - link:
+              - /url: https://agentation.com
+            - paragraph: v3.0.1
+            - button "Switch to light mode"
+          - generic:
+            - generic:
+              - generic: Output Detail
+              - button "Standard"
+            - generic:
+              - generic: React Components
+              - generic:
+                - checkbox [checked]
+            - generic:
+              - generic: Hide Until Restart
+              - generic:
+                - checkbox
+          - generic:
+            - generic: Marker Color
+            - generic:
+              - button "Indigo"
+              - button "Blue"
+              - button "Cyan"
+              - button "Green"
+              - button "Yellow"
+              - button "Orange"
+              - button "Red"
+          - generic:
+            - generic:
+              - generic:
+                - checkbox "Clear on copy/send"
+              - generic: Clear on copy/send
+            - generic:
+              - generic:
+                - checkbox "Block page interactions" [checked]
+              - generic: Block page interactions
+          - button "Manage MCP & Webhooks"
+        - generic:
+          - button "Manage MCP & Webhooks"
+          - generic:
+            - generic: MCP Connection
+            - paragraph:
+              - text: MCP connection allows agents to receive and act on annotations.
+              - link "Learn more":
+                - /url: https://agentation.dev/mcp
+          - generic:
+            - generic:
+              - generic: Webhooks
+              - generic:
+                - generic: Auto-Send
+                - generic:
+                  - checkbox "Auto-Send" [checked] [disabled]
+            - paragraph: The webhook URL will receive live annotation changes and annotation data.
+            - textbox "Webhook URL"
+  - main [ref=f5e37]:
+    - generic [ref=f5e38]:
+      - paragraph [ref=f5e39]: Welcome to
+      - heading "Ship Studio" [level=1] [ref=f5e40]
+      - paragraph [ref=f5e41]: How professionals build with AI. Just describe what you want.
+    - generic [ref=f5e42]:
+      - heading "Getting Started" [level=2] [ref=f5e43]
+      - generic [ref=f5e44]:
+        - generic [ref=f5e45]:
+          - generic [ref=f5e46]: "1"
+          - generic [ref=f5e47]:
+            - heading "Start a conversation" [level=3] [ref=f5e48]
+            - paragraph [ref=f5e49]: Just type what you want to build. A landing page, a web app, a portfolio — anything.
+        - generic [ref=f5e50]:
+          - generic [ref=f5e51]: "2"
+          - generic [ref=f5e52]:
+            - heading "AI builds it" [level=3] [ref=f5e53]
+            - paragraph [ref=f5e54]: Your AI handles the code. Watch your project come together in real-time.
+        - generic [ref=f5e55]:
+          - generic [ref=f5e56]: "3"
+          - generic [ref=f5e57]:
+            - heading "Refine together" [level=3] [ref=f5e58]
+            - paragraph [ref=f5e59]: Ask for changes, add pages, tweak colors. Keep iterating until it's perfect.
+    - generic [ref=f5e60]:
+      - heading "Available Commands" [level=2] [ref=f5e61]
+      - generic [ref=f5e62]:
+        - generic [ref=f5e63]:
+          - code [ref=f5e64]: /onboarding
+          - paragraph [ref=f5e65]: Set up a new project. I'll ask about your business and create a personalized build plan.
+        - generic [ref=f5e66]:
+          - code [ref=f5e67]: /page-remake
+          - paragraph [ref=f5e68]: Rebuild from an example. Share a URL you like, and I'll create something similar but better.
+        - generic [ref=f5e69]:
+          - code [ref=f5e70]: /sanity-cms
+          - paragraph [ref=f5e71]: Add editable content. When you want to update text yourself without touching code.
+    - generic [ref=f5e72]:
+      - heading "What You Can Build" [level=2] [ref=f5e73]
+      - generic [ref=f5e74]:
+        - generic [ref=f5e75]: Landing pages
+        - generic [ref=f5e76]: Web apps
+        - generic [ref=f5e77]: Portfolios
+        - generic [ref=f5e78]: Company websites
+        - generic [ref=f5e79]: Dashboards
+        - generic [ref=f5e80]: SaaS products
+        - generic [ref=f5e81]: Event sites
+        - generic [ref=f5e82]: Personal sites
+      - paragraph [ref=f5e83]: All built with AI, at professional quality.
+    - generic [ref=f5e84]:
+      - heading "Ready to start?" [level=2] [ref=f5e85]
+      - paragraph [ref=f5e86]: Just describe what you want to build. Your AI takes it from there.
