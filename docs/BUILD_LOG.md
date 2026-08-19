@@ -427,3 +427,38 @@ than content). **This is a product decision, not a bug**, and it is deliberately
 not being changed unilaterally because the grouping rule is spec-locked. Options
 to put to the user: leave it and merge by hand; fold groups under a page-count
 threshold into "Other"; or add a merge-suggestion step to Settings.
+
+### Multi-agent workflow for M5-M7 (in progress)
+
+At the user's request, stages M5 (queue/worker), M6 (dashboard read services)
+and M7 (auth) are being built by a background workflow -- three parallel lanes
+on disjoint file sets, each adversarially verified as it lands, then a single
+integration pass that typechecks all three together.
+
+Coordination done up front, before launching, because parallel agents left to
+themselves produce near-duplicate incompatible types: `lib/services/types.ts`
+defines every shared DTO in one place, and the three lanes own strictly
+non-overlapping file sets. Each agent was handed `docs/PLAN.md`,
+`docs/DECISIONS.md` and the hard rules -- including "do not optimise the
+concurrency numbers, they are measured" -- so it cannot quietly undo a decision
+we already paid to learn.
+
+**The session hit its usage limit mid-run and the workflow was resumed.** Two
+things to know about that:
+
+- Lane files that had already been written were swept into commit `45a3790`
+  (the RESUME_HERE commit) by a `git add -A`, so they are committed but were
+  never verified by the integration pass. They must not be trusted until
+  typecheck, lint and tests are green.
+- `lib/services/audit.service.ts` was absent at resume time, so the M5 lane had
+  not finished. On resume, completed agents return cached results and only the
+  unfinished work re-runs.
+
+Verification gate before any of this is trusted:
+
+```
+npx tsc --noEmit && npx eslint . && npm test
+```
+
+The last fully green commit is `057c6b6`. If the workflow output cannot be made
+green, `git checkout -- . && git clean -fd` from there is a safe reset.
