@@ -14,6 +14,7 @@ import { RunAuditButton } from '@/components/runs/RunAuditButton';
 import { RunConditions } from '@/components/report/RunConditions';
 import { Screenshot } from '@/components/report/Screenshot';
 import { RegressionBadge } from '@/components/report/RegressionBadge';
+import { RecommendationPanel } from '@/components/report/RecommendationPanel';
 import { regressionsForPage } from '@/lib/services/regression.service';
 import type { PsiStrategy } from '@/lib/services/types';
 
@@ -178,6 +179,14 @@ export default async function PageReport({
                 </div>
               ))}
             </div>
+          </section>
+
+          <section className="mb-6">
+            <RecommendationPanel
+              pageId={pageId}
+              strategy={strategy}
+              initial={report.recommendation}
+            />
           </section>
 
           <div className="space-y-2">

@@ -12,7 +12,7 @@
     "worker": "tsx lib/queue/worker.ts",
     "db:up": "docker compose -f docker-compose.dev.yml up -d",
     "db:down": "docker compose -f docker-compose.dev.yml down",
-    "db:migrate": "prisma migrate dev && prisma generate && echo \"\n  Schema changed \u2014 RESTART the dev server and worker; both cache the generated client.\n\"",
+    "db:migrate": "prisma migrate dev && prisma generate && echo \"\n  Schema changed — RESTART the dev server and worker; both cache the generated client.\n\"",
     "db:studio": "prisma studio",
     "db:generate": "prisma generate",
     "db:seed": "tsx prisma/seed.ts",
@@ -27,6 +27,7 @@
     "audit:queue": "tsx scripts/queue-audit.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.117.1",
     "@prisma/adapter-pg": "^7.9.1",
     "@prisma/client": "^7.9.1",
     "agentation": "^3.0.1",
