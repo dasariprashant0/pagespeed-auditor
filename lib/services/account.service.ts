@@ -270,3 +270,88 @@ export async function wouldOrphanOrganization(organizationId: string, userId: st
   });
   return target?.role === 'admin';
 }
+
+// --- password reset --------------------------------------------------------
+
+const RESET_TTL_MINUTES = 30;
+
+/**
+ * Starts a reset.
+ *
+ * Always reports the same thing to the caller whether or not the address has an
+ * account: a differing response turns this endpoint into a way to enumerate who
+ * has signed up.
+ */
+export async function requestPasswordReset(
+  email: string,
+  appUrl: string,
+): Promise<{ url: string | null }> {
+  const normalized = normalizeEmail(email);
+  const user = await prisma.user.findUnique({ where: { email: normalized }, select: { id: true } });
+  if (!user) return { url: null };
+
+  const token = randomBytes(32).toString('base64url');
+
+  // Outstanding resets are replaced, so an older link stops working the moment
+  // a newer one is requested.
+  await prisma.passwordReset.deleteMany({ where: { userId: user.id, usedAt: null } });
+  await prisma.passwordReset.create({
+    data: {
+      userId: user.id,
+      tokenHash: hashToken(token),
+      expiresAt: new Date(Date.now() + RESET_TTL_MINUTES * 60_000),
+    },
+  });
+
+  logger.info({ email: normalized }, 'password reset requested');
+  return { url: `${appUrl}/reset?token=${token}` };
+}
+
+export interface ResetTokenInfo {
+  valid: boolean;
+  email?: string;
+  reason?: string;
+}
+
+export async function inspectResetToken(token: string): Promise<ResetTokenInfo> {
+  const row = await prisma.passwordReset.findUnique({
+    where: { tokenHash: hashToken(token) },
+    select: { expiresAt: true, usedAt: true, user: { select: { email: true } } },
+  });
+  if (!row) return { valid: false, reason: 'That reset link is not valid.' };
+  if (row.usedAt) return { valid: false, reason: 'That reset link has already been used.' };
+  if (row.expiresAt < new Date()) return { valid: false, reason: 'That reset link has expired. Request a new one.' };
+  return { valid: true, email: row.user.email };
+}
+
+export async function completePasswordReset(
+  token: string,
+  password: string,
+): Promise<{ ok: true; userId: string; organizationId: string | null } | { ok: false; error: string }> {
+  if (password.length < 12) return { ok: false, error: 'Use a password of at least 12 characters.' };
+
+  const row = await prisma.passwordReset.findUnique({
+    where: { tokenHash: hashToken(token) },
+    select: { id: true, userId: true, expiresAt: true, usedAt: true },
+  });
+  if (!row) return { ok: false, error: 'That reset link is not valid.' };
+  if (row.usedAt) return { ok: false, error: 'That reset link has already been used.' };
+  if (row.expiresAt < new Date()) return { ok: false, error: 'That reset link has expired.' };
+
+  const passwordHash = await hashPassword(password);
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: row.userId }, data: { passwordHash } }),
+    // Marked used inside the same transaction, so the link cannot be replayed
+    // even if two requests arrive together.
+    prisma.passwordReset.update({ where: { id: row.id }, data: { usedAt: new Date() } }),
+  ]);
+
+  const membership = await prisma.membership.findFirst({
+    where: { userId: row.userId },
+    orderBy: { createdAt: 'asc' },
+    select: { organizationId: true },
+  });
+
+  logger.info({ userId: row.userId }, 'password reset completed');
+  return { ok: true, userId: row.userId, organizationId: membership?.organizationId ?? null };
+}

@@ -32,6 +32,11 @@ export function LoginForm({ next, reason }: { next: string; reason?: string }) {
         <Field label="Password" name="password" type="password" autoComplete="current-password" />
         <FormError message={state && !state.ok ? state.error : null} />
         <SubmitButton pending={pending}>Sign in</SubmitButton>
+        <p className="text-center text-[11px]">
+          <Link href="/forgot" className="text-[var(--muted)] underline-offset-2 hover:underline">
+            Forgot your password?
+          </Link>
+        </p>
       </form>
     </AuthCard>
   );

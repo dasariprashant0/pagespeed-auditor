@@ -22,6 +22,24 @@ model User {
 
   memberships Membership[]
   invitesSent Invitation[] @relation("InvitedBy")
+  resetTokens PasswordReset[]
+}
+
+/// A single-use password reset.
+///
+/// Hashed like an invitation, for the same reason: a leaked database row must
+/// not be redeemable. Short-lived, because an unused reset link sitting in a
+/// mailbox is a standing key to the account.
+model PasswordReset {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }
 
 /// A tenant. Every Site, Page and AuditResult belongs to exactly one.

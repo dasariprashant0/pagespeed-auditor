@@ -117,5 +117,5 @@ export const config = {
    * itself (redirect loop), the auth endpoints, and /api/mcp -- which carries
    * its own bearer token in stage 6 and must never receive an HTML redirect.
    */
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|login|signup|invite|api/auth|api/mcp).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|login|signup|invite|forgot|reset|api/auth|api/mcp).*)'],
 };

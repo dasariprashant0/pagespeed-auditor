@@ -2,7 +2,15 @@
 
 import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
-import { login as loginUser, signup as signupOrg, acceptInvitation } from '@/lib/services/account.service';
+import {
+  login as loginUser,
+  signup as signupOrg,
+  acceptInvitation,
+  requestPasswordReset,
+  completePasswordReset,
+} from '@/lib/services/account.service';
+import { getEnv } from '@/lib/env';
+import { sendEmail } from '@/lib/notify/email';
 import { consumeLoginAttempt, resetLoginAttempts, retryAfterMinutes } from '@/lib/auth/rate-limit';
 import { startSession, endSession } from '@/lib/http/session';
 import { safeNextPath } from '@/lib/http/auth-guard';
@@ -82,4 +90,57 @@ export async function acceptInviteAction(_prev: AuthResult | null, form: FormDat
 export async function logoutAction(): Promise<void> {
   await endSession();
   redirect('/login');
+}
+
+export type ResetRequestResult = { ok: true; message: string; devUrl?: string } | { ok: false; error: string };
+
+/**
+ * Starts a reset.
+ *
+ * The response is identical whether or not the address has an account -- a
+ * different message would let anyone test which emails are registered. Rate
+ * limited on the same bucket as login, since it is the same door.
+ */
+export async function requestResetAction(_prev: unknown, form: FormData): Promise<ResetRequestResult> {
+  const email = String(form.get('email') ?? '').trim();
+  if (!email) return { ok: false, error: 'Enter your email address.' };
+
+  const attempt = await consumeLoginAttempt(await clientKey());
+  if (!attempt.allowed) return { ok: false, error: 'Too many attempts. Try again shortly.' };
+
+  const { url } = await requestPasswordReset(email, getEnv().APP_URL);
+
+  if (url) {
+    await sendEmail(
+      [email],
+      'Reset your PageSpeed Auditor password',
+      `<p>Someone asked to reset the password for this account.</p>
+       <p><a href="${url}">Choose a new password</a></p>
+       <p style="color:#78716c">The link works for 30 minutes. If this was not you, ignore it — nothing has changed.</p>`,
+      `Reset your password:\n\n${url}\n\nThe link works for 30 minutes. If this was not you, ignore it.`,
+    );
+  }
+
+  return {
+    ok: true,
+    message: 'If that address has an account, a reset link is on its way. It works for 30 minutes.',
+    // Without a mail transport the link would be unreachable, which in a
+    // self-hosted install means nobody can ever get back in.
+    ...(url && process.env.EMAIL_TRANSPORT !== 'resend' && process.env.EMAIL_TRANSPORT !== 'smtp'
+      ? { devUrl: url }
+      : {}),
+  };
+}
+
+export async function completeResetAction(_prev: AuthResult | null, form: FormData): Promise<AuthResult> {
+  const token = String(form.get('token') ?? '');
+  const password = String(form.get('password') ?? '');
+
+  const result = await completePasswordReset(token, password);
+  if (!result.ok) return { ok: false, error: result.error };
+
+  // Signed straight in: they have just proved control of the mailbox and chosen
+  // a password, so asking them to type it again immediately is friction only.
+  if (result.organizationId) await startSession(result.userId, result.organizationId);
+  redirect(result.organizationId ? '/' : '/login');
 }
