@@ -78,6 +78,20 @@ export interface FieldDataDTO {
   metrics: Partial<Record<'lcp' | 'inp' | 'cls' | 'fcp' | 'ttfb', FieldMetricDTO>>;
 }
 
+/**
+ * One audit's evidence table, normalized out of the pruned rawJson.
+ *
+ * Lighthouse's own heading shape changed between versions (`text`/`itemType` in
+ * v9, `label`/`valueType` in v10+), so it is flattened here rather than in the
+ * component.
+ */
+export interface AuditDetailTable {
+  headings: Array<{ key: string; label: string; type: string }>;
+  rows: Array<Record<string, string>>;
+  /** Rows dropped by pruning, so the UI can say so instead of implying totality. */
+  truncated: boolean;
+}
+
 export interface AuditItemDTO {
   auditId: string;
   title: string;
@@ -88,6 +102,8 @@ export interface AuditItemDTO {
   displayValue: string | null;
   savingsMs: number | null;
   savingsBytes: number | null;
+  /** Null when the audit carries no tabular evidence. */
+  details: AuditDetailTable | null;
 }
 
 export interface PageReportDTO {

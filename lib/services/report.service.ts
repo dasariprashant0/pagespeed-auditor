@@ -4,15 +4,21 @@ import { bucketOf } from '../psi/buckets.ts';
 import type { Bucket, MetricId, PsiStrategy } from '../psi/types.ts';
 import { issueKindFromGroup } from './issues.service.ts';
 import { getPageScoreHistory } from './results.service.ts';
-import type { AuditItemDTO, FieldDataDTO, FieldMetricDTO, PageReportDTO } from './types.ts';
+import type {
+  AuditDetailTable,
+  AuditItemDTO,
+  FieldDataDTO,
+  FieldMetricDTO,
+  PageReportDTO,
+} from './types.ts';
 
 /**
  * The single-page report view.
  *
- * This is the one place in the read layer that may touch rawJson, and only for
- * one row, only for audit descriptions, and only when asked. Everything else --
- * scores, metrics, field data, the issue lists -- comes from real columns and
- * the AuditIssue side table.
+ * This is the one place in the read layer that may touch rawJson, and only ever
+ * for a single row: the audit descriptions and evidence tables live nowhere
+ * else. Every list and aggregate path reads real columns and the AuditIssue
+ * side table instead, which is the whole reason that table exists.
  */
 
 // ---------------------------------------------------------------------------
@@ -270,12 +276,13 @@ export async function getPageReport(
       orderBy: [{ savingsMs: 'desc' }, { score: 'asc' }],
     }),
     getPageScoreHistory(pageId, strategy, opts.historyLimit),
-    opts.includeDescriptions
-      ? prisma.auditResult.findUnique({ where: { id: latest.id }, select: { rawJson: true } })
-      : Promise.resolve(null),
+    // Always fetched now: the report view needs both descriptions and the
+    // evidence tables, and this is a single row rather than a list query.
+    prisma.auditResult.findUnique({ where: { id: latest.id }, select: { rawJson: true } }),
   ]);
 
   const descriptions = descriptionsFromRawJson(rawRow?.rawJson ?? null);
+  const detailTables = detailsFromRawJson(rawRow?.rawJson ?? null);
 
   const items: AuditItemDTO[] = issues.map((i) => ({
     auditId: i.auditId,
@@ -287,6 +294,7 @@ export async function getPageReport(
     displayValue: i.displayValue,
     savingsMs: i.savingsMs,
     savingsBytes: i.savingsBytes,
+    details: detailTables.get(i.auditId) ?? null,
   }));
 
   const ok = latest.status === 'ok';
@@ -340,4 +348,92 @@ export async function getPageReport(
         ? { content: rec.content, model: rec.model, generatedAt: rec.generatedAt.toISOString() }
         : null,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Audit evidence tables
+// ---------------------------------------------------------------------------
+
+/** Values Lighthouse nests as objects rather than scalars. */
+function cellToString(v: unknown): string {
+  if (v === null || v === undefined) return '';
+  if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') return String(v);
+  if (typeof v === 'object') {
+    const o = v as Record<string, unknown>;
+    // Node references and link/url/code wrappers all carry the useful text here.
+    for (const k of ['url', 'text', 'snippet', 'selector', 'value', 'label', 'path']) {
+      const inner = o[k];
+      if (typeof inner === 'string' && inner) return inner;
+      if (typeof inner === 'number') return String(inner);
+    }
+  }
+  return '';
+}
+
+/** Bytes and milliseconds arrive as raw numbers; render them the way PSI does. */
+function formatCell(raw: unknown, type: string): string {
+  const s = cellToString(raw);
+  if (s === '') return '';
+  const n = typeof raw === 'number' ? raw : Number(s);
+  if (!Number.isNaN(n) && typeof raw === 'number') {
+    if (type === 'bytes') {
+      return n < 1024 ? `${Math.round(n)} B` : n < 1048576 ? `${Math.round(n / 1024)} KiB` : `${(n / 1048576).toFixed(1)} MiB`;
+    }
+    if (type === 'ms' || type === 'timespanMs') {
+      return n < 1000 ? `${Math.round(n)} ms` : `${(n / 1000).toFixed(2)} s`;
+    }
+  }
+  return s;
+}
+
+/**
+ * Pulls each audit's evidence table out of the stored (pruned) rawJson.
+ *
+ * Read-time extraction is fine HERE and nowhere else: this is one row for one
+ * page, not a list query. Pruning already capped items at 10 and truncated the
+ * strings inside them, so `truncated` tells the UI to say "showing first 10"
+ * rather than implying the list is complete.
+ */
+export function detailsFromRawJson(rawJson: unknown): Map<string, AuditDetailTable> {
+  const out = new Map<string, AuditDetailTable>();
+  const audits = (rawJson as { lighthouseResult?: { audits?: Record<string, unknown> } })?.lighthouseResult?.audits;
+  if (!audits) return out;
+
+  for (const [auditId, audit] of Object.entries(audits)) {
+    const details = (audit as { details?: Record<string, unknown> }).details;
+    if (!details) continue;
+
+    const type = String(details.type ?? '');
+    // Only tabular shapes carry readable evidence; filmstrips, screenshots,
+    // treemaps and debugdata do not.
+    if (type !== 'table' && type !== 'opportunity' && type !== 'list') continue;
+
+    const rawHeadings = Array.isArray(details.headings) ? details.headings : [];
+    const headings = rawHeadings
+      .map((h) => {
+        const o = h as Record<string, unknown>;
+        return {
+          key: String(o.key ?? ''),
+          // v10+ uses label/valueType; v9 used text/itemType.
+          label: String(o.label ?? o.text ?? o.key ?? ''),
+          type: String(o.valueType ?? o.itemType ?? 'text'),
+        };
+      })
+      .filter((h) => h.key);
+
+    const rawItems = Array.isArray(details.items) ? details.items : [];
+    if (headings.length === 0 || rawItems.length === 0) continue;
+
+    const rows = rawItems.map((item) => {
+      const o = item as Record<string, unknown>;
+      const row: Record<string, string> = {};
+      for (const h of headings) row[h.key] = formatCell(o[h.key], h.type);
+      return row;
+    });
+
+    // Pruning caps items at 10, so a full ten strongly implies more were cut.
+    out.set(auditId, { headings, rows, truncated: rawItems.length >= 10 });
+  }
+
+  return out;
 }

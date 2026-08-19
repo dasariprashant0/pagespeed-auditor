@@ -61,7 +61,7 @@ export default async function HomePage({
       breadcrumb="Overview"
       actions={<StrategyLinks active={strategy} basePath="/" />}
     >
-      <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
+      <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
         <div>
           <h1 className="font-[family-name:var(--font-display)] text-xl font-semibold tracking-tight">
             {site.name}
@@ -72,7 +72,7 @@ export default async function HomePage({
             {summary.lastSweepAt && ` · last sweep ${new Date(summary.lastSweepAt).toLocaleDateString()}`}
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 sm:gap-4">
           {SCORE_COLUMNS.map(({ key, short, full }) => (
             <div key={key} className="text-center">
               <ScorePill score={summary.siteAverage[key]} title={full} />

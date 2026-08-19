@@ -5,6 +5,7 @@ import { listGroupsWithAggregates, listPagesInGroup } from '@/lib/services/resul
 import { AppShell } from '@/components/shell/AppShell';
 import { PageTable } from '@/components/nav/PageTable';
 import { EmptyState } from '@/components/nav/EmptyState';
+import { RunAuditButton } from '@/components/runs/RunAuditButton';
 import type { PsiStrategy } from '@/lib/services/types';
 
 export const dynamic = 'force-dynamic';
@@ -50,6 +51,8 @@ export default async function GroupPage({
         </>
       }
       actions={
+        <div className="flex items-center gap-2">
+        <RunAuditButton kind="group" target={slug} label={`Audit all ${pages.length}`} />
         <div role="tablist" aria-label="Report strategy" className="flex rounded-[5px] border border-[var(--border)] p-0.5">
           {(['mobile', 'desktop'] as const).map((s) => (
             <Link
@@ -65,6 +68,7 @@ export default async function GroupPage({
             </Link>
           ))}
         </div>
+        </div>
       }
     >
       <div className="mb-4">
@@ -72,7 +76,8 @@ export default async function GroupPage({
           {group.name}
         </h1>
         <p className="mt-0.5 text-[12px] text-[var(--muted)]">
-          {pages.length} {pages.length === 1 ? 'page' : 'pages'} · {strategy}
+          {pages.length} {pages.length === 1 ? 'page' : 'pages'} · {strategy} · re-running audits
+          both strategies at ~{Math.max(1, Math.ceil((pages.length * 2) / 0.75 / 60))} min
         </p>
       </div>
 

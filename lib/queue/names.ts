@@ -26,7 +26,11 @@ export const JOB_FINALIZE_RUN = 'finalize-run';
  * what actually stops a duplicate result being written.
  */
 export function auditJobId(runId: string, pageId: string, strategy: PsiStrategy): string {
-  return `a:${runId}:${pageId}:${strategy}`;
+  // Separator is '-' rather than ':'. BullMQ v6 rejects a custom job id
+  // containing a colon, because it namespaces its own Redis keys with them --
+  // and it throws at enqueue time, so the run is created but never gets any
+  // jobs and can never reach totalJobs.
+  return `a-${runId}-${pageId}-${strategy}`;
 }
 
 /**
@@ -34,10 +38,12 @@ export function auditJobId(runId: string, pageId: string, strategy: PsiStrategy)
  * same instant enqueue the same job rather than finalizing twice.
  */
 export function finalizeJobId(runId: string): string {
-  return `f:${runId}`;
+  return `f-${runId}`;
 }
 
 /** One id per site per scheduled tick, so a double-fired cron plans once. */
 export function planSweepJobId(siteId: string, at: Date): string {
-  return `p:${siteId}:${at.toISOString().slice(0, 16)}`;
+  // Colons are illegal in a BullMQ job id, so the ISO timestamp is stripped of
+  // them too rather than only the separators.
+  return `p-${siteId}-${at.toISOString().slice(0, 16).replace(/[:T-]/g, '')}`;
 }

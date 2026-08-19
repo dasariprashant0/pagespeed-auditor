@@ -1,12 +1,24 @@
+/**
+ * Error types shared by the framework-free zone.
+ *
+ * NOTE: no TypeScript parameter properties (`constructor(private readonly x)`)
+ * anywhere in this file. Node's native type-stripping is strip-only -- it
+ * removes types without emitting code -- and a parameter property requires
+ * emitting an assignment, so it throws ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX.
+ * Since `node --test` and the bare worker both load this module, fields must be
+ * declared and assigned explicitly.
+ */
+
 /** Base for errors we raise deliberately, as opposed to bugs. */
 export class AppError extends Error {
-  constructor(
-    message: string,
-    readonly code: string,
-    readonly cause?: unknown,
-  ) {
+  readonly code: string;
+  readonly cause?: unknown;
+
+  constructor(message: string, code: string, cause?: unknown) {
     super(message);
     this.name = new.target.name;
+    this.code = code;
+    this.cause = cause;
   }
 }
 
@@ -24,12 +36,11 @@ export class ValidationError extends AppError {
 
 /** Worth another attempt: 429, 5xx, network, malformed body. */
 export class RetryableError extends AppError {
-  constructor(
-    message: string,
-    readonly retryAfterMs?: number,
-    cause?: unknown,
-  ) {
+  readonly retryAfterMs?: number;
+
+  constructor(message: string, retryAfterMs?: number, cause?: unknown) {
     super(message, 'retryable', cause);
+    this.retryAfterMs = retryAfterMs;
   }
 }
 

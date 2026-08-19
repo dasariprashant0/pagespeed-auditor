@@ -9,9 +9,18 @@ import { CWVGrid } from '@/components/report/CWVGrid';
 import { FieldDataPanel } from '@/components/report/FieldDataPanel';
 import { AuditSection } from '@/components/report/AuditSection';
 import { EmptyState } from '@/components/nav/EmptyState';
+import { ScoreHistory } from '@/components/report/ScoreHistory';
+import { RunAuditButton } from '@/components/runs/RunAuditButton';
 import type { PsiStrategy } from '@/lib/services/types';
 
 export const dynamic = 'force-dynamic';
+
+const SCORE_KEYS = [
+  { key: 'performance', label: 'Performance' },
+  { key: 'accessibility', label: 'Accessibility' },
+  { key: 'bestPractices', label: 'Best Practices' },
+  { key: 'seo', label: 'SEO' },
+] as const;
 
 export default async function PageReport({
   params,
@@ -62,6 +71,8 @@ export default async function PageReport({
         </>
       }
       actions={
+        <div className="flex items-center gap-2">
+        <RunAuditButton kind="page" target={pageId} label="Re-run this page" />
         <div role="tablist" aria-label="Report strategy" className="flex rounded-[5px] border border-[var(--border)] p-0.5">
           {(['mobile', 'desktop'] as const).map((s) => (
             <Link
@@ -77,6 +88,7 @@ export default async function PageReport({
               {!report.availability[s] && <span className="ml-1 text-[10px]">—</span>}
             </Link>
           ))}
+        </div>
         </div>
       }
     >
@@ -107,7 +119,7 @@ export default async function PageReport({
         />
       ) : (
         <>
-          <section aria-label="Scores" className="mb-6 flex flex-wrap gap-6 rounded-[8px] border border-[var(--border)] bg-[var(--surface)] px-5 py-4">
+          <section aria-label="Scores" className="mb-6 flex flex-wrap items-start gap-5 rounded-[8px] border border-[var(--border)] bg-[var(--surface)] px-4 py-4 sm:gap-6 sm:px-5">
             <ScoreGauge score={r.scores.performance} label="Performance" size="lg"
               delta={delta(r.scores.performance, r.previousScores?.performance)} />
             <ScoreGauge score={r.scores.accessibility} label="Accessibility" size="lg"
@@ -116,7 +128,7 @@ export default async function PageReport({
               delta={delta(r.scores.bestPractices, r.previousScores?.bestPractices)} />
             <ScoreGauge score={r.scores.seo} label="SEO" size="lg"
               delta={delta(r.scores.seo, r.previousScores?.seo)} />
-            <div className="ml-auto self-end text-right text-[11px] text-[var(--muted)]">
+            <div className="w-full text-[11px] text-[var(--muted)] sm:ml-auto sm:w-auto sm:self-end sm:text-right">
               {new Date(r.fetchedAt).toLocaleString()}
               {r.lighthouseVersion && <div>Lighthouse {r.lighthouseVersion}</div>}
             </div>
@@ -135,6 +147,20 @@ export default async function PageReport({
               Lab metrics
             </h2>
             <CWVGrid lab={r.lab} />
+          </section>
+
+          <section className="mb-6">
+            <h2 className="mb-2 text-[11px] font-medium uppercase tracking-wide text-[var(--muted)]">
+              History
+            </h2>
+            <div className="grid gap-4 rounded-[8px] border border-[var(--border)] bg-[var(--surface)] p-4 sm:grid-cols-2">
+              {SCORE_KEYS.map(({ key, label }) => (
+                <div key={key}>
+                  <div className="mb-1 text-[11px] text-[var(--muted)]">{label}</div>
+                  <ScoreHistory history={report.history[key]} label={label} />
+                </div>
+              ))}
+            </div>
           </section>
 
           <div className="space-y-2">

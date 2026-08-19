@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { logoutAction } from '@/app/actions/auth';
+import { ActiveRunBar } from '@/components/runs/ActiveRunBar';
 
 export interface RailGroup {
   slug: string;
@@ -71,22 +72,48 @@ export function AppShell({
         </nav>
 
         <div className="min-w-0 flex-1">
-          <header className="sticky top-0 z-10 flex h-12 items-center justify-between gap-4 border-b border-[var(--border)] bg-[var(--background)]/95 px-4 backdrop-blur">
-            <div className="min-w-0 truncate text-[12px] text-[var(--muted)]">{breadcrumb}</div>
-            <div className="flex shrink-0 items-center gap-3">
-              {actions}
-              <Link href="/settings" className="text-[12px] text-[var(--muted)] hover:text-[var(--foreground)]">
-                Settings
-              </Link>
-              <form action={logoutAction}>
-                <button type="submit" className="text-[12px] text-[var(--muted)] hover:text-[var(--foreground)]">
-                  Sign out
-                </button>
-              </form>
+          <header className="sticky top-0 z-10 border-b border-[var(--border)] bg-[var(--background)]/95 backdrop-blur">
+            <div className="flex min-h-12 flex-wrap items-center justify-between gap-x-4 gap-y-1 px-3 py-2 sm:px-4">
+              <div className="min-w-0 flex-1 truncate text-[12px] text-[var(--muted)]">{breadcrumb}</div>
+              <div className="flex shrink-0 items-center gap-3">
+                {actions}
+                <Link href="/settings" className="text-[12px] text-[var(--muted)] hover:text-[var(--foreground)]">
+                  Settings
+                </Link>
+                <form action={logoutAction}>
+                  <button type="submit" className="text-[12px] text-[var(--muted)] hover:text-[var(--foreground)]">
+                    Sign out
+                  </button>
+                </form>
+              </div>
             </div>
           </header>
 
-          <main id="main" className="px-4 py-5">
+          <ActiveRunBar />
+
+          {/* Below lg the rail is hidden, so the group list moves here rather
+              than becoming unreachable on a phone. */}
+          <details className="border-b border-[var(--border)] bg-[var(--surface-subtle)] lg:hidden">
+            <summary className="cursor-pointer list-none px-3 py-2 text-[12px] text-[var(--muted)]">
+              Groups ({groups.length})
+            </summary>
+            <ul className="grid grid-cols-2 gap-1 px-3 pb-3 sm:grid-cols-3">
+              {groups.map((g) => (
+                <li key={g.slug}>
+                  <Link
+                    href={`/g/${g.slug}`}
+                    aria-current={g.slug === activeSlug ? 'page' : undefined}
+                    className="flex items-center justify-between gap-2 rounded-[5px] px-2 py-1.5 text-[12px] hover:bg-[var(--surface-sunken)]"
+                  >
+                    <span className="truncate">{g.name}</span>
+                    <span className="tnum shrink-0 text-[11px] text-[var(--muted)]">{g.pageCount}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </details>
+
+          <main id="main" className="px-3 py-4 sm:px-4 sm:py-5">
             {children}
           </main>
         </div>
