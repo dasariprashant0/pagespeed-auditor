@@ -185,6 +185,10 @@ export interface RunProgressDTO {
   triggeredBy: 'schedule' | 'manual';
   status: RunStatus;
   scopeLabel: string | null;
+  /** Where to go to watch this run — the group or page being audited. */
+  scopeHref: string | null;
+  /** Human phrasing of the same thing: "Compare group", "one page". */
+  scopeName: string | null;
   totalJobs: number;
   completedJobs: number;
   failedJobs: number;

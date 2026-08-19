@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { RunProgressDTO } from '@/lib/services/types';
 
@@ -79,8 +80,16 @@ function RunRow({ run: r }: { run: RunProgressDTO }) {
   }${eta ? `, ${eta}` : ''}`;
 
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2">
-      <span className="text-[11px] font-medium">{r.scopeLabel ?? r.type}</span>
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 sm:px-4">
+      {/* Linked, because "something is running" without "where" is the moment
+          you actually want to go and look at it. */}
+      {r.scopeHref ? (
+        <Link href={r.scopeHref} className="shrink-0 text-[11px] font-medium underline-offset-2 hover:underline">
+          {r.scopeName ?? r.scopeLabel ?? r.type} ↗
+        </Link>
+      ) : (
+        <span className="shrink-0 text-[11px] font-medium">{r.scopeLabel ?? r.type}</span>
+      )}
 
       <div
         role="progressbar"

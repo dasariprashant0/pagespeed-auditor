@@ -146,6 +146,7 @@ export async function getRunProgress(
     triggeredBy: run.triggeredBy as RunProgressDTO['triggeredBy'],
     status: run.status as RunStatus,
     scopeLabel: run.scopeLabel,
+    ...scopeLink(run.scopeLabel, run.type),
     totalJobs: run.totalJobs,
     completedJobs: run.completedJobs,
     failedJobs: run.failedJobs,
@@ -429,4 +430,28 @@ export async function reconcileStaleRuns(
 
   if (open.length > 0) logger.info(summary, 'stale run reconciliation complete');
   return summary;
+}
+
+
+/**
+ * Turns a stored scope label back into somewhere to navigate.
+ *
+ * Without this, a progress bar on an unrelated screen tells you something is
+ * running but not where -- which is exactly the moment you want to go look.
+ */
+export function scopeLink(
+  scopeLabel: string | null,
+  type: string,
+): { scopeHref: string | null; scopeName: string | null } {
+  if (type === 'full_sweep') return { scopeHref: '/', scopeName: 'Full site sweep' };
+  if (!scopeLabel) return { scopeHref: null, scopeName: null };
+
+  const scope = parseScopeLabel(scopeLabel);
+  if (scope.kind === 'group' && scope.ref) {
+    return { scopeHref: `/g/${scope.ref}`, scopeName: `${scope.ref} group` };
+  }
+  if (scope.kind === 'page' && scope.ref) {
+    return { scopeHref: `/p/${scope.ref}`, scopeName: 'one page' };
+  }
+  return { scopeHref: '/', scopeName: 'whole site' };
 }

@@ -23,7 +23,8 @@
     "verify:ingest": "tsx scripts/verify-ingest-invariants.ts",
     "verify:audit": "tsx scripts/verify-audit-path.ts",
     "set-password": "tsx scripts/set-password.ts",
-    "audit:group": "tsx scripts/audit-group.ts"
+    "audit:group": "tsx scripts/audit-group.ts",
+    "audit:queue": "tsx scripts/queue-audit.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.9.1",

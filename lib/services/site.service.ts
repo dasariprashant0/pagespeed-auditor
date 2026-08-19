@@ -2,6 +2,7 @@ import { prisma } from '../db.ts';
 import { NotFoundError } from '../errors.ts';
 import type { PsiStrategy } from '../psi/types.ts';
 import { computeAggregate, latestResultIdFor } from './results.service.ts';
+import { scopeLink } from './run.service.ts';
 import type { RunProgressDTO, RunStatus, SiteSummaryDTO } from './types.ts';
 
 /**
@@ -125,6 +126,7 @@ export function toRunProgress(
     triggeredBy: run.triggeredBy as RunProgressDTO['triggeredBy'],
     status,
     scopeLabel: run.scopeLabel,
+    ...scopeLink(run.scopeLabel, run.type),
     totalJobs: run.totalJobs,
     completedJobs: run.completedJobs,
     failedJobs: run.failedJobs,
@@ -225,3 +227,5 @@ export async function getSiteSummary(
     siteAverage: computeAggregate(results),
   };
 }
+
+
