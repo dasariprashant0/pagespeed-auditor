@@ -200,8 +200,25 @@ export async function auditPage(
   // line during a sweep.
   await deps.limiter.acquire();
 
+  // The key belongs to the SITE, not the deployment: each organisation uses
+  // its own Google quota rather than sharing one and starving each other.
+  // Falling back to the environment keeps single-tenant installs working.
+  const { psiKeyForSite } = await import('./tenant.service.ts');
+  const page = await deps.prisma.page.findUnique({
+    where: { id: args.pageId },
+    select: { siteId: true },
+  });
+  const apiKey = (page ? await psiKeyForSite(page.siteId) : null) ?? env.PSI_API_KEY;
+
+  if (!apiKey) {
+    // Naming the cause here saves a very confusing 403 on every page of a run.
+    throw new PermanentError(
+      'No Google API key is configured for this site. An admin can add one under Settings → Site.',
+    );
+  }
+
   const res: PsiFetchResult = await runPagespeed(args.url, args.strategy, {
-    apiKey: env.PSI_API_KEY,
+    apiKey,
     timeoutMs: env.PSI_TIMEOUT_MS,
     fetchImpl: deps.fetchImpl,
   });

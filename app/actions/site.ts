@@ -97,3 +97,36 @@ export async function updatePsiKeyAction(_prev: unknown, form: FormData): Promis
     return fail(e);
   }
 }
+
+/**
+ * Re-reads the sitemap into Page rows.
+ *
+ * Idempotent: existing pages keep their history and their manual group, and a
+ * URL that has left the sitemap is deactivated rather than deleted -- the past
+ * results are the point of the tool.
+ */
+export async function ingestSitemapAction(siteId: string): Promise<SiteResult> {
+  try {
+    const ctx = await requireCapability('site:manage');
+    await requireSiteAccess(ctx.organizationId, siteId);
+
+    const { ingestSitemap } = await import('@/lib/services/ingest.service');
+    const s = await ingestSitemap(prisma, siteId);
+
+    const parts = [
+      s.created > 0 ? `${s.created} new` : null,
+      s.updated > 0 ? `${s.updated} unchanged` : null,
+      s.reactivated > 0 ? `${s.reactivated} back` : null,
+      s.deactivated > 0 ? `${s.deactivated} no longer listed` : null,
+      s.groupsCreated > 0 ? `${s.groupsCreated} new sections` : null,
+    ].filter(Boolean);
+
+    const rejected = Object.entries(s.rejected).filter(([, n]) => n > 0);
+    if (rejected.length) parts.push(`skipped ${rejected.map(([k, n]) => `${n} ${k}`).join(', ')}`);
+
+    revalidatePath('/', 'layout');
+    return { ok: true, message: `${s.discovered} pages found — ${parts.join(', ') || 'nothing changed'}.` };
+  } catch (e) {
+    return fail(e);
+  }
+}

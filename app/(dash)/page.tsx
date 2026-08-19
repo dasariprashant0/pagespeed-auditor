@@ -1,6 +1,9 @@
 import Link from 'next/link';
 import { requireSession } from '@/lib/http/auth-guard';
 import { defaultSite } from '@/lib/services/tenant.service';
+import { onboardingState } from '@/lib/services/onboarding.service';
+import { SetupChecklist } from '@/components/onboarding/SetupChecklist';
+import { can } from '@/lib/auth/roles';
 import { listGroupsWithAggregates, splitSmallGroups } from '@/lib/services/results.service';
 import { getTopIssues } from '@/lib/services/issues.service';
 import { getSiteSummary } from '@/lib/services/site.service';
@@ -34,13 +37,23 @@ export default async function HomePage({
   // whichever site happens to be first in the table -- another tenant's.
   const ctx = await requireSession();
   const site = await defaultSite(ctx.organizationId);
+  const setup = await onboardingState(ctx.organizationId);
+  const canManage = can(ctx.role, 'site:manage');
+
   if (!site) {
     return (
-      <AppShell siteName={ctx.organizationName} groups={[]}>
-        <EmptyState
-          title="No site configured yet"
-          body="Set SITE_SITEMAP_URL and SITE_BASE_URL in .env, then run `npm run db:seed` followed by `npm run ingest`."
-        />
+      <AppShell siteName={ctx.organizationName} groups={[]} breadcrumb="Getting started">
+        <header className="mb-6">
+          <div className="eyebrow">Welcome</div>
+          <h1 className="title-lg mt-1">Let&rsquo;s measure your site</h1>
+          <p className="mt-1 max-w-lg text-[12px] text-[var(--muted)]">
+            Point this at a sitemap and it will check every page on it — on phone and desktop —
+            and keep the results so you can see what improves and what slips.
+          </p>
+        </header>
+        <div className="max-w-2xl">
+          <SetupChecklist state={setup} canManage={canManage} />
+        </div>
       </AppShell>
     );
   }
@@ -111,10 +124,12 @@ export default async function HomePage({
         )}
       </header>
 
+      <SetupChecklist state={setup} canManage={canManage} />
+
       {summary.auditedCount === 0 ? (
         <EmptyState
-          title={`${summary.activePageCount} pages ingested, none audited yet`}
-          body="Full sweeps run on a schedule rather than on demand — 1,494 PSI calls take roughly half an hour. Audit a single group to see results now, or wait for the first scheduled sweep."
+          title={`${summary.activePageCount} pages found, none measured yet`}
+          body="Whole-site checks run on a schedule, because measuring every page takes about half an hour. To see real numbers now, open a section and measure that instead."
         />
       ) : (
         <>

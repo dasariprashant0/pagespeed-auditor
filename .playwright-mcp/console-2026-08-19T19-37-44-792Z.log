@@ -1,0 +1,19 @@
+[     226ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297
+[     250ms] [LOG] [HMR] connected @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297
+[   33240ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297
+[   33684ms] [LOG] [Fast Refresh] done in 545ms @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297
+[   33931ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297
+[   34426ms] [LOG] [Fast Refresh] done in 598ms @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297
+[   68349ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297
+[   68685ms] [LOG] [Fast Refresh] done in 436ms @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297
+[  102037ms] [VERBOSE] [DOM] Input elements should have autocomplete attributes (suggested: "new-password"): (More info: https://goo.gl/9p2vKq) %o @ http://localhost:3000/settings/site:0
+[  149130ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297
+[  149193ms] [LOG] [Fast Refresh] done in 164ms @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297
+[  181335ms] [ERROR] WebSocket connection to 'ws://localhost:3000/_next/webpack-hmr?id=fT1uB9SS0pczitdRqYQ3v' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/_next/static/chunks/883b8_next_dist_client_93c1f073._.js:10876
+[  182339ms] [ERROR] WebSocket connection to 'ws://localhost:3000/_next/webpack-hmr?id=fT1uB9SS0pczitdRqYQ3v' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/_next/static/chunks/883b8_next_dist_client_93c1f073._.js:10876
+[  183896ms] [LOG] [HMR] connected @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297
+[  184994ms] [VERBOSE] [DOM] Input elements should have autocomplete attributes (suggested: "new-password"): (More info: https://goo.gl/9p2vKq) @ http://localhost:3000/settings/site:0
+[  185043ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297
+[  185078ms] [LOG] [HMR] connected @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297
+[  185307ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297
+[  185404ms] [LOG] [Fast Refresh] done in 199ms @ http://localhost:3000/_next/static/chunks/883b8_next_dist_9ee7ee9b._.js:2297

@@ -1,0 +1,421 @@
+- generic [active] [ref=f6e1]:
+  - generic [ref=f6e2]:
+    - link "Skip to content" [ref=f6e3] [cursor=pointer]:
+      - /url: "#main"
+    - generic [ref=f6e4]:
+      - navigation "Groups" [ref=f6e5]:
+        - link "PageSpeed Zuddl" [ref=f6e6] [cursor=pointer]:
+          - /url: /
+          - generic [ref=f6e7]: PageSpeed
+          - generic [ref=f6e8]: Zuddl
+        - generic [ref=f6e9]: Sections
+        - list [ref=f6e10]:
+          - listitem [ref=f6e11]:
+            - link "About 1" [ref=f6e12] [cursor=pointer]:
+              - /url: /g/about
+              - generic [ref=f6e13]: About
+              - generic [ref=f6e14]: "1"
+          - listitem [ref=f6e15]:
+            - link "Blog 324" [ref=f6e16] [cursor=pointer]:
+              - /url: /g/blog
+              - generic [ref=f6e17]: Blog
+              - generic [ref=f6e18]: "324"
+          - listitem [ref=f6e19]:
+            - link "Checklists 15" [ref=f6e20] [cursor=pointer]:
+              - /url: /g/checklists
+              - generic [ref=f6e21]: Checklists
+              - generic [ref=f6e22]: "15"
+          - listitem [ref=f6e23]:
+            - link "Ebook 5" [ref=f6e24] [cursor=pointer]:
+              - /url: /g/ebook
+              - generic [ref=f6e25]: Ebook
+              - generic [ref=f6e26]: "5"
+          - listitem [ref=f6e27]:
+            - link "Contact 1" [ref=f6e28] [cursor=pointer]:
+              - /url: /g/contact
+              - generic [ref=f6e29]: Contact
+              - generic [ref=f6e30]: "1"
+          - listitem [ref=f6e31]:
+            - link "Contact Thank You 1" [ref=f6e32] [cursor=pointer]:
+              - /url: /g/contact-thank-you
+              - generic [ref=f6e33]: Contact Thank You
+              - generic [ref=f6e34]: "1"
+          - listitem [ref=f6e35]:
+            - link "Cpra 1" [ref=f6e36] [cursor=pointer]:
+              - /url: /g/cpra
+              - generic [ref=f6e37]: Cpra
+              - generic [ref=f6e38]: "1"
+          - listitem [ref=f6e39]:
+            - link "Culture 1" [ref=f6e40] [cursor=pointer]:
+              - /url: /g/culture
+              - generic [ref=f6e41]: Culture
+              - generic [ref=f6e42]: "1"
+          - listitem [ref=f6e43]:
+            - link "Customer Stories 25" [ref=f6e44] [cursor=pointer]:
+              - /url: /g/customer-stories
+              - generic [ref=f6e45]: Customer Stories
+              - generic [ref=f6e46]: "25"
+          - listitem [ref=f6e47]:
+            - link "Dpa 1" [ref=f6e48] [cursor=pointer]:
+              - /url: /g/dpa
+              - generic [ref=f6e49]: Dpa
+              - generic [ref=f6e50]: "1"
+          - listitem [ref=f6e51]:
+            - link "Ebooks 26" [ref=f6e52] [cursor=pointer]:
+              - /url: /g/ebooks
+              - generic [ref=f6e53]: Ebooks
+              - generic [ref=f6e54]: "26"
+          - listitem [ref=f6e55]:
+            - link "Event Integrations 1" [ref=f6e56] [cursor=pointer]:
+              - /url: /g/event-integrations
+              - generic [ref=f6e57]: Event Integrations
+              - generic [ref=f6e58]: "1"
+          - listitem [ref=f6e59]:
+            - link "Event Trends 2023 1" [ref=f6e60] [cursor=pointer]:
+              - /url: /g/event-trends-2023
+              - generic [ref=f6e61]: Event Trends 2023
+              - generic [ref=f6e62]: "1"
+          - listitem [ref=f6e63]:
+            - link "Events About Events 1" [ref=f6e64] [cursor=pointer]:
+              - /url: /g/events-about-events
+              - generic [ref=f6e65]: Events About Events
+              - generic [ref=f6e66]: "1"
+          - listitem [ref=f6e67]:
+            - link "Partner Thank You 1" [ref=f6e68] [cursor=pointer]:
+              - /url: /g/partner-thank-you
+              - generic [ref=f6e69]: Partner Thank You
+              - generic [ref=f6e70]: "1"
+          - listitem [ref=f6e71]:
+            - link "Partners 1" [ref=f6e72] [cursor=pointer]:
+              - /url: /g/partners
+              - generic [ref=f6e73]: Partners
+              - generic [ref=f6e74]: "1"
+          - listitem [ref=f6e75]:
+            - link "Podcast 21" [ref=f6e76] [cursor=pointer]:
+              - /url: /g/podcast
+              - generic [ref=f6e77]: Podcast
+              - generic [ref=f6e78]: "21"
+          - listitem [ref=f6e79]:
+            - link "Pricing Thank You 1" [ref=f6e80] [cursor=pointer]:
+              - /url: /g/pricing-thank-you
+              - generic [ref=f6e81]: Pricing Thank You
+              - generic [ref=f6e82]: "1"
+          - listitem [ref=f6e83]:
+            - link "Privacy Policy 1" [ref=f6e84] [cursor=pointer]:
+              - /url: /g/privacy-policy
+              - generic [ref=f6e85]: Privacy Policy
+              - generic [ref=f6e86]: "1"
+          - listitem [ref=f6e87]:
+            - link "Request A Demo 1" [ref=f6e88] [cursor=pointer]:
+              - /url: /g/request-a-demo
+              - generic [ref=f6e89]: Request A Demo
+              - generic [ref=f6e90]: "1"
+          - listitem [ref=f6e91]:
+            - link "Search 1" [ref=f6e92] [cursor=pointer]:
+              - /url: /g/search
+              - generic [ref=f6e93]: Search
+              - generic [ref=f6e94]: "1"
+          - listitem [ref=f6e95]:
+            - link "Security 1" [ref=f6e96] [cursor=pointer]:
+              - /url: /g/security
+              - generic [ref=f6e97]: Security
+              - generic [ref=f6e98]: "1"
+          - listitem [ref=f6e99]:
+            - link "Terms Of Service 1" [ref=f6e100] [cursor=pointer]:
+              - /url: /g/terms-of-service
+              - generic [ref=f6e101]: Terms Of Service
+              - generic [ref=f6e102]: "1"
+          - listitem [ref=f6e103]:
+            - link "Terms Of Use 1" [ref=f6e104] [cursor=pointer]:
+              - /url: /g/terms-of-use
+              - generic [ref=f6e105]: Terms Of Use
+              - generic [ref=f6e106]: "1"
+          - listitem [ref=f6e107]:
+            - link "Thankyou 1" [ref=f6e108] [cursor=pointer]:
+              - /url: /g/thankyou
+              - generic [ref=f6e109]: Thankyou
+              - generic [ref=f6e110]: "1"
+          - listitem [ref=f6e111]:
+            - link "Webinar Pricing Thank You 1" [ref=f6e112] [cursor=pointer]:
+              - /url: /g/webinar-pricing-thank-you
+              - generic [ref=f6e113]: Webinar Pricing Thank You
+              - generic [ref=f6e114]: "1"
+          - listitem [ref=f6e115]:
+            - link "Why Zuddl 1" [ref=f6e116] [cursor=pointer]:
+              - /url: /g/why-zuddl
+              - generic [ref=f6e117]: Why Zuddl
+              - generic [ref=f6e118]: "1"
+          - listitem [ref=f6e119]:
+            - link "Zuddl For Startups 1" [ref=f6e120] [cursor=pointer]:
+              - /url: /g/zuddl-for-startups
+              - generic [ref=f6e121]: Zuddl For Startups
+              - generic [ref=f6e122]: "1"
+          - listitem [ref=f6e123]:
+            - link "Platform 25" [ref=f6e124] [cursor=pointer]:
+              - /url: /g/platform
+              - generic [ref=f6e125]: Platform
+              - generic [ref=f6e126]: "25"
+          - listitem [ref=f6e127]:
+            - link "Event Type 5" [ref=f6e128] [cursor=pointer]:
+              - /url: /g/event-type
+              - generic [ref=f6e129]: Event Type
+              - generic [ref=f6e130]: "5"
+          - listitem [ref=f6e131]:
+            - link "Experiences 3" [ref=f6e132] [cursor=pointer]:
+              - /url: /g/experiences
+              - generic [ref=f6e133]: Experiences
+              - generic [ref=f6e134]: "3"
+          - listitem [ref=f6e135]:
+            - link "B2b Event Trends 2024 1" [ref=f6e136] [cursor=pointer]:
+              - /url: /g/b2b-event-trends-2024
+              - generic [ref=f6e137]: B2b Event Trends 2024
+              - generic [ref=f6e138]: "1"
+          - listitem [ref=f6e139]:
+            - link "Terms 1" [ref=f6e140] [cursor=pointer]:
+              - /url: /g/terms
+              - generic [ref=f6e141]: Terms
+              - generic [ref=f6e142]: "1"
+          - listitem [ref=f6e143]:
+            - link "Compare 4" [ref=f6e144] [cursor=pointer]:
+              - /url: /g/compare
+              - generic [ref=f6e145]: Compare
+              - generic [ref=f6e146]: "4"
+          - listitem [ref=f6e147]:
+            - link "Conference Couch Sessions 10" [ref=f6e148] [cursor=pointer]:
+              - /url: /g/conference-couch-sessions
+              - generic [ref=f6e149]: Conference Couch Sessions
+              - generic [ref=f6e150]: "10"
+          - listitem [ref=f6e151]:
+            - link "Secrets To Your Event Success 1" [ref=f6e152] [cursor=pointer]:
+              - /url: /g/secrets-to-your-event-success
+              - generic [ref=f6e153]: Secrets To Your Event Success
+              - generic [ref=f6e154]: "1"
+          - listitem [ref=f6e155]:
+            - link "The State Of Event Marketing 2024 1" [ref=f6e156] [cursor=pointer]:
+              - /url: /g/the-state-of-event-marketing-2024
+              - generic [ref=f6e157]: The State Of Event Marketing 2024
+              - generic [ref=f6e158]: "1"
+          - listitem [ref=f6e159]:
+            - link "Annual User Conference Planning 1" [ref=f6e160] [cursor=pointer]:
+              - /url: /g/annual-user-conference-planning
+              - generic [ref=f6e161]: Annual User Conference Planning
+              - generic [ref=f6e162]: "1"
+          - listitem [ref=f6e163]:
+            - link "Zuddl Events And Webinars 36" [ref=f6e164] [cursor=pointer]:
+              - /url: /g/zuddl-events-and-webinars
+              - generic [ref=f6e165]: Zuddl Events And Webinars
+              - generic [ref=f6e166]: "36"
+          - listitem [ref=f6e167]:
+            - link "Home 1" [ref=f6e168] [cursor=pointer]:
+              - /url: /g/home
+              - generic [ref=f6e169]: Home
+              - generic [ref=f6e170]: "1"
+          - listitem [ref=f6e171]:
+            - link "Boldpush Offer 1" [ref=f6e172] [cursor=pointer]:
+              - /url: /g/boldpush-offer
+              - generic [ref=f6e173]: Boldpush Offer
+              - generic [ref=f6e174]: "1"
+          - listitem [ref=f6e175]:
+            - link "Top Budget Considerations For Your User Conference Exitfive Newsletter 1" [ref=f6e176] [cursor=pointer]:
+              - /url: /g/top-budget-considerations-for-your-user-conference-exitfive-newsletter
+              - generic [ref=f6e177]: Top Budget Considerations For Your User Conference Exitfive Newsletter
+              - generic [ref=f6e178]: "1"
+          - listitem [ref=f6e179]:
+            - link "Step Up Your Events With Zuddl 1" [ref=f6e180] [cursor=pointer]:
+              - /url: /g/step-up-your-events-with-zuddl
+              - generic [ref=f6e181]: Step Up Your Events With Zuddl
+              - generic [ref=f6e182]: "1"
+          - listitem [ref=f6e183]:
+            - link "Post Event Roi Metrics Checklist Exit Five 1" [ref=f6e184] [cursor=pointer]:
+              - /url: /g/post-event-roi-metrics-checklist-exit-five
+              - generic [ref=f6e185]: Post Event Roi Metrics Checklist Exit Five
+              - generic [ref=f6e186]: "1"
+          - listitem [ref=f6e187]:
+            - link "Huddl With Zuddl 10" [ref=f6e188] [cursor=pointer]:
+              - /url: /g/huddl-with-zuddl
+              - generic [ref=f6e189]: Huddl With Zuddl
+              - generic [ref=f6e190]: "10"
+          - listitem [ref=f6e191]:
+            - link "Zuddl Hubspot Integration Post Event Follow Ups Exit Five 1" [ref=f6e192] [cursor=pointer]:
+              - /url: /g/zuddl-hubspot-integration-post-event-follow-ups-exit-five
+              - generic [ref=f6e193]: Zuddl Hubspot Integration Post Event Follow Ups Exit Five
+              - generic [ref=f6e194]: "1"
+          - listitem [ref=f6e195]:
+            - link "Product Walkthroughs 2" [ref=f6e196] [cursor=pointer]:
+              - /url: /g/product-walkthroughs
+              - generic [ref=f6e197]: Product Walkthroughs
+              - generic [ref=f6e198]: "2"
+          - listitem [ref=f6e199]:
+            - link "Exit Five 1" [ref=f6e200] [cursor=pointer]:
+              - /url: /g/exit-five
+              - generic [ref=f6e201]: Exit Five
+              - generic [ref=f6e202]: "1"
+          - listitem [ref=f6e203]:
+            - link "Cema 1" [ref=f6e204] [cursor=pointer]:
+              - /url: /g/cema
+              - generic [ref=f6e205]: Cema
+              - generic [ref=f6e206]: "1"
+          - listitem [ref=f6e207]:
+            - link "Eventmarketersweek 23" [ref=f6e208] [cursor=pointer]:
+              - /url: /g/eventmarketersweek
+              - generic [ref=f6e209]: Eventmarketersweek
+              - generic [ref=f6e210]: "23"
+          - listitem [ref=f6e211]:
+            - link "Imex 1" [ref=f6e212] [cursor=pointer]:
+              - /url: /g/imex
+              - generic [ref=f6e213]: Imex
+              - generic [ref=f6e214]: "1"
+          - listitem [ref=f6e215]:
+            - link "Faq 28" [ref=f6e216] [cursor=pointer]:
+              - /url: /g/faq
+              - generic [ref=f6e217]: Faq
+              - generic [ref=f6e218]: "28"
+          - listitem [ref=f6e219]:
+            - link "Glossary 13" [ref=f6e220] [cursor=pointer]:
+              - /url: /g/glossary
+              - generic [ref=f6e221]: Glossary
+              - generic [ref=f6e222]: "13"
+          - listitem [ref=f6e223]:
+            - link "Gdpr 1" [ref=f6e224] [cursor=pointer]:
+              - /url: /g/gdpr
+              - generic [ref=f6e225]: Gdpr
+              - generic [ref=f6e226]: "1"
+          - listitem [ref=f6e227]:
+            - link "Ai Event Marketers Game Show 4" [ref=f6e228] [cursor=pointer]:
+              - /url: /g/ai-event-marketers-game-show
+              - generic [ref=f6e229]: Ai Event Marketers Game Show
+              - generic [ref=f6e230]: "4"
+          - listitem [ref=f6e231]:
+            - link "Pricing 1" [ref=f6e232] [cursor=pointer]:
+              - /url: /g/pricing
+              - generic [ref=f6e233]: Pricing
+              - generic [ref=f6e234]: "1"
+          - listitem [ref=f6e235]:
+            - link "Lp 5" [ref=f6e236] [cursor=pointer]:
+              - /url: /g/lp
+              - generic [ref=f6e237]: Lp
+              - generic [ref=f6e238]: "5"
+          - listitem [ref=f6e239]:
+            - link "Legal 1" [ref=f6e240] [cursor=pointer]:
+              - /url: /g/legal
+              - generic [ref=f6e241]: Legal
+              - generic [ref=f6e242]: "1"
+          - listitem [ref=f6e243]:
+            - link "Agentic Events Platform 1" [ref=f6e244] [cursor=pointer]:
+              - /url: /g/agentic-events-platform
+              - generic [ref=f6e245]: Agentic Events Platform
+              - generic [ref=f6e246]: "1"
+          - listitem [ref=f6e247]:
+            - link "Eventmarketersweek 2026 1" [ref=f6e248] [cursor=pointer]:
+              - /url: /g/eventmarketersweek-2026
+              - generic [ref=f6e249]: Eventmarketersweek 2026
+              - generic [ref=f6e250]: "1"
+          - listitem [ref=f6e251]:
+            - link "Product Updates 1" [ref=f6e252] [cursor=pointer]:
+              - /url: /g/product-updates
+              - generic [ref=f6e253]: Product Updates
+              - generic [ref=f6e254]: "1"
+          - listitem [ref=f6e255]:
+            - link "Blog Topic 9" [ref=f6e256] [cursor=pointer]:
+              - /url: /g/blog-topic
+              - generic [ref=f6e257]: Blog Topic
+              - generic [ref=f6e258]: "9"
+          - listitem [ref=f6e259]:
+            - link "Author 27" [ref=f6e260] [cursor=pointer]:
+              - /url: /g/author
+              - generic [ref=f6e261]: Author
+              - generic [ref=f6e262]: "27"
+          - listitem [ref=f6e263]:
+            - link "E Book 4" [ref=f6e264] [cursor=pointer]:
+              - /url: /g/e-book
+              - generic [ref=f6e265]: E Book
+              - generic [ref=f6e266]: "4"
+          - listitem [ref=f6e267]:
+            - link "Newsroom 58" [ref=f6e268] [cursor=pointer]:
+              - /url: /g/newsroom
+              - generic [ref=f6e269]: Newsroom
+              - generic [ref=f6e270]: "58"
+          - listitem [ref=f6e271]:
+            - link "Event Solution 4" [ref=f6e272] [cursor=pointer]:
+              - /url: /g/event-solution
+              - generic [ref=f6e273]: Event Solution
+              - generic [ref=f6e274]: "4"
+          - listitem [ref=f6e275]:
+            - link "Event Series 7" [ref=f6e276] [cursor=pointer]:
+              - /url: /g/event-series
+              - generic [ref=f6e277]: Event Series
+              - generic [ref=f6e278]: "7"
+          - listitem [ref=f6e279]:
+            - link "Built On Zuddl 12" [ref=f6e280] [cursor=pointer]:
+              - /url: /g/built-on-zuddl
+              - generic [ref=f6e281]: Built On Zuddl
+              - generic [ref=f6e282]: "12"
+      - generic [ref=f6e283]:
+        - banner [ref=f6e284]:
+          - generic [ref=f6e285]:
+            - generic [ref=f6e286]: Settings / Site
+            - generic [ref=f6e287]:
+              - link "Settings" [ref=f6e288] [cursor=pointer]:
+                - /url: /settings/profile
+              - button "Sign out" [ref=f6e290]
+        - main [ref=f6e291]:
+          - heading "Settings" [level=1] [ref=f6e292]
+          - navigation "Settings sections" [ref=f6e293]:
+            - link "Profile" [ref=f6e294] [cursor=pointer]:
+              - /url: /settings/profile
+            - link "Teammates" [ref=f6e295] [cursor=pointer]:
+              - /url: /settings/team
+            - link "Site" [ref=f6e296] [cursor=pointer]:
+              - /url: /settings/site
+            - link "Automation" [ref=f6e297] [cursor=pointer]:
+              - /url: /settings
+          - generic [ref=f6e298]:
+            - generic [ref=f6e299]:
+              - heading "Site" [level=2] [ref=f6e300]
+              - generic [ref=f6e301]:
+                - generic [ref=f6e302]:
+                  - generic [ref=f6e303]: Name
+                  - textbox "Name" [ref=f6e304]: Zuddl marketing site
+                - generic [ref=f6e305]:
+                  - generic [ref=f6e306]: Website address
+                  - textbox "Website address" [ref=f6e307]: https://www.zuddl.com
+                - generic [ref=f6e308]:
+                  - generic [ref=f6e309]: Sitemap address
+                  - textbox "Sitemap address Changing this? Re-ingest afterwards so pages match." [ref=f6e310]: https://www.zuddl.com/sitemap.xml
+                  - generic [ref=f6e311]: Changing this? Re-ingest afterwards so pages match.
+                - button "Save" [ref=f6e313]
+            - generic [ref=f6e314]:
+              - heading "API key" [level=2] [ref=f6e315]
+              - paragraph [ref=f6e316]: Google measures the pages. The key is stored for this organisation only and is never shown again once saved.
+              - generic [ref=f6e317]:
+                - generic [ref=f6e318]:
+                  - generic [ref=f6e319]: Google PageSpeed API key
+                  - textbox "Google PageSpeed API key Checked against Google when you save, so a wrong key fails here rather than silently on every page of the next run." [ref=f6e320]:
+                    - /placeholder: AIza…
+                    - text: ••••••••••••
+                  - generic [ref=f6e321]: Checked against Google when you save, so a wrong key fails here rather than silently on every page of the next run.
+                - generic [ref=f6e322]:
+                  - button "Save key" [ref=f6e323]
+                  - link "How to get one" [ref=f6e324] [cursor=pointer]:
+                    - /url: https://developers.google.com/speed/docs/insights/v5/get-started
+            - generic [ref=f6e325]:
+              - heading "Pages" [level=2] [ref=f6e326]
+              - paragraph [ref=f6e327]: 747 pages are being tracked. Re-read the sitemap after publishing or removing pages — existing pages keep their history, and anything no longer listed stops being checked without losing its past results.
+              - button "Re-read sitemap" [ref=f6e329]
+            - generic [ref=f6e330]:
+              - heading "History" [level=2] [ref=f6e331]
+              - paragraph [ref=f6e332]: The last 10 checks of every page are kept, together with their reports and advice. Older ones are removed so storage does not grow without limit.
+              - generic [ref=f6e333]:
+                - generic [ref=f6e334]:
+                  - term [ref=f6e335]: Results stored
+                  - definition [ref=f6e336]: "0"
+                - generic [ref=f6e337]:
+                  - term [ref=f6e338]: Checks recorded
+                  - definition [ref=f6e339]: "0"
+                - generic [ref=f6e340]:
+                  - term [ref=f6e341]: Oldest
+                  - definition [ref=f6e342]: —
+                - generic [ref=f6e343]:
+                  - term [ref=f6e344]: Storage used
+                  - definition [ref=f6e345]: 0 B
+  - button "Open Next.js Dev Tools" [ref=f6e351] [cursor=pointer]
