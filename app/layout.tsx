@@ -16,8 +16,8 @@ const dmSans = DM_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Ship Studio",
-  description: "How professionals build with AI. No coding required.",
+  title: "PageSpeed Auditor",
+  description: "Internal PageSpeed Insights auditing for the whole site.",
 };
 
 export default function RootLayout({

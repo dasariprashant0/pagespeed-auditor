@@ -47,8 +47,8 @@ Milestone definitions and their verification steps are in `docs/PLAN.md`
 | M5 | Queue, idempotency, resumability | **done** — audit path verified against the live API |
 | M6 | Services for the dashboard | **done** (from the workflow) |
 | M7 | Auth + routes | **done** (from the workflow) |
-| M8 | Dashboard | **next** |
-| M9 | Real 50-page canary | not started |
+| M8 | Dashboard | **done** — all four routes rendering real data |
+| M9 | Real 50-page canary | **next** |
 | M10 | SITE.md | not started |
 
 **M3 is the gate.** It validates the ~0.75 req/s sustained-throughput assumption
@@ -581,3 +581,60 @@ and a wrong password is rejected with a generic message.
 
 Note for M8: after login you currently land on the Ship Studio placeholder page,
 because the dashboard is the remaining milestone.
+
+
+### M8 complete -- the dashboard
+
+Routes: `/` (overview), `/g/[slug]`, `/p/[pageId]`, `/settings`, plus `/login`.
+All render against real data; typecheck, lint and 121 tests green.
+
+Everything that renders audit data is a Server Component -- `ScoreGauge`,
+`ScorePill`, `PageTable`, `GroupCard`, `TopIssuesWidget`, `CWVGrid`,
+`FieldDataPanel`, `AuditSection`. A 300-row group page therefore ships
+essentially no JavaScript for its data, which is the whole reason no charting
+library was added: Recharts would turn every sparkline into a client island, and
+shipping a slow dashboard from a performance tool is a credibility problem.
+
+`app/page.tsx` (the Ship Studio placeholder) was deleted -- it collided with
+`app/(dash)/page.tsx` on the `/` route.
+
+Design decisions carried through from the plan: Lighthouse's exact score colours
+with separate darker tones for text (the bright green and orange fail AA on
+white), the arc gauge, the `▲ ■ ●` band glyphs so nothing is colour-only, 13px
+base with 36px rows, flat hairline cards and no shadows, and a left rail of
+groups that PSI does not have because it is a one-report-at-a-time tool.
+
+`AuditSection` uses native `<details>` rather than a button plus
+`aria-expanded`: free keyboard operation, works without JS, and Chrome's
+find-in-page can search collapsed content -- which is how someone actually hunts
+for an audit id across forty sections.
+
+The 42 single-page groups collapse into one expandable "Small groups" card, as
+decided in DECISIONS.md 5.1. The data model is untouched.
+
+### First real audit run: 10 pages of /platform
+
+| | |
+|---|---|
+| Audited | 10 pages, mobile |
+| Wall clock | 6.7 min |
+| Performance range | **34 – 85** |
+| Failed to render | **2 pages** (`FAILED_DOCUMENT_REQUEST`) |
+| Issues extracted | 153 `AuditIssue` rows total |
+
+The two failures are a real finding rather than a bug: those pages under
+`/platform/event-registration-and-ticketing-software/` do not render for
+Lighthouse at all. They are stored as error rows, which is exactly why
+`completedJobs` could still reach 10/10 and the run finalized cleanly with
+`failedJobs: 2`.
+
+Worth flagging to the team: the homepage scores **56** with an **8.0 s LCP**, and
+`/platform/ai-agents` scores **34** with a **14.5 s LCP**.
+
+### Operational notes
+
+- Turbopack's filesystem cache corrupted itself mid-session and made one route
+  return `ERR_ABORTED`. `rm -rf .next` and restart fixes it; it is not a code
+  fault, but it is worth recognising rather than debugging the route.
+- `SITE_NAME` is now `Zuddl` in both `.env` and the database.
+- A login password is set. Change it with `npm run set-password -- '...'`.

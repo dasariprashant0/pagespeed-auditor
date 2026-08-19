@@ -1,10 +1,77 @@
 @import "tailwindcss";
 
+/*
+ * Two things are deliberately NOT ours to invent: Lighthouse's three score
+ * colours and its <50 / 50-89 / 90+ bands. The team reads PSI reports daily and
+ * pattern-matches on them, so deviating there costs accuracy. Everything else --
+ * type, density, surfaces -- is this tool's own. See docs/PLAN.md.
+ */
 :root {
   --background: #fafaf9;
   --foreground: #1c1917;
   --muted: #78716c;
   --accent: #dc2626;
+
+  --surface: #ffffff;
+  --surface-subtle: #f5f5f4;
+  --surface-sunken: #ececea;
+  --border: #e7e5e4;
+  --border-strong: #d6d3d1;
+
+  /* Lighthouse's own gauge colours. */
+  --score-fail: #ff4e42;
+  --score-average: #ffa400;
+  --score-pass: #0cce6b;
+
+  /* Darker tones for TEXT: the bright green and orange above fail AA on white. */
+  --score-fail-text: #c00000;
+  --score-average-text: #d04900;
+  --score-pass-text: #068849;
+
+  --score-fail-tint: rgb(255 78 66 / 0.10);
+  --score-average-tint: rgb(255 164 0 / 0.10);
+  --score-pass-tint: rgb(12 206 107 / 0.10);
+
+  --score-none: #a8a29e;
+  --score-none-tint: rgb(168 162 158 / 0.12);
+  --gauge-track: #e7e5e4;
+
+  --info: #0369a1;
+  --radius: 8px;
+  --radius-sm: 5px;
+  --rail-w: 15rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --background: #0c0a09;
+    --foreground: #f5f5f4;
+    --muted: #a8a29e;
+    --accent: #f87171;
+
+    --surface: #1c1917;
+    --surface-subtle: #262322;
+    --surface-sunken: #141211;
+    --border: #2e2a28;
+    --border-strong: #44403c;
+    --gauge-track: #2e2a28;
+
+    /* Arcs stay bright so the PSI recognition survives... */
+    --score-fail: #ff5f52;
+    --score-average: #ffb400;
+    --score-pass: #16d97a;
+    /* ...but text flips lighter for contrast on a dark surface. */
+    --score-fail-text: #ff8a80;
+    --score-average-text: #ffc766;
+    --score-pass-text: #4ade9b;
+    /* 10% tint is invisible on near-black; lift to 16%. */
+    --score-fail-tint: rgb(255 95 82 / 0.16);
+    --score-average-tint: rgb(255 180 0 / 0.16);
+    --score-pass-tint: rgb(22 217 122 / 0.16);
+    --score-none: #78716c;
+    --score-none-tint: rgb(120 113 108 / 0.18);
+    --info: #38bdf8;
+  }
 }
 
 @theme inline {
@@ -12,20 +79,44 @@
   --color-foreground: var(--foreground);
   --color-muted: var(--muted);
   --color-accent: var(--accent);
+  --color-surface: var(--surface);
+  --color-surface-subtle: var(--surface-subtle);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-fail: var(--score-fail);
+  --color-average: var(--score-average);
+  --color-pass: var(--score-pass);
+  --color-fail-text: var(--score-fail-text);
+  --color-average-text: var(--score-average-text);
+  --color-pass-text: var(--score-pass-text);
+  --color-score-none: var(--score-none);
+  --color-info: var(--info);
   --font-sans: var(--font-body);
   --font-display: var(--font-display);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #fafaf9;
-    --muted: #a8a29e;
-    --accent: #f87171;
-  }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
+  /* 13px base. This is an internal console showing 800 rows, not a landing page. */
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+/* Columns of numbers only read as columns when the digits align. */
+td, th, .tnum { font-variant-numeric: tabular-nums; }
+
+:focus-visible {
+  outline: 2px solid var(--info);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* The gauge sweep and section transitions are decoration, not information. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }
