@@ -8,6 +8,7 @@ import { reconcileStaleRuns } from '../services/run.service.ts';
 import { advanceSchedule, dueSchedules } from '../services/schedule.service.ts';
 import { QUEUE_AUDIT, QUEUE_CONTROL, JOB_FINALIZE_RUN, JOB_PLAN_SWEEP } from './names.ts';
 import { getRedis, auditJobOptions, closeQueues } from './queues.ts';
+import { startHeartbeat } from './heartbeat.ts';
 import { enqueueFinalizeRun, enqueuePlanSweep } from './producers.ts';
 import { processAuditPage } from './processors/auditPage.processor.ts';
 import { processFinalizeRun } from './processors/finalizeRun.processor.ts';
@@ -139,6 +140,10 @@ async function main() {
    * Firing is idempotent -- nextRunAt advances immediately, and the planner
    * skips if a sweep is already running.
    */
+  // Without this, a dead worker means scheduled sweeps simply never happen and
+  // nothing anywhere says so.
+  const heartbeat = startHeartbeat();
+
   const scheduleTick = setInterval(() => {
     void (async () => {
       try {
@@ -163,6 +168,7 @@ async function main() {
     shuttingDown = true;
     logger.info({ signal }, 'shutting down — letting in-flight jobs finish');
     clearInterval(scheduleTick);
+    clearInterval(heartbeat);
     // close() waits for active jobs rather than killing them mid-PSI-call,
     // so their results are still written and completedJobs stays truthful.
     await Promise.allSettled([auditWorker.close(), controlWorker.close()]);

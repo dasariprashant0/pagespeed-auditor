@@ -81,6 +81,14 @@ export default async function PageReport({
       actions={
         <div className="flex items-center gap-2">
         <RunAuditButton kind="page" target={pageId} label="Re-run this page" />
+        <a
+          href={`/api/reports/${pageId}?strategy=${strategy}`}
+          download
+          className="rounded-[5px] border border-[var(--border)] px-2.5 py-1 text-[12px] text-[var(--muted)] hover:bg-[var(--surface-subtle)]"
+          title="Markdown written for a coding agent: the actual failing resources, selectors and measured savings. Hand it to Cursor, Claude or Codex."
+        >
+          Download .md
+        </a>
         <div role="tablist" aria-label="Report strategy" className="flex rounded-[5px] border border-[var(--border)] p-0.5">
           {(['mobile', 'desktop'] as const).map((s) => (
             <Link

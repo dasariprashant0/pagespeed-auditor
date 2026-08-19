@@ -53,6 +53,14 @@ export default async function GroupPage({
       actions={
         <div className="flex items-center gap-2">
         <RunAuditButton kind="group" target={slug} label={`Audit all ${pages.length}`} />
+        <a
+          href={`/api/reports/bulk?group=${slug}&strategy=${strategy}`}
+          download
+          className="rounded-[5px] border border-[var(--border)] px-2.5 py-1 text-[12px] text-[var(--muted)] hover:bg-[var(--surface-subtle)]"
+          title="Every audited page in this group as one markdown file, for handing to a coding agent."
+        >
+          Download .md
+        </a>
         <div role="tablist" aria-label="Report strategy" className="flex rounded-[5px] border border-[var(--border)] p-0.5">
           {(['mobile', 'desktop'] as const).map((s) => (
             <Link
