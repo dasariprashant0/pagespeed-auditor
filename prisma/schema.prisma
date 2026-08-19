@@ -34,6 +34,27 @@ model Organization {
   members     Membership[]
   sites       Site[]
   invitations Invitation[]
+  mcpTokens   McpToken[]
+}
+
+/// An agent's key into ONE organisation.
+///
+/// A single shared token in an environment variable cannot work once there is
+/// more than one tenant: whoever holds it would reach whichever organisation
+/// happened to be queried. Tokens are per-organisation, stored hashed, and
+/// revocable individually.
+model McpToken {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  label          String
+  tokenHash      String       @unique
+  createdById    String?
+  createdAt      DateTime     @default(now())
+  lastUsedAt     DateTime?
+  revokedAt      DateTime?
+
+  @@index([organizationId])
 }
 
 /// Roles, least to most privileged. Stored as a string rather than a Postgres

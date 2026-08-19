@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { prisma } from '@/lib/db';
+import { requireSession } from '@/lib/http/auth-guard';
+import { defaultSite, requirePageAccess } from '@/lib/services/tenant.service';
 import { getPageReport } from '@/lib/services/report.service';
 import { listGroupsWithAggregates } from '@/lib/services/results.service';
 import { AppShell } from '@/components/shell/AppShell';
@@ -38,10 +39,15 @@ export default async function PageReport({
   const { strategy: raw } = await searchParams;
   const strategy: PsiStrategy = raw === 'desktop' ? 'desktop' : 'mobile';
 
-  const site = await prisma.site.findFirstOrThrow({ select: { id: true, name: true } });
+  const ctx = await requireSession();
+  const site = await defaultSite(ctx.organizationId);
+  if (!site) notFound();
 
+  // Page ids appear in URLs. Without this check, pasting another tenant's id
+  // would render their report.
   let report;
   try {
+    await requirePageAccess(ctx.organizationId, pageId);
     report = await getPageReport(pageId, strategy);
   } catch {
     notFound();

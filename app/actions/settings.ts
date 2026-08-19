@@ -1,8 +1,9 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { requireSession } from '@/lib/http/auth-guard';
+import { requireCapability } from '@/lib/http/auth-guard';
 import { prisma } from '@/lib/db';
+import { defaultSite } from '@/lib/services/tenant.service';
 import { saveSchedule, validateCron } from '@/lib/services/schedule.service';
 import { dispatchSweepNotification } from '@/lib/notify';
 import { getEnv } from '@/lib/env';
@@ -10,9 +11,8 @@ import { getEnv } from '@/lib/env';
 export type SettingsResult = { ok: true; message: string; next?: string[] } | { ok: false; error: string };
 
 export async function saveScheduleAction(_prev: unknown, form: FormData): Promise<SettingsResult> {
-  await requireSession();
-
-  const site = await prisma.site.findFirst({ select: { id: true } });
+  const ctx = await requireCapability('automation:manage');
+  const site = await defaultSite(ctx.organizationId);
   if (!site) return { ok: false, error: 'No site configured.' };
 
   const enabled = form.get('enabled') === 'on';
@@ -31,9 +31,8 @@ export async function saveScheduleAction(_prev: unknown, form: FormData): Promis
 }
 
 export async function saveNotificationsAction(_prev: unknown, form: FormData): Promise<SettingsResult> {
-  await requireSession();
-
-  const site = await prisma.site.findFirst({ select: { id: true } });
+  const ctx = await requireCapability('automation:manage');
+  const site = await defaultSite(ctx.organizationId);
   if (!site) return { ok: false, error: 'No site configured.' };
 
   const emailEnabled = form.get('emailEnabled') === 'on';
@@ -61,9 +60,8 @@ export async function saveNotificationsAction(_prev: unknown, form: FormData): P
 
 /** Sends a sample through whatever channels are enabled, using real numbers. */
 export async function sendTestNotificationAction(): Promise<SettingsResult> {
-  await requireSession();
-
-  const site = await prisma.site.findFirst({ select: { id: true, name: true } });
+  const ctx = await requireCapability('automation:manage');
+  const site = await defaultSite(ctx.organizationId);
   if (!site) return { ok: false, error: 'No site configured.' };
 
   const settings = await prisma.notificationSetting.findUnique({ where: { siteId: site.id } });
@@ -102,6 +100,6 @@ export async function sendTestNotificationAction(): Promise<SettingsResult> {
 }
 
 export async function previewCronAction(expr: string, timezone: string) {
-  await requireSession();
+  await requireCapability('automation:manage');
   return validateCron(expr, timezone);
 }

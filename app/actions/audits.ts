@@ -1,8 +1,9 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { requireSession } from '@/lib/http/auth-guard';
+import { requireCapability } from '@/lib/http/auth-guard';
 import { prisma } from '@/lib/db';
+import { defaultSite } from '@/lib/services/tenant.service';
 import { BOTH_STRATEGIES, createRun, expandScope, findActiveRun } from '@/lib/services/run.service';
 import { enqueueAuditJobs } from '@/lib/queue/producers';
 import { estimateRun, formatDuration } from '@/lib/services/estimate.service';
@@ -30,10 +31,11 @@ export async function queueAuditAction(input: {
   strategies?: PsiStrategy[];
 }): Promise<QueueResult> {
   // Server Actions are public HTTP endpoints regardless of what proxy.ts
-  // matches, so this is the actual authorization boundary.
-  await requireSession();
+  // matches, so this is the actual authorization boundary. Running audits
+  // spends the organisation's PSI quota, so a viewer must not be able to.
+  const ctx = await requireCapability('audits:run');
 
-  const site = await prisma.site.findFirst({ select: { id: true } });
+  const site = await defaultSite(ctx.organizationId);
   if (!site) return { ok: false, error: 'No site configured.' };
 
   const strategies = input.strategies?.length ? input.strategies : BOTH_STRATEGIES;

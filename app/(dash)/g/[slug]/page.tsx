@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { prisma } from '@/lib/db';
+import { requireSession } from '@/lib/http/auth-guard';
+import { defaultSite, requireGroupAccess } from '@/lib/services/tenant.service';
 import { listGroupsWithAggregates, listPagesInGroup } from '@/lib/services/results.service';
 import { AppShell } from '@/components/shell/AppShell';
 import { PageTable } from '@/components/nav/PageTable';
@@ -21,12 +22,18 @@ export default async function GroupPage({
   const { strategy: raw } = await searchParams;
   const strategy: PsiStrategy = raw === 'desktop' ? 'desktop' : 'mobile';
 
-  const site = await prisma.site.findFirstOrThrow({ select: { id: true, name: true } });
-  const group = await prisma.group.findFirst({
-    where: { siteId: site.id, slug },
-    select: { id: true, name: true, slug: true },
-  });
-  if (!group) notFound();
+  const ctx = await requireSession();
+  const site = await defaultSite(ctx.organizationId);
+  if (!site) notFound();
+
+  // Resolved against the organisation, not just the slug: group slugs are only
+  // unique within a site, so an unscoped lookup could land on another tenant's.
+  let group;
+  try {
+    group = await requireGroupAccess(ctx.organizationId, slug, site.id);
+  } catch {
+    notFound();
+  }
 
   const [pages, allGroups] = await Promise.all([
     listPagesInGroup(group.id, { strategy }),

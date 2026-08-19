@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireApiSession } from '@/lib/http/auth-guard';
 import { prisma } from '@/lib/db';
+import { defaultSite } from '@/lib/services/tenant.service';
 import { getPageReport } from '@/lib/services/report.service';
 import { buildAgentReport } from '@/lib/report/agentMarkdown';
 import type { PsiStrategy } from '@/lib/services/types';
@@ -25,7 +26,8 @@ export async function GET(req: Request) {
   // Capped: a whole-site export would be megabytes and blow any agent's context.
   const limit = Math.min(Number(url.searchParams.get('limit') ?? 25), 50);
 
-  const site = await prisma.site.findFirstOrThrow({ select: { id: true, name: true, baseUrl: true } });
+  const site = await defaultSite(session.organizationId);
+  if (!site) return new NextResponse('No site configured.', { status: 404 });
 
   const pages = await prisma.page.findMany({
     where: {

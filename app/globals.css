@@ -7,16 +7,25 @@
  * type, density, surfaces -- is this tool's own. See docs/PLAN.md.
  */
 :root {
-  --background: #fafaf9;
-  --foreground: #1c1917;
-  --muted: #78716c;
-  --accent: #dc2626;
+  /* Graphite, not stone-warm: this is an instrument, and a cream cast makes
+     measurements read as editorial. */
+  --background: #fbfbfa;
+  --foreground: #17171a;
+  --muted: #6f6f78;
+  --faint: #9a9aa4;
+
+  /* The chrome is deliberately colourless. Score colour is the only saturated
+     thing on screen, so a coloured button cannot be mistaken for a reading.
+     --danger exists solely for destructive confirmations. */
+  --danger: #b42318;
 
   --surface: #ffffff;
-  --surface-subtle: #f5f5f4;
-  --surface-sunken: #ececea;
-  --border: #e7e5e4;
-  --border-strong: #d6d3d1;
+  --surface-subtle: #f6f6f5;
+  --surface-sunken: #eeeeec;
+  --border: #e6e6e3;
+  --border-strong: #d2d2ce;
+  /* One shadow, used only where something genuinely floats. */
+  --lift: 0 1px 2px rgb(23 23 26 / 0.04), 0 4px 12px rgb(23 23 26 / 0.04);
 
   /* Lighthouse's own gauge colours. */
   --score-fail: #ff4e42;
@@ -44,17 +53,19 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --background: #0c0a09;
-    --foreground: #f5f5f4;
-    --muted: #a8a29e;
-    --accent: #f87171;
+    --background: #0b0b0d;
+    --foreground: #f4f4f5;
+    --muted: #9c9ca6;
+    --faint: #6b6b76;
+    --danger: #f87171;
 
-    --surface: #1c1917;
-    --surface-subtle: #262322;
-    --surface-sunken: #141211;
-    --border: #2e2a28;
-    --border-strong: #44403c;
-    --gauge-track: #2e2a28;
+    --surface: #141417;
+    --surface-subtle: #1c1c20;
+    --surface-sunken: #0f0f12;
+    --border: #26262b;
+    --border-strong: #3a3a41;
+    --gauge-track: #26262b;
+    --lift: 0 1px 2px rgb(0 0 0 / 0.4), 0 4px 12px rgb(0 0 0 / 0.3);
 
     /* Arcs stay bright so the PSI recognition survives... */
     --score-fail: #ff5f52;
@@ -78,7 +89,8 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-muted: var(--muted);
-  --color-accent: var(--accent);
+  --color-danger: var(--danger);
+  --color-faint: var(--faint);
   --color-surface: var(--surface);
   --color-surface-subtle: var(--surface-subtle);
   --color-surface-sunken: var(--surface-sunken);
@@ -102,6 +114,47 @@ body {
   /* 13px base. This is an internal console showing 800 rows, not a landing page. */
   font-size: 0.8125rem;
   line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/*
+ * Type scale.
+ *
+ * The whole hierarchy is carried by SIZE and WEIGHT rather than colour, because
+ * colour is reserved for scores. Labels are small, letterspaced and quiet;
+ * measurements are large and set in the display face.
+ */
+.eyebrow {
+  font-size: 0.625rem;
+  font-weight: 500;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.metric {
+  font-family: var(--font-display);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+.title-lg {
+  font-family: var(--font-display);
+  font-size: 1.375rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+.title-md {
+  font-family: var(--font-display);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
 }
 
 /* Columns of numbers only read as columns when the digits align. */

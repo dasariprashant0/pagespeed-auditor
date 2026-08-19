@@ -24,7 +24,6 @@ export type EmailOutcome =
  */
 export function emailConfigProblem(): string | null {
   const transport = process.env.EMAIL_TRANSPORT ?? 'none';
-
   if (transport === 'resend') {
     if (!process.env.RESEND_API_KEY) {
       return 'RESEND_API_KEY is not set. Create a key at resend.com, verify your domain, then run: npm run env -- RESEND_API_KEY re_xxx';
@@ -56,7 +55,6 @@ export async function sendEmail(
   html: string,
   text: string,
 ): Promise<EmailOutcome> {
-  const transport = process.env.EMAIL_TRANSPORT ?? 'none';
   if (to.length === 0) return { sent: false, reason: 'No recipient address.' };
 
   const problem = emailConfigProblem();

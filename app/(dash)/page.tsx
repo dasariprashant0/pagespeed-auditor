@@ -1,5 +1,6 @@
 import Link from 'next/link';
-import { prisma } from '@/lib/db';
+import { requireSession } from '@/lib/http/auth-guard';
+import { defaultSite } from '@/lib/services/tenant.service';
 import { listGroupsWithAggregates, splitSmallGroups } from '@/lib/services/results.service';
 import { getTopIssues } from '@/lib/services/issues.service';
 import { getSiteSummary } from '@/lib/services/site.service';
@@ -8,6 +9,8 @@ import { GroupCard } from '@/components/nav/GroupCard';
 import { TopIssuesWidget } from '@/components/nav/TopIssuesWidget';
 import { EmptyState } from '@/components/nav/EmptyState';
 import { ScorePill } from '@/components/score/ScorePill';
+import { ScoreSpectrum } from '@/components/score/ScoreSpectrum';
+import { listPagesInGroup } from '@/lib/services/results.service';
 import type { PsiStrategy } from '@/lib/services/types';
 
 export const dynamic = 'force-dynamic';
@@ -27,10 +30,13 @@ export default async function HomePage({
   const { strategy: raw } = await searchParams;
   const strategy: PsiStrategy = raw === 'desktop' ? 'desktop' : 'mobile';
 
-  const site = await prisma.site.findFirst({ select: { id: true, name: true } });
+  // Scoped to the caller's organisation. findFirst() with no filter would show
+  // whichever site happens to be first in the table -- another tenant's.
+  const ctx = await requireSession();
+  const site = await defaultSite(ctx.organizationId);
   if (!site) {
     return (
-      <AppShell siteName="PageSpeed Auditor" groups={[]}>
+      <AppShell siteName={ctx.organizationName} groups={[]}>
         <EmptyState
           title="No site configured yet"
           body="Set SITE_SITEMAP_URL and SITE_BASE_URL in .env, then run `npm run db:seed` followed by `npm run ingest`."
@@ -44,6 +50,16 @@ export default async function HomePage({
     listGroupsWithAggregates(site.id, { strategy }),
     getTopIssues({ siteId: site.id, strategy, limit: 8 }),
   ]);
+
+  // Every page in one strip. This is the view the tool exists for -- PSI can
+  // only ever show one page at a time.
+  const spectrum = (
+    await Promise.all(
+      groups.filter((g) => g.auditedCount > 0).map((g) => listPagesInGroup(g.id, { strategy })),
+    )
+  )
+    .flat()
+    .map((p) => ({ id: p.id, path: p.path, score: p.scores.performance }));
 
   // 42 of this site's 68 groups hold a single page. Rendering 68 cards is not a
   // usable home screen, so the tail collapses. The data model is untouched --
@@ -61,26 +77,39 @@ export default async function HomePage({
       breadcrumb="Overview"
       actions={<StrategyLinks active={strategy} basePath="/" />}
     >
-      <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
-        <div>
-          <h1 className="font-[family-name:var(--font-display)] text-xl font-semibold tracking-tight">
-            {site.name}
-          </h1>
-          <p className="mt-0.5 text-[12px] text-[var(--muted)]">
-            {summary.activePageCount} pages · {summary.groupCount} groups ·{' '}
-            {summary.auditedCount} audited
-            {summary.lastSweepAt && ` · last sweep ${new Date(summary.lastSweepAt).toLocaleDateString()}`}
-          </p>
-        </div>
-        <div className="flex items-center gap-3 sm:gap-4">
-          {SCORE_COLUMNS.map(({ key, short, full }) => (
-            <div key={key} className="text-center">
-              <ScorePill score={summary.siteAverage[key]} title={full} />
-              <div className="mt-1 text-[10px] uppercase tracking-wide text-[var(--muted)]">{short}</div>
-            </div>
-          ))}
-        </div>
-      </div>
+      <header className="mb-6">
+        <div className="eyebrow">Overview</div>
+        <h1 className="title-lg mt-1">{site.name}</h1>
+        <p className="mt-1 text-[12px] text-[var(--muted)]">
+          {summary.activePageCount} pages across {summary.groupCount} sections ·{' '}
+          {summary.auditedCount} measured
+          {summary.lastSweepAt && ` · last check ${new Date(summary.lastSweepAt).toLocaleDateString()}`}
+        </p>
+
+        {summary.auditedCount > 0 && (
+          <div className="mt-5 grid gap-3 sm:grid-cols-[repeat(4,minmax(0,auto))_1fr] sm:items-end">
+            {SCORE_COLUMNS.map(({ key, short, full }) => {
+              const v = summary.siteAverage[key];
+              const band = v === null ? null : v < 50 ? 'fail' : v < 90 ? 'average' : 'pass';
+              return (
+                <div key={key} title={full}>
+                  <div
+                    className="metric text-[34px]"
+                    style={{
+                      color: band
+                        ? `var(--score-${band}-text)`
+                        : 'var(--faint)',
+                    }}
+                  >
+                    {v ?? '—'}
+                  </div>
+                  <div className="eyebrow mt-1">{short}</div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </header>
 
       {summary.auditedCount === 0 ? (
         <EmptyState
@@ -89,27 +118,28 @@ export default async function HomePage({
         />
       ) : (
         <>
-          <section className="mb-6">
-            <h2 className="mb-2 text-[11px] font-medium uppercase tracking-wide text-[var(--muted)]">
-              Top issues across the site
-            </h2>
+          <section className="mb-7">
+            <h2 className="eyebrow mb-2">Every page, worst to best</h2>
+            <ScoreSpectrum pages={spectrum} />
+          </section>
+
+          <section className="mb-7">
+            <h2 className="eyebrow mb-2">Affecting the most pages</h2>
             <TopIssuesWidget issues={topIssues} />
           </section>
 
           <section>
-            <h2 className="mb-2 text-[11px] font-medium uppercase tracking-wide text-[var(--muted)]">
-              Groups
-            </h2>
-            <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
+            <h2 className="eyebrow mb-2">Sections</h2>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {primary.map((g) => (
                 <GroupCard key={g.id} group={g} />
               ))}
             </div>
 
             {small.length > 0 && (
-              <details className="mt-3 rounded-[8px] border border-[var(--border)] bg-[var(--surface)]">
-                <summary className="cursor-pointer list-none px-3.5 py-2.5 text-[12px] text-[var(--muted)]">
-                  Small groups ({small.length}) — fewer than 3 pages each
+              <details className="panel mt-3">
+                <summary className="cursor-pointer list-none px-4 py-3 text-[12px] text-[var(--muted)] hover:text-[var(--foreground)]">
+                  {small.length} smaller sections — fewer than 3 pages each
                 </summary>
                 <div className="grid gap-1 border-t border-[var(--border)] p-2 sm:grid-cols-2 lg:grid-cols-3">
                   {small.map((g) => (

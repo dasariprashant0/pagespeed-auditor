@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { requireSession } from '@/lib/http/auth-guard';
+import { requireCapability } from '@/lib/http/auth-guard';
 import { prisma } from '@/lib/db';
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
@@ -15,7 +15,7 @@ export type ActionResult = { ok: true } | { ok: false; error: string };
  * to sitemap order.
  */
 export async function setGroupPriorityAction(slugsInOrder: string[]): Promise<ActionResult> {
-  await requireSession();
+  await requireCapability('groups:manage');
 
   try {
     await prisma.$transaction(async (tx) => {

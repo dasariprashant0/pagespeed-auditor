@@ -1,0 +1,103 @@
+- generic [active] [ref=e1]:
+  - main [ref=e2]:
+    - main [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5]:
+          - heading "Create an account" [level=1] [ref=e6]
+          - paragraph [ref=e7]: You will be the admin of a new organisation, and can invite your team afterwards.
+        - generic [ref=e8]:
+          - generic [ref=e9]:
+            - generic [ref=e10]: Organisation
+            - textbox "Organisation Your company or team. You can add several sites to it." [ref=e11]
+            - generic [ref=e12]: Your company or team. You can add several sites to it.
+          - generic [ref=e13]:
+            - generic [ref=e14]: Your name
+            - textbox "Your name" [ref=e15]
+          - generic [ref=e16]:
+            - generic [ref=e17]: Email
+            - textbox "Email" [ref=e18]
+          - generic [ref=e19]:
+            - generic [ref=e20]: Password
+            - textbox "Password At least 12 characters." [ref=e21]
+            - generic [ref=e22]: At least 12 characters.
+          - button "Create account" [ref=e23]
+        - generic [ref=e24]:
+          - text: Already have one?
+          - link "Sign in" [ref=e25] [cursor=pointer]:
+            - /url: /login
+  - alert [ref=e26]
+  - button [ref=e28] [cursor=pointer]:
+    - generic:
+      - generic:
+        - button
+      - generic:
+        - button
+      - generic:
+        - button [disabled]
+      - generic:
+        - button [disabled]
+      - generic:
+        - button [disabled]
+      - generic:
+        - button [disabled]
+      - generic:
+        - button
+      - generic:
+        - button
+    - generic:
+      - generic:
+        - generic:
+          - generic:
+            - link:
+              - /url: https://agentation.com
+            - paragraph: v3.0.1
+            - button "Switch to light mode"
+          - generic:
+            - generic:
+              - generic: Output Detail
+              - button "Standard"
+            - generic:
+              - generic: React Components
+              - generic:
+                - checkbox [checked]
+            - generic:
+              - generic: Hide Until Restart
+              - generic:
+                - checkbox
+          - generic:
+            - generic: Marker Color
+            - generic:
+              - button "Indigo"
+              - button "Blue"
+              - button "Cyan"
+              - button "Green"
+              - button "Yellow"
+              - button "Orange"
+              - button "Red"
+          - generic:
+            - generic:
+              - generic:
+                - checkbox "Clear on copy/send"
+              - generic: Clear on copy/send
+            - generic:
+              - generic:
+                - checkbox "Block page interactions" [checked]
+              - generic: Block page interactions
+          - button "Manage MCP & Webhooks"
+        - generic:
+          - button "Manage MCP & Webhooks"
+          - generic:
+            - generic: MCP Connection
+            - paragraph:
+              - text: MCP connection allows agents to receive and act on annotations.
+              - link "Learn more":
+                - /url: https://agentation.dev/mcp
+          - generic:
+            - generic:
+              - generic: Webhooks
+              - generic:
+                - generic: Auto-Send
+                - generic:
+                  - checkbox "Auto-Send" [checked] [disabled]
+            - paragraph: The webhook URL will receive live annotation changes and annotation data.
+            - textbox "Webhook URL"

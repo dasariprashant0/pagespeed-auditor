@@ -24,14 +24,37 @@ import type { PsiStrategy } from '../psi/types.ts';
 
 const strategyArg = z.enum(['mobile', 'desktop']).default('mobile');
 
-async function siteId(): Promise<string> {
-  const site = await prisma.site.findFirstOrThrow({ select: { id: true } });
+/**
+ * The organisation this call belongs to, taken from the bearer token.
+ *
+ * mcp-handler puts the verified auth info on the request. Resolving the site
+ * any other way -- findFirst, an env var, an id in the arguments -- would let
+ * one tenant's agent read another's data.
+ */
+function orgIdOf(ctx: unknown): string {
+  const org = (ctx as { authInfo?: { organizationId?: string } } | undefined)?.authInfo?.organizationId;
+  if (!org) throw new Error('This token is not associated with an organisation.');
+  return org;
+}
+
+async function siteId(ctx: unknown): Promise<string> {
+  const site = await prisma.site.findFirst({
+    where: { organizationId: orgIdOf(ctx) },
+    orderBy: { createdAt: 'asc' },
+    select: { id: true },
+  });
+  if (!site) throw new Error('No site is configured for this organisation yet.');
   return site.id;
 }
 
 /** Resolves a URL the way ingestion did, so agents can pass any form of it. */
-async function findPage(url: string) {
-  const site = await prisma.site.findFirstOrThrow({ select: { id: true, baseUrl: true } });
+async function findPage(url: string, ctx: unknown) {
+  const site = await prisma.site.findFirst({
+    where: { organizationId: orgIdOf(ctx) },
+    orderBy: { createdAt: 'asc' },
+    select: { id: true, baseUrl: true },
+  });
+  if (!site) throw new Error('No site is configured for this organisation yet.');
   const norm = normalizeUrl(url, site.baseUrl);
   const candidates = norm.ok ? [norm.url, url] : [url];
 
@@ -63,8 +86,8 @@ export const mcpHandler = createMcpHandler((server) => {
       inputSchema: { strategy: strategyArg },
       annotations: { readOnlyHint: true },
     },
-    async ({ strategy }) => {
-      const groups = await listGroupsWithAggregates(await siteId(), { strategy: strategy as PsiStrategy });
+    async ({ strategy }, ctx) => {
+      const groups = await listGroupsWithAggregates(await siteId(ctx), { strategy: strategy as PsiStrategy });
       const rows = groups
         .filter((g) => g.pageCount > 0)
         .map((g) => `${g.slug}\t${g.pageCount} pages\tperf ${g.aggregate.performance ?? '--'}\tworst ${g.worstPerformance ?? '--'}\t${g.auditedCount} audited`);
@@ -84,8 +107,8 @@ export const mcpHandler = createMcpHandler((server) => {
       },
       annotations: { readOnlyHint: true },
     },
-    async ({ group, strategy, limit }) => {
-      const sid = await siteId();
+    async ({ group, strategy, limit }, ctx) => {
+      const sid = await siteId(ctx);
       const g = group
         ? await prisma.group.findFirst({ where: { siteId: sid, slug: group }, select: { id: true } })
         : null;
@@ -115,8 +138,8 @@ export const mcpHandler = createMcpHandler((server) => {
       inputSchema: { url: z.string(), strategy: strategyArg },
       annotations: { readOnlyHint: true },
     },
-    async ({ url, strategy }) => {
-      const page = await findPage(url);
+    async ({ url, strategy }, ctx) => {
+      const page = await findPage(url, ctx);
       const report = await getPageReport(page.id, strategy as PsiStrategy);
       if (!report.result) {
         return text(`${page.url} has not been audited on ${strategy}. Use run_page_audit to measure it.`);
@@ -138,11 +161,11 @@ export const mcpHandler = createMcpHandler((server) => {
       },
       annotations: { readOnlyHint: true },
     },
-    async ({ url, group, strategy, limit }) => {
+    async ({ url, group, strategy, limit }, ctx) => {
       if (!url === !group) throw new Error('Pass exactly one of url or group.');
 
       if (url) {
-        const page = await findPage(url);
+        const page = await findPage(url, ctx);
         const history = await getScoreHistory({ pageId: page.id }, { strategy: strategy as PsiStrategy, limit });
         const pts = history.filter((p) => p.v !== null);
         if (pts.length === 0) return text(`No history for ${page.url} on ${strategy}.`);
@@ -153,7 +176,7 @@ export const mcpHandler = createMcpHandler((server) => {
         );
       }
 
-      const sid = await siteId();
+      const sid = await siteId(ctx);
       const g = await prisma.group.findFirstOrThrow({ where: { siteId: sid, slug: group! }, select: { id: true } });
       const history = await getScoreHistory({ groupId: g.id }, { strategy: strategy as PsiStrategy, limit });
       const pts = history.filter((p) => p.v !== null);
@@ -169,8 +192,8 @@ export const mcpHandler = createMcpHandler((server) => {
       inputSchema: { strategy: strategyArg, limit: z.number().int().min(1).max(40).default(15) },
       annotations: { readOnlyHint: true },
     },
-    async ({ strategy, limit }) => {
-      const issues = await getTopIssues({ siteId: await siteId(), strategy: strategy as PsiStrategy, limit });
+    async ({ strategy, limit }, ctx) => {
+      const issues = await getTopIssues({ siteId: await siteId(ctx), strategy: strategy as PsiStrategy, limit });
       if (issues.length === 0) return text('No completed run yet, so there is nothing to rank.');
       return text(
         issues.map((i) => `${String(i.pagesAffected).padStart(4)} of ${i.pagesTotal} pages  ${i.title}`).join('\n'),
@@ -186,8 +209,8 @@ export const mcpHandler = createMcpHandler((server) => {
       inputSchema: { url: z.string(), strategy: strategyArg, refresh: z.boolean().default(false) },
       annotations: { readOnlyHint: false, idempotentHint: true },
     },
-    async ({ url, strategy, refresh }) => {
-      const page = await findPage(url);
+    async ({ url, strategy, refresh }, ctx) => {
+      const page = await findPage(url, ctx);
       const rec = await getOrCreateRecommendation(page.id, strategy as PsiStrategy, { force: refresh });
       return text(`${rec.cached ? '(cached) ' : ''}${rec.content}`);
     },
@@ -201,9 +224,9 @@ export const mcpHandler = createMcpHandler((server) => {
       inputSchema: { url: z.string(), strategy: z.enum(['mobile', 'desktop', 'both']).default('both') },
       annotations: { readOnlyHint: false },
     },
-    async ({ url, strategy }) => {
-      const page = await findPage(url);
-      const sid = await siteId();
+    async ({ url, strategy }, ctx) => {
+      const page = await findPage(url, ctx);
+      const sid = await siteId(ctx);
       const active = await findActiveRun(prisma, sid);
       if (active) throw new Error(`A ${active.type} run is already active (${active.id}). Poll it with get_run_status.`);
 
@@ -227,8 +250,8 @@ export const mcpHandler = createMcpHandler((server) => {
       inputSchema: { group: z.string(), strategy: z.enum(['mobile', 'desktop', 'both']).default('both') },
       annotations: { readOnlyHint: false },
     },
-    async ({ group, strategy }) => {
-      const sid = await siteId();
+    async ({ group, strategy }, ctx) => {
+      const sid = await siteId(ctx);
       const active = await findActiveRun(prisma, sid);
       if (active) throw new Error(`A ${active.type} run is already active (${active.id}).`);
 
@@ -253,7 +276,7 @@ export const mcpHandler = createMcpHandler((server) => {
       inputSchema: { runId: z.string() },
       annotations: { readOnlyHint: true },
     },
-    async ({ runId }) => {
+    async ({ runId }, ctx) => {
       const p = await getRunProgress(runId);
       if (!p) throw new Error(`No run ${runId}.`);
       const eta = p.etaSeconds === null ? '' : `, ~${Math.round(p.etaSeconds / 60)} min left`;

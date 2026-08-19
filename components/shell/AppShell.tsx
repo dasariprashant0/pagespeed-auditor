@@ -44,27 +44,26 @@ export function AppShell({
           aria-label="Groups"
           className="sticky top-0 hidden h-screen w-[var(--rail-w)] shrink-0 overflow-y-auto border-r border-[var(--border)] bg-[var(--surface-subtle)] px-3 py-4 lg:block"
         >
-          <Link href="/" className="mb-4 block px-2">
-            <div className="font-[family-name:var(--font-display)] text-sm font-semibold tracking-tight">
-              PageSpeed Auditor
-            </div>
-            <div className="text-[11px] text-[var(--muted)]">{siteName}</div>
+          <Link href="/" className="mb-5 block px-2">
+            <div className="eyebrow mb-0.5">PageSpeed</div>
+            <div className="title-md truncate">{siteName}</div>
           </Link>
 
+          <div className="eyebrow mb-1.5 px-2">Sections</div>
           <ul className="space-y-px">
             {groups.map((g) => (
               <li key={g.slug}>
                 <Link
                   href={`/g/${g.slug}`}
                   aria-current={g.slug === activeSlug ? 'page' : undefined}
-                  className={`flex items-center justify-between rounded-[5px] px-2 py-1.5 text-[12px] hover:bg-[var(--surface-sunken)] ${
+                  className={`group flex items-center justify-between gap-2 rounded-[6px] px-2 py-[5px] text-[12px] transition-colors ${
                     g.slug === activeSlug
                       ? 'bg-[var(--surface-sunken)] font-medium text-[var(--foreground)]'
-                      : 'text-[var(--muted)]'
+                      : 'text-[var(--muted)] hover:bg-[var(--surface-sunken)] hover:text-[var(--foreground)]'
                   }`}
                 >
                   <span className="truncate">{g.name}</span>
-                  <span className="tnum ml-2 shrink-0 text-[11px] text-[var(--muted)]">{g.pageCount}</span>
+                  <span className="tnum shrink-0 text-[10px] text-[var(--faint)]">{g.pageCount}</span>
                 </Link>
               </li>
             ))}
@@ -72,16 +71,22 @@ export function AppShell({
         </nav>
 
         <div className="min-w-0 flex-1">
-          <header className="sticky top-0 z-10 border-b border-[var(--border)] bg-[var(--background)]/95 backdrop-blur">
+          <header className="sticky top-0 z-10 border-b border-[var(--border)] bg-[var(--background)]/85 backdrop-blur-md">
             <div className="flex min-h-12 flex-wrap items-center justify-between gap-x-4 gap-y-1 px-3 py-2 sm:px-4">
               <div className="min-w-0 flex-1 truncate text-[12px] text-[var(--muted)]">{breadcrumb}</div>
               <div className="flex shrink-0 items-center gap-3">
                 {actions}
-                <Link href="/settings" className="text-[12px] text-[var(--muted)] hover:text-[var(--foreground)]">
+                <Link
+                  href="/settings/profile"
+                  className="text-[12px] text-[var(--muted)] transition-colors hover:text-[var(--foreground)]"
+                >
                   Settings
                 </Link>
                 <form action={logoutAction}>
-                  <button type="submit" className="text-[12px] text-[var(--muted)] hover:text-[var(--foreground)]">
+                  <button
+                    type="submit"
+                    className="text-[12px] text-[var(--muted)] transition-colors hover:text-[var(--foreground)]"
+                  >
                     Sign out
                   </button>
                 </form>
@@ -113,7 +118,7 @@ export function AppShell({
             </ul>
           </details>
 
-          <main id="main" className="px-3 py-4 sm:px-4 sm:py-5">
+          <main id="main" className="mx-auto max-w-[1400px] px-4 py-6 sm:px-6">
             {children}
           </main>
         </div>

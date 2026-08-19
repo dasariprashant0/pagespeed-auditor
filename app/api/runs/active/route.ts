@@ -16,7 +16,9 @@ export async function GET() {
   if (session instanceof NextResponse) return session;
 
   const runs = await prisma.auditRun.findMany({
-    where: { status: { in: ['queued', 'running'] } },
+    // Scoped: an unfiltered poll would leak another tenant's activity, and
+    // their scope labels name their pages.
+    where: { status: { in: ['queued', 'running'] }, site: { organizationId: session.organizationId } },
     orderBy: { startedAt: 'desc' },
     take: 3,
     select: {

@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { requireSession } from '@/lib/http/auth-guard';
+import { requireCapability } from '@/lib/http/auth-guard';
 import { getOrCreateRecommendation } from '@/lib/services/recommendation.service';
 import type { PsiStrategy } from '@/lib/services/types';
 
@@ -14,7 +14,7 @@ export async function generateRecommendationAction(input: {
   strategy: PsiStrategy;
   force?: boolean;
 }): Promise<RecommendationActionResult> {
-  await requireSession();
+  await requireCapability('recommendations:generate');
   try {
     const r = await getOrCreateRecommendation(input.pageId, input.strategy, { force: input.force });
     revalidatePath(`/p/${input.pageId}`);

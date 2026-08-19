@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireApiSession } from '@/lib/http/auth-guard';
 import { getPageReport } from '@/lib/services/report.service';
+import { requirePageAccess } from '@/lib/services/tenant.service';
 import { buildAgentReport } from '@/lib/report/agentMarkdown';
 import type { PsiStrategy } from '@/lib/services/types';
 
@@ -20,6 +21,13 @@ export async function GET(req: Request, { params }: { params: Promise<{ pageId: 
   const url = new URL(req.url);
   const strategy = (url.searchParams.get('strategy') === 'desktop' ? 'desktop' : 'mobile') as PsiStrategy;
   const includePassed = url.searchParams.get('passed') === '1';
+
+  // Same id-in-the-URL exposure as the report page.
+  try {
+    await requirePageAccess(session.organizationId, pageId);
+  } catch {
+    return NextResponse.json({ error: 'not_found' }, { status: 404 });
+  }
 
   const report = await getPageReport(pageId, strategy);
   const md = buildAgentReport(report, { includePassed });

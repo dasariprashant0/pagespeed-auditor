@@ -1,6 +1,6 @@
 'use server';
 
-import { requireSession } from '@/lib/http/auth-guard';
+import { requireCapability } from '@/lib/http/auth-guard';
 import { prisma } from '@/lib/db';
 import { estimateRun, formatDuration } from '@/lib/services/estimate.service';
 
@@ -23,7 +23,7 @@ export async function previewEstimateAction(input: {
   ref: string;
   strategyCount?: number;
 }): Promise<EstimatePreview> {
-  await requireSession();
+  await requireCapability('reports:read');
 
   const strategies = input.strategyCount ?? 2;
   const pageCount =

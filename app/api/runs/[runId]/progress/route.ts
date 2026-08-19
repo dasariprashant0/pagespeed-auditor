@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireApiSession } from '@/lib/http/auth-guard';
 import { getRunProgress } from '@/lib/services/site.service';
+import { requireRunAccess } from '@/lib/services/tenant.service';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,6 +11,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ runId: 
   if (session instanceof NextResponse) return session;
 
   const { runId } = await params;
+  try {
+    await requireRunAccess(session.organizationId, runId);
+  } catch {
+    return NextResponse.json({ error: 'not_found' }, { status: 404 });
+  }
+
   const progress = await getRunProgress(runId);
   if (!progress) return NextResponse.json({ error: 'not_found' }, { status: 404 });
 

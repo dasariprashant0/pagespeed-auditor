@@ -1,4 +1,8 @@
 import { prisma } from '@/lib/db';
+import { requireCapability } from '@/lib/http/auth-guard';
+import { defaultSite } from '@/lib/services/tenant.service';
+import { redirect } from 'next/navigation';
+import { SettingsNav } from '@/components/settings/SettingsNav';
 import { getEnv } from '@/lib/env';
 import { listGroupsWithAggregates } from '@/lib/services/results.service';
 import { estimateRun, formatDuration } from '@/lib/services/estimate.service';
@@ -7,7 +11,6 @@ import { ScheduleForm } from '@/components/settings/ScheduleForm';
 import { NotificationForm } from '@/components/settings/NotificationForm';
 import { PriorityForm } from '@/components/settings/PriorityForm';
 import { emailConfigProblem } from '@/lib/notify/email';
-import { historyOverview } from '@/lib/services/retention.service';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,7 +32,11 @@ function Section({ title, hint, children }: { title: string; hint?: string; chil
 
 export default async function SettingsPage() {
   const env = getEnv();
-  const site = await prisma.site.findFirstOrThrow();
+  // Automation is admin-only; anyone else lands on their profile instead of a
+  // page that would reject every control on it.
+  const ctx = await requireCapability('automation:manage');
+  const site = await defaultSite(ctx.organizationId);
+  if (!site) redirect('/');
 
   const [groups, schedule, notif] = await Promise.all([
     listGroupsWithAggregates(site.id, { strategy: 'mobile' }),
