@@ -452,3 +452,89 @@ export async function getScoreHistory(
       v: g._avg.performanceScore === null ? null : Math.round(g._avg.performanceScore),
     }));
 }
+
+// ---------------------------------------------------------------------------
+// Run-by-run history
+// ---------------------------------------------------------------------------
+
+export interface PageRunHistoryEntry {
+  resultId: string;
+  runId: string;
+  runType: string;
+  triggeredBy: string;
+  strategy: string;
+  at: string;
+  status: 'ok' | 'error';
+  runtimeError: string | null;
+  scores: FourScores;
+  /** Change against the run before it, so a regression is visible in the list. */
+  performanceDelta: number | null;
+  lcp: number | null;
+  cls: number | null;
+  hasRecommendation: boolean;
+}
+
+/**
+ * Every retained run for one page, newest first.
+ *
+ * This is the "we checked weekly, what changed over the month" view. Deltas are
+ * computed against the previous SUCCESSFUL run rather than the previous row --
+ * comparing against an error row's nulls would show a phantom collapse and then
+ * a phantom recovery.
+ */
+export async function getPageRunHistory(
+  pageId: string,
+  strategy: PsiStrategy,
+  limit = 20,
+): Promise<PageRunHistoryEntry[]> {
+  const rows = await prisma.auditResult.findMany({
+    where: { pageId, strategy },
+    orderBy: { createdAt: 'desc' },
+    take: limit,
+    select: {
+      id: true,
+      createdAt: true,
+      status: true,
+      runtimeError: true,
+      performanceScore: true,
+      accessibilityScore: true,
+      bestPracticesScore: true,
+      seoScore: true,
+      lcp: true,
+      cls: true,
+      auditRun: { select: { id: true, type: true, triggeredBy: true } },
+      recommendation: { select: { id: true, status: true } },
+    },
+  });
+
+  // Walk oldest-first so each entry can see the last good score before it.
+  const ascending = [...rows].reverse();
+  const deltas = new Map<string, number | null>();
+  let lastGood: number | null = null;
+  for (const r of ascending) {
+    const score = r.status === 'ok' ? r.performanceScore : null;
+    deltas.set(r.id, score !== null && lastGood !== null ? score - lastGood : null);
+    if (score !== null) lastGood = score;
+  }
+
+  return rows.map((r) => ({
+    resultId: r.id,
+    runId: r.auditRun.id,
+    runType: r.auditRun.type,
+    triggeredBy: r.auditRun.triggeredBy,
+    strategy,
+    at: r.createdAt.toISOString(),
+    status: r.status === 'error' ? 'error' : 'ok',
+    runtimeError: r.runtimeError,
+    scores: {
+      performance: r.performanceScore,
+      accessibility: r.accessibilityScore,
+      bestPractices: r.bestPracticesScore,
+      seo: r.seoScore,
+    },
+    performanceDelta: deltas.get(r.id) ?? null,
+    lcp: r.lcp,
+    cls: r.cls,
+    hasRecommendation: r.recommendation?.status === 'complete',
+  }));
+}

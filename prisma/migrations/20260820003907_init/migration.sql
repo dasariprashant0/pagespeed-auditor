@@ -1,20 +1,63 @@
+-- CreateSchema
+CREATE SCHEMA IF NOT EXISTS "public";
+
 -- CreateTable
 CREATE TABLE "User" (
     "id" TEXT NOT NULL,
-    "username" TEXT NOT NULL,
+    "email" TEXT NOT NULL,
+    "name" TEXT,
     "passwordHash" TEXT NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "lastLoginAt" TIMESTAMP(3),
 
     CONSTRAINT "User_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
+CREATE TABLE "Organization" (
+    "id" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "slug" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "Organization_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "Membership" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "organizationId" TEXT NOT NULL,
+    "role" TEXT NOT NULL DEFAULT 'viewer',
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "Membership_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "Invitation" (
+    "id" TEXT NOT NULL,
+    "organizationId" TEXT NOT NULL,
+    "email" TEXT NOT NULL,
+    "role" TEXT NOT NULL DEFAULT 'viewer',
+    "tokenHash" TEXT NOT NULL,
+    "invitedById" TEXT,
+    "expiresAt" TIMESTAMP(3) NOT NULL,
+    "acceptedAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "Invitation_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "Site" (
     "id" TEXT NOT NULL,
+    "organizationId" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "sitemapUrl" TEXT NOT NULL,
     "baseUrl" TEXT NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "psiApiKey" TEXT,
 
     CONSTRAINT "Site_pkey" PRIMARY KEY ("id")
 );
@@ -26,6 +69,7 @@ CREATE TABLE "Group" (
     "name" TEXT NOT NULL,
     "slug" TEXT NOT NULL,
     "isManual" BOOLEAN NOT NULL DEFAULT false,
+    "priority" INTEGER,
 
     CONSTRAINT "Group_pkey" PRIMARY KEY ("id")
 );
@@ -51,6 +95,7 @@ CREATE TABLE "Page" (
     "isManuallyGrouped" BOOLEAN NOT NULL DEFAULT false,
     "lastmod" TIMESTAMP(3),
     "lastAuditedAt" TIMESTAMP(3),
+    "sitemapIndex" INTEGER,
     "latestResultMobileId" TEXT,
     "latestResultDesktopId" TEXT,
 
@@ -107,6 +152,7 @@ CREATE TABLE "AuditResult" (
     "fieldJson" JSONB,
     "finalUrl" TEXT,
     "lighthouseVersion" TEXT,
+    "durationMs" INTEGER,
     "rawJson" JSONB,
     "markdownReport" TEXT NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -154,7 +200,7 @@ CREATE TABLE "Schedule" (
     "id" TEXT NOT NULL,
     "siteId" TEXT NOT NULL,
     "cronExpr" TEXT,
-    "timezone" TEXT NOT NULL DEFAULT 'UTC',
+    "timezone" TEXT NOT NULL DEFAULT 'Asia/Kolkata',
     "enabled" BOOLEAN NOT NULL DEFAULT false,
     "lastRunAt" TIMESTAMP(3),
     "nextRunAt" TIMESTAMP(3),
@@ -175,7 +221,22 @@ CREATE TABLE "NotificationSetting" (
 );
 
 -- CreateIndex
-CREATE UNIQUE INDEX "User_username_key" ON "User"("username");
+CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Organization_slug_key" ON "Organization"("slug");
+
+-- CreateIndex
+CREATE INDEX "Membership_organizationId_idx" ON "Membership"("organizationId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Membership_userId_organizationId_key" ON "Membership"("userId", "organizationId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Invitation_tokenHash_key" ON "Invitation"("tokenHash");
+
+-- CreateIndex
+CREATE INDEX "Invitation_organizationId_email_idx" ON "Invitation"("organizationId", "email");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Group_siteId_slug_key" ON "Group"("siteId", "slug");
@@ -188,6 +249,9 @@ CREATE UNIQUE INDEX "Page_url_key" ON "Page"("url");
 
 -- CreateIndex
 CREATE INDEX "Page_siteId_isActive_idx" ON "Page"("siteId", "isActive");
+
+-- CreateIndex
+CREATE INDEX "Page_siteId_sitemapIndex_idx" ON "Page"("siteId", "sitemapIndex");
 
 -- CreateIndex
 CREATE INDEX "Page_groupId_isActive_idx" ON "Page"("groupId", "isActive");
@@ -229,6 +293,21 @@ CREATE UNIQUE INDEX "Schedule_siteId_key" ON "Schedule"("siteId");
 CREATE UNIQUE INDEX "NotificationSetting_siteId_key" ON "NotificationSetting"("siteId");
 
 -- AddForeignKey
+ALTER TABLE "Membership" ADD CONSTRAINT "Membership_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Membership" ADD CONSTRAINT "Membership_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "Organization"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Invitation" ADD CONSTRAINT "Invitation_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "Organization"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Invitation" ADD CONSTRAINT "Invitation_invitedById_fkey" FOREIGN KEY ("invitedById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Site" ADD CONSTRAINT "Site_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "Organization"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "Group" ADD CONSTRAINT "Group_siteId_fkey" FOREIGN KEY ("siteId") REFERENCES "Site"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -266,3 +345,4 @@ ALTER TABLE "Schedule" ADD CONSTRAINT "Schedule_siteId_fkey" FOREIGN KEY ("siteI
 
 -- AddForeignKey
 ALTER TABLE "NotificationSetting" ADD CONSTRAINT "NotificationSetting_siteId_fkey" FOREIGN KEY ("siteId") REFERENCES "Site"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+

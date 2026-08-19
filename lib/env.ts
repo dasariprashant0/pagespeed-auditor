@@ -71,8 +71,13 @@ const schema = z.object({
   SESSION_SECRET: z.string().default(''),
   SESSION_TTL_DAYS: int(30),
 
-  RAW_JSON_RETAIN_RUNS: int(5),
-  ISSUE_RETAIN_RUNS: int(30),
+  /**
+   * Audit results kept per page and strategy. Ten is roughly two months of
+   * weekly checks. A run's results, markdown and recommendation are kept and
+   * removed together -- a report you can open but whose evidence was deleted is
+   * worse than one that has plainly aged out.
+   */
+  RESULT_RETAIN_RUNS: int(10),
 });
 
 export type Env = z.infer<typeof schema> & {

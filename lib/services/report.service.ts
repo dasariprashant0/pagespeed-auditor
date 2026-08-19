@@ -125,7 +125,7 @@ export function buildFieldData(cols: FieldColumns, fieldJson?: unknown): FieldDa
  * worth storing 60k times. It lives in rawJson, so a report reads it from
  * there for its one row.
  *
- * Retention prunes rawJson after RAW_JSON_RETAIN_RUNS runs, so this is
+ * Retention removes whole results past RESULT_RETAIN_RUNS, so this is
  * best-effort by design: an older report loses the prose, not the finding.
  */
 export function descriptionsFromRawJson(rawJson: unknown): Map<string, string> {

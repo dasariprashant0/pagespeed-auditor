@@ -30,17 +30,7 @@ const DUMMY_HASH = '$2b$12$JX6DMbPnRG7NP5Aab8xHXuxtr/LYgEeInHzYhr4ekBsaPBo2glny6
 /** bcrypt's modular crypt prefixes. Anything else in .env is a paste accident. */
 const BCRYPT_HASH_RE = /^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/;
 
-export type CredentialCheck =
-  | { ok: true }
-  /** The deployment has no usable AUTH_PASSWORD_HASH -- an operator problem, not a user one. */
-  | { ok: false; reason: 'not_configured' }
-  | { ok: false; reason: 'invalid' };
 
-export interface ConfiguredCredential {
-  username: string;
-  /** The bcrypt hash from AUTH_PASSWORD_HASH. May legitimately be '' on a fresh checkout. */
-  passwordHash: string;
-}
 
 export function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, BCRYPT_COST);
@@ -65,29 +55,3 @@ export function isUsableHash(hash: string): boolean {
   return BCRYPT_HASH_RE.test(hash.trim());
 }
 
-/**
- * The whole login decision. Always performs exactly one bcrypt compare,
- * whatever the outcome, for the timing reason described on DUMMY_HASH.
- */
-export async function verifyCredentials(
-  submitted: { username: string; password: string },
-  configured: ConfiguredCredential,
-): Promise<CredentialCheck> {
-  const hash = configured.passwordHash.trim();
-
-  if (!isUsableHash(hash)) {
-    await bcrypt.compare(submitted.password, DUMMY_HASH);
-    return { ok: false, reason: 'not_configured' };
-  }
-
-  // Compare against the dummy rather than short-circuiting, so an unknown
-  // username costs the same ~250 ms as a known one.
-  if (submitted.username !== configured.username) {
-    await bcrypt.compare(submitted.password, DUMMY_HASH);
-    return { ok: false, reason: 'invalid' };
-  }
-
-  return (await bcrypt.compare(submitted.password, hash))
-    ? { ok: true }
-    : { ok: false, reason: 'invalid' };
-}

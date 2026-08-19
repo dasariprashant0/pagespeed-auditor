@@ -45,10 +45,11 @@ export async function getSession(): Promise<SessionClaims | null> {
  * Issue a session cookie. Only callable from a Server Action or Route Handler
  * -- Next throws if a Server Component tries to write cookies.
  */
-export async function startSession(username: string): Promise<void> {
+export async function startSession(userId: string, organizationId: string): Promise<void> {
   const env = getEnv();
   const token = await signSession({
-    username,
+    userId,
+    organizationId,
     secret: env.SESSION_SECRET,
     ttlSeconds: daysToSeconds(env.SESSION_TTL_DAYS),
   });

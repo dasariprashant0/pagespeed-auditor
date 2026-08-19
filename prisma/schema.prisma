@@ -11,19 +11,82 @@ datasource db {
   provider = "postgresql"
 }
 
+/// A person. Identity is global; what they can DO comes from Membership.
 model User {
-  id           String   @id @default(cuid())
-  username     String   @unique
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String?
   passwordHash String
-  createdAt    DateTime @default(now())
+  createdAt    DateTime  @default(now())
+  lastLoginAt  DateTime?
+
+  memberships Membership[]
+  invitesSent Invitation[] @relation("InvitedBy")
+}
+
+/// A tenant. Every Site, Page and AuditResult belongs to exactly one.
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+
+  members     Membership[]
+  sites       Site[]
+  invitations Invitation[]
+}
+
+/// Roles, least to most privileged. Stored as a string rather than a Postgres
+/// enum so adding one later is a code change, not a migration with a lock.
+///   viewer    - read reports, download the agent markdown
+///   editor    - also run audits, generate recommendations, rename/merge groups
+///   developer - also the MCP token and raw PSI JSON
+///   admin     - also teammates, PSI key, site config, schedule, notifications
+model Membership {
+  id             String       @id @default(cuid())
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  role           String       @default("viewer")
+  createdAt      DateTime     @default(now())
+
+  @@unique([userId, organizationId])
+  @@index([organizationId])
+}
+
+/// A pending invitation. The token is stored hashed: a leaked database row must
+/// not be redeemable.
+model Invitation {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  email          String
+  role           String       @default("viewer")
+  tokenHash      String       @unique
+  invitedById    String?
+  invitedBy      User?        @relation("InvitedBy", fields: [invitedById], references: [id], onDelete: SetNull)
+  expiresAt      DateTime
+  acceptedAt     DateTime?
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId, email])
 }
 
 model Site {
-  id         String   @id @default(cuid())
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
   name       String
   sitemapUrl String
-  baseUrl    String // SPEC+: normalization rejects cross-domain <loc> entries
+  baseUrl    String // normalization rejects cross-domain <loc> entries
   createdAt  DateTime @default(now())
+
+  /// Per-site PSI key, so each tenant uses its own Google quota rather than
+  /// sharing one and starving each other. Admin-editable; never sent to the
+  /// browser unmasked.
+  psiApiKey String?
 
   schedule Schedule?
   notif    NotificationSetting?
@@ -154,9 +217,9 @@ model AuditResult {
   seoScore           Int?
 
   // --- Lab metrics (Lighthouse) ---
-  lcp Float?
-  cls Float?
-  fcp Float?
+  lcp  Float?
+  cls  Float?
+  fcp  Float?
   ttfb Float?
 
   // SPEC+: INP is a FIELD-ONLY metric. Lab runs do not produce it, so this is
@@ -253,7 +316,7 @@ model Recommendation {
 
   // SPEC+: makes the create-then-read pattern an atomic lock (ON CONFLICT DO
   // NOTHING), so two tabs opening the same report generate exactly once.
-  status    String  @default("generating") // "generating" | "complete" | "failed"
+  status    String   @default("generating") // "generating" | "complete" | "failed"
   error     String?
   startedAt DateTime @default(now())
 

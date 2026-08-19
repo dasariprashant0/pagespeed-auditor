@@ -37,8 +37,18 @@ function check(label: string, cond: boolean, detail = '') {
 
 async function main() {
   const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
+  // Its own throwaway organisation as well as its own site, so the check can
+  // never touch a real tenant's data.
+  const org = await prisma.organization.create({
+    data: { name: '__invariant_test__', slug: `invariant-${Date.now()}` },
+  });
   const site = await prisma.site.create({
-    data: { name: '__invariant_test__', sitemapUrl: `${BASE}/sitemap.xml`, baseUrl: BASE },
+    data: {
+      organizationId: org.id,
+      name: '__invariant_test__',
+      sitemapUrl: `${BASE}/sitemap.xml`,
+      baseUrl: BASE,
+    },
   });
 
   try {
@@ -107,6 +117,7 @@ async function main() {
     await prisma.groupAlias.deleteMany({ where: { group: { siteId: site.id } } });
     await prisma.group.deleteMany({ where: { siteId: site.id } });
     await prisma.site.delete({ where: { id: site.id } });
+    await prisma.organization.delete({ where: { id: org.id } });
     await prisma.$disconnect();
   }
 

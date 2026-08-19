@@ -1,0 +1,272 @@
+import { randomBytes, createHash } from 'node:crypto';
+import { prisma } from '../db.ts';
+import { hashPassword, verifyPassword } from '../auth/password.ts';
+import { isRole, type Role } from '../auth/roles.ts';
+import { logger } from '../logger.ts';
+
+/**
+ * Accounts, organisations and invitations.
+ *
+ * Identity is global (one User per email) but authority is per-organisation
+ * (Membership). The same person can belong to two tenants with different roles,
+ * and nothing anywhere may assume a user has exactly one.
+ */
+
+export interface SessionContext {
+  userId: string;
+  email: string;
+  name: string | null;
+  organizationId: string;
+  organizationName: string;
+  role: Role;
+}
+
+export function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+function slugify(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'org';
+}
+
+/** Slugs are user-visible and unique; collisions get a numeric suffix. */
+async function uniqueSlug(base: string): Promise<string> {
+  const root = slugify(base);
+  for (let i = 0; i < 50; i++) {
+    const candidate = i === 0 ? root : `${root}-${i + 1}`;
+    const taken = await prisma.organization.findUnique({ where: { slug: candidate }, select: { id: true } });
+    if (!taken) return candidate;
+  }
+  return `${root}-${randomBytes(3).toString('hex')}`;
+}
+
+export type SignupResult =
+  | { ok: true; userId: string; organizationId: string }
+  | { ok: false; error: string };
+
+/**
+ * Creates an organisation and its first admin, atomically.
+ *
+ * An organisation with no admin is unusable and cannot be repaired through the
+ * UI, so the two are never created separately.
+ */
+export async function signup(input: {
+  email: string;
+  password: string;
+  name?: string;
+  organizationName: string;
+}): Promise<SignupResult> {
+  const email = normalizeEmail(input.email);
+  if (!email.includes('@')) return { ok: false, error: 'That does not look like an email address.' };
+  if (input.password.length < 12) return { ok: false, error: 'Use a password of at least 12 characters.' };
+  if (!input.organizationName.trim()) return { ok: false, error: 'Give your organisation a name.' };
+
+  const existing = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+  if (existing) return { ok: false, error: 'An account already exists for that email. Sign in instead.' };
+
+  const passwordHash = await hashPassword(input.password);
+  const slug = await uniqueSlug(input.organizationName);
+
+  const result = await prisma.$transaction(async (tx) => {
+    const org = await tx.organization.create({
+      data: { name: input.organizationName.trim(), slug },
+      select: { id: true },
+    });
+    const user = await tx.user.create({
+      data: { email, name: input.name?.trim() || null, passwordHash },
+      select: { id: true },
+    });
+    await tx.membership.create({ data: { userId: user.id, organizationId: org.id, role: 'admin' } });
+    return { userId: user.id, organizationId: org.id };
+  });
+
+  logger.info({ email, organizationId: result.organizationId }, 'organisation created');
+  return { ok: true, ...result };
+}
+
+export type LoginOutcome =
+  | { ok: true; context: SessionContext }
+  | { ok: false; error: string };
+
+/** Constant-ish cost regardless of outcome; see verifyPassword. */
+export async function login(email: string, password: string): Promise<LoginOutcome> {
+  const normalized = normalizeEmail(email);
+  const user = await prisma.user.findUnique({
+    where: { email: normalized },
+    select: { id: true, email: true, name: true, passwordHash: true },
+  });
+
+  // Always run a compare, even for an unknown address, so response time does
+  // not reveal which emails have accounts.
+  const ok = await verifyPassword(password, user?.passwordHash ?? '');
+  if (!user || !ok) return { ok: false, error: 'Email or password is incorrect.' };
+
+  const membership = await prisma.membership.findFirst({
+    where: { userId: user.id },
+    orderBy: { createdAt: 'asc' },
+    select: { organizationId: true, role: true, organization: { select: { name: true } } },
+  });
+  if (!membership) {
+    return { ok: false, error: 'This account is not a member of any organisation. Ask an admin to invite you again.' };
+  }
+
+  await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+
+  return {
+    ok: true,
+    context: {
+      userId: user.id,
+      email: user.email,
+      name: user.name,
+      organizationId: membership.organizationId,
+      organizationName: membership.organization.name,
+      role: isRole(membership.role) ? membership.role : 'viewer',
+    },
+  };
+}
+
+/** Re-reads authority on every request; a revoked role must take effect at once. */
+export async function contextFor(userId: string, organizationId?: string): Promise<SessionContext | null> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, email: true, name: true },
+  });
+  if (!user) return null;
+
+  const membership = await prisma.membership.findFirst({
+    where: { userId, ...(organizationId ? { organizationId } : {}) },
+    orderBy: { createdAt: 'asc' },
+    select: { organizationId: true, role: true, organization: { select: { name: true } } },
+  });
+  if (!membership) return null;
+
+  return {
+    userId: user.id,
+    email: user.email,
+    name: user.name,
+    organizationId: membership.organizationId,
+    organizationName: membership.organization.name,
+    role: isRole(membership.role) ? membership.role : 'viewer',
+  };
+}
+
+// --- invitations -----------------------------------------------------------
+
+const INVITE_TTL_DAYS = 7;
+
+function hashToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
+}
+
+export interface CreatedInvite {
+  token: string;
+  email: string;
+  role: Role;
+  expiresAt: Date;
+}
+
+/**
+ * The raw token is returned ONCE and never stored -- only its hash is. A leaked
+ * database row therefore cannot be redeemed.
+ */
+export async function inviteMember(input: {
+  organizationId: string;
+  email: string;
+  role: Role;
+  invitedById: string;
+}): Promise<{ ok: true; invite: CreatedInvite } | { ok: false; error: string }> {
+  const email = normalizeEmail(input.email);
+  if (!email.includes('@')) return { ok: false, error: 'That does not look like an email address.' };
+
+  const already = await prisma.membership.findFirst({
+    where: { organizationId: input.organizationId, user: { email } },
+    select: { id: true },
+  });
+  if (already) return { ok: false, error: `${email} is already a member.` };
+
+  const token = randomBytes(32).toString('base64url');
+  const expiresAt = new Date(Date.now() + INVITE_TTL_DAYS * 86_400_000);
+
+  // Re-inviting replaces the outstanding invite rather than accumulating rows.
+  await prisma.invitation.deleteMany({
+    where: { organizationId: input.organizationId, email, acceptedAt: null },
+  });
+  await prisma.invitation.create({
+    data: {
+      organizationId: input.organizationId,
+      email,
+      role: input.role,
+      tokenHash: hashToken(token),
+      invitedById: input.invitedById,
+      expiresAt,
+    },
+  });
+
+  return { ok: true, invite: { token, email, role: input.role, expiresAt } };
+}
+
+export type AcceptOutcome =
+  | { ok: true; userId: string; organizationId: string; needsPassword: boolean }
+  | { ok: false; error: string };
+
+/**
+ * Redeems an invitation, creating the account if this is a new person.
+ *
+ * The invited address is authoritative: accepting cannot be redirected to a
+ * different email, or an intercepted link would let someone join as themselves.
+ */
+export async function acceptInvitation(token: string, password?: string, name?: string): Promise<AcceptOutcome> {
+  const invite = await prisma.invitation.findUnique({
+    where: { tokenHash: hashToken(token) },
+    select: { id: true, organizationId: true, email: true, role: true, expiresAt: true, acceptedAt: true },
+  });
+
+  if (!invite) return { ok: false, error: 'That invitation link is not valid.' };
+  if (invite.acceptedAt) return { ok: false, error: 'That invitation has already been used.' };
+  if (invite.expiresAt < new Date()) return { ok: false, error: 'That invitation has expired. Ask for a new one.' };
+
+  const existing = await prisma.user.findUnique({
+    where: { email: invite.email },
+    select: { id: true },
+  });
+
+  if (!existing && (!password || password.length < 12)) {
+    return { ok: false, error: 'Choose a password of at least 12 characters.' };
+  }
+
+  const role: Role = isRole(invite.role) ? invite.role : 'viewer';
+
+  const userId = await prisma.$transaction(async (tx) => {
+    const user =
+      existing ??
+      (await tx.user.create({
+        data: { email: invite.email, name: name?.trim() || null, passwordHash: await hashPassword(password!) },
+        select: { id: true },
+      }));
+
+    await tx.membership.upsert({
+      where: { userId_organizationId: { userId: user.id, organizationId: invite.organizationId } },
+      update: { role },
+      create: { userId: user.id, organizationId: invite.organizationId, role },
+    });
+    await tx.invitation.update({ where: { id: invite.id }, data: { acceptedAt: new Date() } });
+    return user.id;
+  });
+
+  logger.info({ email: invite.email, organizationId: invite.organizationId, role }, 'invitation accepted');
+  return { ok: true, userId, organizationId: invite.organizationId, needsPassword: false };
+}
+
+/**
+ * Removing the last admin would leave the organisation unmanageable, with no
+ * way back through the UI. Both removal and demotion are blocked.
+ */
+export async function wouldOrphanOrganization(organizationId: string, userId: string): Promise<boolean> {
+  const admins = await prisma.membership.count({ where: { organizationId, role: 'admin' } });
+  if (admins > 1) return false;
+  const target = await prisma.membership.findFirst({
+    where: { organizationId, userId },
+    select: { role: true },
+  });
+  return target?.role === 'admin';
+}

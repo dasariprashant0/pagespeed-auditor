@@ -3,6 +3,7 @@ import { prisma } from '../../db.ts';
 import { runLogger } from '../../logger.ts';
 import { finalizeRun } from '../../services/run.service.ts';
 import { buildSweepSummary } from '../../services/sweepSummary.service.ts';
+import { pruneSiteHistory } from '../../services/retention.service.ts';
 import { dispatchSweepNotification } from '../../notify/index.ts';
 import { getEnv } from '../../env.ts';
 import type { FinalizeRunJobData } from '../jobs.ts';
@@ -27,7 +28,19 @@ export async function processFinalizeRun(job: Job<FinalizeRunJobData>): Promise<
     where: { id: runId },
     select: { type: true, siteId: true },
   });
-  if (run?.type !== 'full_sweep') return;
+  if (!run) return;
+
+  // Immediately after a run is the moment new results exist, so it is the
+  // natural point to drop whatever has now aged out of the keep window.
+  try {
+    const pruned = await pruneSiteHistory(run.siteId);
+    if (pruned.resultsDeleted > 0) log.info({ ...pruned }, 'aged-out history removed');
+  } catch (e) {
+    // Never let housekeeping fail a run that otherwise succeeded.
+    log.error({ err: e instanceof Error ? e.message : String(e) }, 'history prune failed');
+  }
+
+  if (run.type !== 'full_sweep') return;
   if (status !== 'completed' && status !== 'failed') return;
 
   const summary = await buildSweepSummary(

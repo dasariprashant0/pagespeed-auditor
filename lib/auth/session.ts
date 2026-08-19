@@ -33,8 +33,15 @@ export const JWT_AUDIENCE = 'pagespeed-auditor';
 export const MIN_SECRET_LENGTH = 32;
 
 export interface SessionClaims {
-  /** The authenticated username. */
-  username: string;
+  /** The authenticated user's id. */
+  userId: string;
+  /**
+   * Which organisation this session is acting in. A user can belong to several,
+   * so the token has to say which one -- but the ROLE is deliberately not in
+   * here: it is re-read from the database on every request, so revoking
+   * someone's access takes effect immediately rather than at token expiry.
+   */
+  organizationId: string;
   /** Issued-at, seconds since epoch. */
   issuedAt: number;
   /** Expiry, seconds since epoch. */
@@ -42,7 +49,8 @@ export interface SessionClaims {
 }
 
 export interface SignSessionParams {
-  username: string;
+  userId: string;
+  organizationId: string;
   secret: string;
   /** Lifetime in seconds. SESSION_TTL_DAYS x 86400 in the app; tests pass small or negative-offset values. */
   ttlSeconds: number;
@@ -63,12 +71,12 @@ export function sessionKey(secret: string): Uint8Array {
   return new TextEncoder().encode(secret);
 }
 
-export async function signSession({ username, secret, ttlSeconds, now = new Date() }: SignSessionParams): Promise<string> {
+export async function signSession({ userId, organizationId, secret, ttlSeconds, now = new Date() }: SignSessionParams): Promise<string> {
   const iat = Math.floor(now.getTime() / 1000);
 
-  return new SignJWT({})
+  return new SignJWT({ org: organizationId })
     .setProtectedHeader({ alg: JWT_ALG })
-    .setSubject(username)
+    .setSubject(userId)
     .setIssuer(JWT_ISSUER)
     .setAudience(JWT_AUDIENCE)
     .setIssuedAt(iat)
@@ -93,9 +101,10 @@ export async function verifySession(token: string, secret: string): Promise<Sess
     });
 
     if (typeof payload.sub !== 'string' || payload.sub.length === 0) return null;
+    if (typeof payload.org !== 'string' || payload.org.length === 0) return null;
     if (typeof payload.iat !== 'number' || typeof payload.exp !== 'number') return null;
 
-    return { username: payload.sub, issuedAt: payload.iat, expiresAt: payload.exp };
+    return { userId: payload.sub, organizationId: payload.org, issuedAt: payload.iat, expiresAt: payload.exp };
   } catch {
     return null;
   }
