@@ -272,3 +272,33 @@ Listed because each looks like an omission and isn't.
 - **`AuditResult` keeps error rows** (`status: 'error'`, null scores) so a failed
   job still lets a run finalize. The consequence — every aggregate must filter
   `status: 'ok'` — is a real footgun and is called out in the README.
+
+---
+
+## 5. Decisions made after seeing real data
+
+### 5.1 The 42 single-page groups — fixed in presentation, not in the data model
+
+Ingesting the real site produced 68 groups from 747 pages: `blog` alone holds
+324 (43% of the site), and **42 groups hold exactly one page**. A home screen
+rendering 68 cards, most of them one page, is not usable.
+
+Three options were on the table: leave it and merge by hand (42 manual merges —
+unreasonable), auto-fold small groups into an "Other" group at ingest time
+(changes the spec-locked grouping rule and loses the path information), or fix
+it in the dashboard.
+
+**Chosen: fix it in the dashboard.** The data model stays exactly as the spec
+locks it — first path segment, one `Group` row per segment, manual merge still
+available. The home view sorts groups by page count, renders groups at or above
+a threshold (default 3 pages) as normal cards, and collapses the remainder into
+a single expandable "Small groups (42)" card.
+
+Why this rather than changing ingestion: it is reversible (a display constant,
+not a migration), it loses no information, group URLs keep working, and if the
+team later merges the obvious pairs by hand the tail shrinks on its own. It also
+keeps the spec's locked rule genuinely intact rather than nominally intact.
+
+Merge candidates visible in the real data, for whenever someone wants them:
+`ebooks` (26) + `ebook` (5); and `author`, `blog-topic`, `event-type` look like
+taxonomy pages rather than content.
