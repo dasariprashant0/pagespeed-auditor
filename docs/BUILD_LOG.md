@@ -43,8 +43,8 @@ Milestone definitions and their verification steps are in `docs/PLAN.md`
 | M1 | PSI extraction (pure, fixture-driven) | **done** — 47 tests passing against real fixtures |
 | M2 | Markdown report (pure) | **done** — 17 tests |
 | M3 | PSI client + rate limiter + throughput dry-run | **done** — gate PASSED |
-| M4 | Sitemap ingestion | **next** |
-| M5 | Queue, idempotency, resumability | not started |
+| M4 | Sitemap ingestion | **done** — 747 real pages ingested, invariants verified |
+| M5 | Queue, idempotency, resumability | **next** |
 | M6 | Services for the dashboard | not started |
 | M7 | Auth + routes | not started |
 | M8 | Dashboard | not started |
@@ -270,7 +270,7 @@ Gaps found, and their status:
 | `docs/DECISIONS.md` orphaned (unlinked) | **Fixed** — linked from README and this file. |
 | `lib/queue/worker.ts`, `scripts/throughput-dryrun.ts`, `proxy.ts`, `docker-compose.yml`, `Dockerfile.*` referenced but missing | **Expected** — these belong to M3/M5/M8/M12. Listed here so the dangling references aren't mistaken for oversights. |
 | `SITE.md` absent | **Deferred to M10**, per the plan. |
-| No sitemap fixtures | **Expected** — M4. |
+| Sitemap fixtures | **Done** — index, gzipped child, single-`<url>`, cross-domain, asset, utm and trailing-slash duplicates. |
 | `prisma/migrations/` empty | **Blocked on Docker.** The first migration is created the moment the dev stack is up. |
 
 ### M1 complete — extraction written and tested
@@ -363,3 +363,67 @@ estimate are sound.**
 Client error classification is tested against the captured live 400 body: a
 Lighthouse content failure (`lighthouseUserError` / `NO_FCP`) is classified
 `content` and becomes a stored error row, while other 400s stay `permanent`.
+
+### Counterfactual: why concurrency 20 and not 4
+
+Ran the same dry-run at `WORKER_CONCURRENCY=4` -- the value my first draft
+specified -- to check the correction empirically rather than trusting arithmetic:
+
+| | concurrency 20 | concurrency 4 |
+|---|---|---|
+| Steady-state | **0.695 req/s** | 0.225 req/s |
+| Peak in flight | 15 of 20 | **4 of 4 (pinned)** |
+| 2000-call sweep | **48 min** | **148 min** |
+
+In-flight pinned at the ceiling is the signature of the worker pool throttling
+rather than the limiter. The original draft would have made every sweep roughly
+three times slower, with no error and nothing in the logs to explain it.
+
+### M4 complete -- sitemap ingestion
+
+`lib/sitemap/{normalize,fetch,group}.ts`,
+`lib/services/{ingest,group}.service.ts`, 19 unit tests plus a 15-assertion
+database integration check.
+
+**Real ingest of www.zuddl.com:**
+
+| | |
+|---|---|
+| Pages discovered | **747** |
+| Groups derived | 68 |
+| Duplicates collapsed | 0 |
+| Rejected | none |
+| Sitemap documents | 1 (flat, no index) |
+| Ingest time | 0.7 s |
+| **Full sweep** | **1,494 PSI calls -> ~33 min** |
+
+Re-running is a clean no-op: 0 created, 0 regrouped, 0 groups created,
+0 deactivated.
+
+`npm run verify:ingest` exercises the invariants against a throwaway Site row
+served from fixtures, so real data is never touched. All 15 pass, including the
+ones most likely to break silently:
+
+- a merged-away group does **not** reappear on re-ingest and does not drag its
+  pages back out (this is what `GroupAlias` is for);
+- a renamed-away slug likewise does not reappear;
+- a page with `isManuallyGrouped` is **not** moved back;
+- a URL dropped from the sitemap is deactivated, **not deleted** -- all 6 rows
+  survive when only 1 remains listed.
+
+New scripts: `npm run inspect-sitemap` (crawl/normalize/group report, writes
+nothing), `npm run ingest` (supports `-- --dry`), `npm run verify:ingest`.
+
+### Finding for the user: 42 of 68 groups hold a single page
+
+The spec's first-path-segment rule, applied to this site, produces a long tail.
+`blog` alone holds 324 pages (43% of the site) while 42 groups hold exactly one.
+The dashboard home would render 68 cards, most of them one page.
+
+The fix mechanism exists and is tested -- manual merge -- but doing it by hand
+42 times is not reasonable. Some pairs are already obvious (`ebooks` 26 /
+`ebook` 5; `author`, `blog-topic`, `event-type` look like taxonomy pages rather
+than content). **This is a product decision, not a bug**, and it is deliberately
+not being changed unilaterally because the grouping rule is spec-locked. Options
+to put to the user: leave it and merge by hand; fold groups under a page-count
+threshold into "Other"; or add a merge-suggestion step to Settings.
