@@ -9,6 +9,7 @@
 
 | File | What it is |
 |---|---|
+| **`docs/RESUME_HERE.md`** | **Read first.** Current state, next action, and the traps that cost time. |
 | `docs/PLAN.md` | The approved build plan. **Source of truth** for architecture, schema, and verification. |
 | `docs/BUILD_LOG.md` | Current state: what's built, what's next, what's blocked. Update it as you work. |
 | `docs/DECISIONS.md` | Why things are the way they are, and what was rejected. Read before changing a design. |

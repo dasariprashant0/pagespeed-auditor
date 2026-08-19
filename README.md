@@ -8,6 +8,7 @@ modelled on pagespeed.web.dev.
 
 | Doc | What it is |
 |---|---|
+| **`docs/RESUME_HERE.md`** | **Picking this up cold? Start here.** Current state, the next action, and the gotchas that cost time. |
 | **`docs/PLAN.md`** | The approved build plan. Architecture, schema reasoning, verification steps. **Read this first.** |
 | **`docs/BUILD_LOG.md`** | What's built, what's next, what's blocking. Updated as work lands. |
 | `docs/DECISIONS.md` | Why it's built this way, and what was rejected. Read before changing a design. |
