@@ -6,7 +6,7 @@ import { AppShell } from '@/components/shell/AppShell';
 import { ScheduleForm } from '@/components/settings/ScheduleForm';
 import { NotificationForm } from '@/components/settings/NotificationForm';
 import { PriorityForm } from '@/components/settings/PriorityForm';
-import { emailIsConfigured } from '@/lib/notify/email';
+import { emailConfigProblem } from '@/lib/notify/email';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,7 +36,7 @@ export default async function SettingsPage() {
     prisma.notificationSetting.findUnique({ where: { siteId: site.id } }),
   ]);
 
-  const emailReady = emailIsConfigured();
+  const emailProblem = emailConfigProblem();
   const activePages = groups.reduce((n, g) => n + g.pageCount, 0);
   const sweepEstimate = await estimateRun(activePages * 2, site.id);
 
@@ -67,9 +67,9 @@ export default async function SettingsPage() {
         <Section
           title="Notifications"
           hint={
-            emailReady
-              ? 'Both channels are off until you turn them on. Email is configured and will actually send.'
-              : 'Both channels are off until you turn them on. NOTE: EMAIL_TRANSPORT is not set to "smtp", so email is written to the log rather than sent — set EMAIL_TRANSPORT, SMTP_HOST, SMTP_USER and SMTP_PASS in .env and restart. Slack needs only a webhook URL and works without any of that.'
+            emailProblem
+              ? `Both channels are off until you turn them on. Email cannot send yet: ${emailProblem} Slack needs none of that — a webhook URL alone works.`
+              : `Both channels are off until you turn them on. Email is ready and will send via ${process.env.SMTP_HOST}.`
           }
         >
           <NotificationForm
@@ -102,7 +102,7 @@ export default async function SettingsPage() {
               ['Pages tested at once', String(env.WORKER_CONCURRENCY)],
               ['Google rate limit', `${env.PSI_RATE_MAX} requests per ${env.PSI_RATE_WINDOW_MS / 1000}s`],
               ['Typical time per page', sweepEstimate.measured ? `${Math.round(sweepEstimate.medianCallMs / 1000)} seconds (measured)` : 'not measured yet'],
-              ['Email transport', emailReady ? `smtp via ${process.env.SMTP_HOST}` : `${process.env.EMAIL_TRANSPORT ?? 'none'} — logs only, does not send`],
+              ['Email', emailProblem ? 'not sending — see the Notifications section' : `sending via ${process.env.SMTP_HOST}`],
             ] as Array<[string, string]>).map(([k, v]) => (
               <div key={k} className="flex flex-wrap gap-x-4 py-1.5">
                 <dt className="w-44 shrink-0 text-[var(--muted)]">{k}</dt>
