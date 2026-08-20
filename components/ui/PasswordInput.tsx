@@ -27,6 +27,8 @@ function EyeOffIcon() {
   );
 }
 
+const PLACEHOLDER_CHAR = '•';
+
 /**
  * A password/secret input with an eye toggle to check what's actually in
  * it before submitting -- wherever confidential values get typed (login,
@@ -36,26 +38,55 @@ function EyeOffIcon() {
  * typed short of retyping it blind, which is exactly what led to a wrong
  * port number sitting unnoticed in a masked field earlier.
  *
+ * The eye disables itself while the value is still the saved-secret
+ * placeholder (a run of `•`, this codebase's existing convention for "a
+ * value is stored" -- see updatePsiKeyAction/updateOrgEmailAction/
+ * saveNotificationsAction, which all check `raw.includes('•')` the same
+ * way to mean "untouched, keep what's already saved"). Revealing that
+ * placeholder would only ever show the literal dots as plain text, not
+ * the real secret, which is deliberately never sent to the browser at
+ * all -- clicking the eye and seeing the same dots back reads as "broken"
+ * rather than "correctly refusing to fake a look at a value it doesn't
+ * have." Once the field holds a real typed value (no `•` in it), the eye
+ * works normally.
+ *
  * Drop-in for `<input type="password">`: takes the same props, manages its
  * own reveal state, and never itself changes the value -- only whether it's
  * legible.
  */
 export function PasswordInput({
   className = '',
+  defaultValue,
+  onChange,
   ...props
-}: InputHTMLAttributes<HTMLInputElement>) {
+}: Omit<InputHTMLAttributes<HTMLInputElement>, 'type' | 'value'>) {
+  const [value, setValue] = useState(defaultValue != null ? String(defaultValue) : '');
   const [visible, setVisible] = useState(false);
+  const isPlaceholder = value.includes(PLACEHOLDER_CHAR);
+  const revealed = visible && !isPlaceholder;
+
   return (
     <div className="relative">
-      <input {...props} type={visible ? 'text' : 'password'} className={`${className} pr-8`} />
+      <input
+        {...props}
+        value={value}
+        onChange={(e) => {
+          setValue(e.target.value);
+          onChange?.(e);
+        }}
+        type={revealed ? 'text' : 'password'}
+        className={`${className} pr-8`}
+      />
       <button
         type="button"
+        disabled={isPlaceholder}
         onClick={() => setVisible((v) => !v)}
-        aria-label={visible ? 'Hide value' : 'Show value'}
-        aria-pressed={visible}
-        className="absolute inset-y-0 right-0 flex w-8 items-center justify-center text-[var(--muted)] transition-colors hover:text-[var(--foreground)]"
+        aria-label={revealed ? 'Hide value' : 'Show value'}
+        aria-pressed={revealed}
+        title={isPlaceholder ? 'The saved value can’t be shown again — type a new one to replace it.' : undefined}
+        className="absolute inset-y-0 right-0 flex w-8 items-center justify-center text-[var(--muted)] transition-colors hover:text-[var(--foreground)] disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:text-[var(--muted)]"
       >
-        {visible ? <EyeOffIcon /> : <EyeIcon />}
+        {revealed ? <EyeOffIcon /> : <EyeIcon />}
       </button>
     </div>
   );
