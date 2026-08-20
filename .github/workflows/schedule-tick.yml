@@ -1,0 +1,32 @@
+name: Schedule tick
+
+# Vercel Cron on the Hobby plan can only fire once a day (see vercel.json and
+# CLAUDE.md's "Environment gotchas"), but /api/cron/schedule-tick's own code
+# assumes a 15-minute cadence (lib/redis.ts's CRON_INTERVAL_MS, the scheduler
+# "alive" heartbeat threshold, and how promptly a configured schedule actually
+# fires). This workflow is the free external pinger that gap needed and never
+# had -- GitHub Actions' own schedule trigger, no paid plan required.
+#
+# GitHub's schedule trigger is best-effort and can slip by several minutes
+# under load; that's fine here since the route itself is idempotent per tick
+# and schedule.service.ts refuses schedules closer than an hour apart.
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch: {}
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hit schedule-tick
+        run: |
+          status=$(curl -s -o /dev/null -w '%{http_code}' \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "https://pagespeed-auditor.vercel.app/api/cron/schedule-tick")
+          echo "response status: $status"
+          if [ "$status" != "200" ]; then
+            echo "::error::schedule-tick returned $status"
+            exit 1
+          fi
