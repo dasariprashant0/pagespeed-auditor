@@ -602,3 +602,34 @@ The SDK's own docs say it "currently work[s] best when deployed to Vercel,"
 so this was treated as a local-dev-only wrinkle rather than chased further —
 verify a real run end-to-end against a Vercel **preview** deployment before
 promoting to production.
+
+## 12. `prisma migrate deploy` moved into the build script (20 Aug 2026)
+
+**Chosen:** `"build": "prisma generate && prisma migrate deploy && next build"`
+— pending migrations now apply automatically on every Vercel deploy, instead
+of someone having to remember to run them against production by hand.
+
+**Why, not just "convenience":** `vercel env pull --environment=production`
+returns `DATABASE_URL=""` for this project — genuinely empty, confirmed with
+`vercel env ls production` showing it as a normal (Encrypted) project-scoped
+variable, not a special one. The deployed app plainly works, so *something*
+supplies Vercel's build/runtime with a real connection string; it just isn't
+retrievable through the CLI the way the rest of this project's env vars are.
+That means **a local machine cannot reliably run `prisma migrate deploy`
+against production at all** — not "shouldn't," genuinely can't get a working
+value to point it at. Vercel's own build step is the one place that
+demonstrably has a working `DATABASE_URL`, so that is where the migration
+has to run.
+
+**Safety:** `migrate deploy` only applies forward migrations already
+committed to `prisma/migrations/` — it never generates a new one, never
+prompts, and is idempotent (a build with nothing pending is a no-op). If a
+migration fails, the build fails with it, which is the correct failure mode:
+shipping code that expects a column the database doesn't have yet is worse
+than a red deploy.
+
+**What this replaces:** the previous expectation (`CLAUDE.md`, and the
+instructions given after the `roleTourSeenAt` migration) that someone would
+`vercel env pull` + `prisma migrate deploy` by hand before/after a deploy.
+That path is now understood to not reliably work for this project's
+production database regardless of who runs it, not just inconvenient.
