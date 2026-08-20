@@ -1060,3 +1060,62 @@ code-level (the `Promise.allSettled` + last-attempt gap is unambiguous) but
 whether Upstash connectivity is really the trigger, versus some other
 unclassified exception, remains circumstantial until it's caught in the act
 with a log line attached.
+
+## 20 Aug 2026 (later still) — storage math, and a way to delete specific checks
+
+Prompted by a real worry: "one whole-site sweep is ~200 MB, how does Neon
+survive three of them, and at $5/month will the infra cost more than the
+revenue." Two separate answers, both grounded in live numbers rather than
+guesses.
+
+**Growth was already capped, just not visibly.** `finalize.ts` has called
+`pruneSiteHistory` after every run since the BullMQ→Workflow migration,
+keeping the last `DEFAULT_KEEP_RUNS` (10) results per (page, strategy).
+Production's own Settings → Site panel showed the real number:
+**154.8 MB, 1,516 results, 6 checks, 1 day of history** — essentially one
+full sweep's `pg_column_size` (compressed, on-disk), matching the "~200 MB"
+instinct. Steady state plateaus around 10× that per site, not unbounded.
+
+**Real pricing** (fetched live, not memorized): Neon storage $0.35/GB-month
+(free tier only 0.5 GB); Vercel Blob storage $0.023/GB-month — **~15× cheaper
+per GB** — plus $0.40/1M read ops and $5/1M write ops; Upstash Redis PAYG
+$0.2/100k commands + $0.25/GB, free tier 256 MB / 500k commands/month. Two
+conclusions: Redis is not the cost risk (the app's only usage is the rate
+limiter and a heartbeat key, nowhere near the free tier); `rawJson` sitting
+in Postgres is the wrong call given Blob is ~15× cheaper for the exact same
+bytes and also shrinks what Neon has to TOAST/detoast on every write and
+read. **Not yet done:** actually moving `rawJson` to Vercel Blob — agreed to
+land as its own change, after this one.
+
+**Built now: pick-and-delete, not just a blanket wipe.** First cut was a
+single "delete everything" button; the ask (fairly) was finer control —
+"I ran the whole-site sweep 5 times, let me choose which to delete." Landed
+as a per-run picker instead:
+
+- `retention.service.ts` gained `deleteRuns(siteId, runIds)` — scoped to
+  `siteId` (a run id is a Server Action argument, not proof of ownership,
+  same reasoning as every other tenant-scoped action) and to terminal
+  statuses only (`completed`/`failed`/`cancelled`/`skipped`) — deleting a
+  run's row out from under a workflow step still writing to it would break
+  the FK the step depends on mid-flight, not just lose history.
+- `deleteRunsAction` in `app/actions/site.ts` gates on `site:manage`
+  (admin-only, same capability the rest of the Site settings page already
+  requires) and reports both the run count and the results count removed.
+- `RunHistoryList` replaces the old read-only "Recent checks" list in
+  `AutomationStatus` with the same list plus a checkbox per row, "select
+  all", and the two-step confirm pattern already used by `RunControls`'
+  "Stop for good" (click once to reveal Delete/Cancel, rather than a native
+  `confirm()`). A run still in flight has no checkbox at all.
+- Bumped the recent-runs query from `take: 10` to `take: 30` so there is
+  something to pick from beyond the last handful.
+
+### Verified
+
+`npx tsc --noEmit` clean. `npm run lint` 0 errors (same 6 pre-existing
+warnings). `npm test` 127/127. Exercised for real against local dev's
+database (not production): selected one `cancelled 0/2` run in
+Settings → Automation, confirmed, got "Deleted 1 check.", and every other
+row — including the 1,494-page scheduled sweep — was left untouched.
+Production cleanup itself was deliberately left to the user to do through
+this same UI once deployed, rather than run from here, so the choice of
+which checks survive stays theirs.

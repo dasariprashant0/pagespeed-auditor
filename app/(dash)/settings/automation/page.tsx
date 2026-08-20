@@ -50,7 +50,9 @@ export default async function SettingsPage() {
     prisma.auditRun.findMany({
       where: { siteId: site.id },
       orderBy: { startedAt: 'desc' },
-      take: 10,
+      // Enough to pick from a run history "I ran this 5 times" without
+      // paginating -- these are small metadata rows, not the heavy results.
+      take: 30,
       select: {
         id: true, type: true, triggeredBy: true, status: true,
         startedAt: true, finishedAt: true,
@@ -84,7 +86,13 @@ export default async function SettingsPage() {
       <SettingsNav role={ctx.role} active="/settings/automation" />
 
       <div className="max-w-3xl space-y-3">
-        <AutomationStatus health={health} maxAttempts={env.PSI_MAX_ATTEMPTS} canRetry={can(ctx.role, 'audits:run')} />
+        <AutomationStatus
+          health={health}
+          maxAttempts={env.PSI_MAX_ATTEMPTS}
+          canRetry={can(ctx.role, 'audits:run')}
+          siteId={site.id}
+          canDelete={can(ctx.role, 'site:manage')}
+        />
 
         <Section
           title="Automatic site check"

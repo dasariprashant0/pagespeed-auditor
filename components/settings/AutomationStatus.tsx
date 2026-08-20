@@ -1,6 +1,4 @@
-import Link from 'next/link';
-import { RunControls } from '@/components/runs/RunControls';
-import { FailedPages } from '@/components/runs/FailedPages';
+import { RunHistoryList, type HistoryRun } from '@/components/settings/RunHistoryList';
 
 export interface AutomationHealth {
   schedulerAlive: boolean;
@@ -10,17 +8,7 @@ export interface AutomationHealth {
   nextRunAt: string | null;
   lastRunAt: string | null;
   timezone: string;
-  recentRuns: Array<{
-    id: string;
-    type: string;
-    triggeredBy: string;
-    status: string;
-    startedAt: string;
-    finishedAt: string | null;
-    completedJobs: number;
-    totalJobs: number;
-    failedJobs: number;
-  }>;
+  recentRuns: HistoryRun[];
 }
 
 function ago(seconds: number | null): string {
@@ -54,10 +42,14 @@ export function AutomationStatus({
   health,
   maxAttempts,
   canRetry,
+  siteId,
+  canDelete,
 }: {
   health: AutomationHealth;
   maxAttempts: number;
   canRetry: boolean;
+  siteId: string;
+  canDelete: boolean;
 }) {
   const rows: Array<[string, React.ReactNode, boolean]> = [
     [
@@ -109,49 +101,14 @@ export function AutomationStatus({
 
       <div className="border-t border-[var(--border)] px-4 py-3">
         <div className="eyebrow mb-2">Recent checks</div>
-        {health.recentRuns.length === 0 ? (
-          <p className="text-[11px] text-[var(--muted)]">
-            Nothing has run yet. The first scheduled check will appear here.
-          </p>
-        ) : (
-          <ul className="space-y-1">
-            {health.recentRuns.map((r) => (
-              <li key={r.id} className="text-[11px]">
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
-                <span className="tnum w-32 shrink-0 text-[var(--muted)]">{when(r.startedAt, health.timezone)}</span>
-                <span className="w-24 shrink-0">
-                  {r.type === 'full_sweep' ? 'whole site' : r.type === 'group' ? 'a section' : 'one page'}
-                </span>
-                <span className="w-20 shrink-0 text-[var(--muted)]">
-                  {r.triggeredBy === 'schedule' ? 'scheduled' : 'manual'}
-                </span>
-                <span
-                  className="tnum"
-                  style={{
-                    color:
-                      r.status === 'failed'
-                        ? 'var(--score-fail-text)'
-                        : r.status === 'completed'
-                          ? 'var(--score-pass-text)'
-                          : 'var(--muted)',
-                  }}
-                >
-                  {r.status} {r.completedJobs}/{r.totalJobs}
-                  {r.failedJobs > 0 && ` · ${r.failedJobs} failed`}
-                </span>
-                {/* Only renders for a run still in flight; it returns null
-                    otherwise, so finished rows stay quiet. */}
-                <RunControls runId={r.id} status={r.status} compact />
-                </div>
-                <FailedPages runId={r.id} count={r.failedJobs} attempts={maxAttempts} canRetry={canRetry} />
-              </li>
-            ))}
-          </ul>
-        )}
-        <p className="mt-2 text-[11px] text-[var(--faint)]">
-          A running check also shows as a progress bar at the top of every screen, with a link to
-          whatever it is measuring. <Link href="/" className="underline">Overview</Link>
-        </p>
+        <RunHistoryList
+          runs={health.recentRuns}
+          timezone={health.timezone}
+          siteId={siteId}
+          canDelete={canDelete}
+          maxAttempts={maxAttempts}
+          canRetry={canRetry}
+        />
       </div>
     </section>
   );

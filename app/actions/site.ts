@@ -130,3 +130,35 @@ export async function ingestSitemapAction(siteId: string): Promise<SiteResult> {
     return fail(e);
   }
 }
+
+/**
+ * Deletes chosen historical checks entirely -- an operator picking specific
+ * sweeps/sections to reclaim space, not the age-based prune that already runs
+ * after every finalize. Pages, groups and site config are untouched.
+ */
+export async function deleteRunsAction(siteId: string, runIds: string[]): Promise<SiteResult> {
+  try {
+    const ctx = await requireCapability('site:manage');
+    await requireSiteAccess(ctx.organizationId, siteId);
+    if (runIds.length === 0) return { ok: false, error: 'Select at least one check to delete.' };
+
+    const { deleteRuns } = await import('@/lib/services/retention.service');
+    const { runsDeleted, resultsDeleted } = await deleteRuns(siteId, runIds);
+
+    if (runsDeleted === 0) {
+      return { ok: false, error: 'Nothing was deleted — a run still in progress cannot be removed this way.' };
+    }
+
+    revalidatePath('/settings/site');
+    revalidatePath('/settings/automation');
+    revalidatePath('/', 'layout');
+    return {
+      ok: true,
+      message: `Deleted ${runsDeleted} check${runsDeleted === 1 ? '' : 's'}${
+        resultsDeleted > 0 ? ` — ${resultsDeleted.toLocaleString()} results removed` : ''
+      }.`,
+    };
+  } catch (e) {
+    return fail(e);
+  }
+}

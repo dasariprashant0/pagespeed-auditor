@@ -85,6 +85,36 @@ export async function pruneSiteHistory(siteId: string): Promise<RetentionSummary
   return summary;
 }
 
+/**
+ * Deletes specific historical checks entirely, at the operator's choice --
+ * not an age-based prune. AuditResult/AuditIssue/Recommendation cascade from
+ * AuditRun, so one deleteMany takes a whole run's data with it.
+ *
+ * Scoped to siteId, same as pruneSiteHistory: a run id is a Server Action
+ * argument and therefore not proof the caller's organisation owns it.
+ *
+ * Excludes anything not yet terminal -- deleting a run's row out from under a
+ * workflow step that is still writing to it would break the FK it depends on
+ * mid-flight, not just lose history.
+ */
+export async function deleteRuns(
+  siteId: string,
+  runIds: string[],
+): Promise<{ runsDeleted: number; resultsDeleted: number }> {
+  if (runIds.length === 0) return { runsDeleted: 0, resultsDeleted: 0 };
+
+  const deletable = await prisma.auditRun.findMany({
+    where: { siteId, id: { in: runIds }, status: { in: ['completed', 'failed', 'cancelled', 'skipped'] } },
+    select: { id: true },
+  });
+  const ids = deletable.map((r) => r.id);
+  if (ids.length === 0) return { runsDeleted: 0, resultsDeleted: 0 };
+
+  const resultsDeleted = await prisma.auditResult.count({ where: { auditRunId: { in: ids } } });
+  const { count: runsDeleted } = await prisma.auditRun.deleteMany({ where: { id: { in: ids } } });
+  return { runsDeleted, resultsDeleted };
+}
+
 /** Removes runs that no longer have any results, so the run list stays honest. */
 export async function pruneEmptyRuns(siteId: string): Promise<number> {
   const res = await prisma.auditRun.deleteMany({
