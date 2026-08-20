@@ -114,6 +114,45 @@
   }
 }
 
+/* Explicit choice, independent of the OS setting -- see ThemeToggle.tsx. Same
+   tokens as the media query above, repeated rather than shared, because plain
+   CSS custom properties have no mixin: this is the one place duplicating them
+   is simpler than inventing a way not to. */
+:root[data-theme="dark"] {
+  --background: #0a0b0d;
+  --foreground: #f2f3f5;
+  --muted: #949cab;
+  --faint: #656d7b;
+  --danger: #f87171;
+
+  --surface: #131519;
+  --surface-subtle: #1a1d22;
+  --surface-sunken: #0e1013;
+  --chrome: #101216;
+  --border: #24272e;
+  --border-strong: #383c45;
+  --gauge-track: #24272e;
+
+  --shadow-raised: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-lift: 0 1px 2px rgb(0 0 0 / 0.4), 0 4px 12px rgb(0 0 0 / 0.35);
+  --shadow-over: 0 4px 8px rgb(0 0 0 / 0.4), 0 16px 40px rgb(0 0 0 / 0.55);
+  --lift: var(--shadow-lift);
+
+  --score-fail: #ff5f52;
+  --score-average: #ffb400;
+  --score-pass: #16d97a;
+  --score-fail-text: #ff8a80;
+  --score-average-text: #ffc766;
+  --score-pass-text: #4ade9b;
+  --score-fail-tint: rgb(255 95 82 / 0.16);
+  --score-average-tint: rgb(255 180 0 / 0.16);
+  --score-pass-tint: rgb(22 217 122 / 0.16);
+  --score-none: #78716c;
+  --score-none-tint: rgb(120 113 108 / 0.18);
+  --info: #38bdf8;
+  --info-tint: rgb(56 189 248 / 0.12);
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

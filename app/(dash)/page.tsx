@@ -127,8 +127,14 @@ export default async function HomePage({
 
           {/* One list, not a big grid plus a collapsed tail. Splitting them
               meant the visible order was not the order things ran in, which
-              made dragging pointless. */}
-          <SectionGrid groups={groups} canReorder={canReorderGroups} />
+              made dragging pointless.
+
+              key={strategy}: useReorder seeds its own state from `groups`
+              once on mount for optimistic dragging, so switching mobile/
+              desktop otherwise left every tile showing the strategy that was
+              active on first load -- forcing a remount is what makes it
+              re-seed from the new aggregates. */}
+          <SectionGrid key={strategy} groups={groups} canReorder={canReorderGroups} />
         </>
       )}
     </>

@@ -3,6 +3,7 @@ import { logoutAction } from '@/app/actions/auth';
 import { ActiveRunBar } from '@/components/runs/ActiveRunBar';
 import { GroupRail, type RailGroup } from './GroupRail';
 import { RailActiveMark } from './RailActiveMark';
+import { ThemeToggle } from './ThemeToggle';
 
 export type { RailGroup };
 
@@ -68,6 +69,7 @@ export function AppShell({
 
           <div className="mt-3 shrink-0 space-y-px border-t border-[var(--border)] pt-3">
             <RailActiveMark href="/settings/profile" match="/settings" label="Settings" />
+            <ThemeToggle />
             <form action={logoutAction}>
               <button
                 type="submit"
@@ -100,6 +102,7 @@ export function AppShell({
                   <Link href="/settings/profile" className="text-[var(--muted)] hover:text-[var(--foreground)]">
                     Settings
                   </Link>
+                  <ThemeToggle compact />
                   <form action={logoutAction}>
                     <button type="submit" className="text-[var(--muted)] hover:text-[var(--foreground)]">
                       Sign out

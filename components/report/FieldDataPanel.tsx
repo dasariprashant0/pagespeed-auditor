@@ -37,6 +37,12 @@ export function FieldDataPanel({ field }: { field: FieldDataDTO }) {
   }
 
   const isFallback = field.source === 'origin_fallback';
+  // Google's own pass/fail line: overall_category is FAST only when LCP, INP
+  // and CLS are ALL "good" at p75 -- the same rule pagespeed.web.dev's
+  // "Core Web Vitals Assessment" banner uses. FCP/TTFB below are diagnostic,
+  // not part of that assessment, so this reuses field.overall rather than
+  // re-deriving anything.
+  const passed = field.overall === 'good';
 
   return (
     <div
@@ -48,6 +54,20 @@ export function FieldDataPanel({ field }: { field: FieldDataDTO }) {
         borderLeftColor: isFallback ? 'var(--score-average)' : 'var(--border)',
       }}
     >
+      {field.overall && (
+        <div className="flex items-center gap-2 border-b border-[var(--border)] px-3.5 py-2.5">
+          <span className="text-[12px] font-medium">Core Web Vitals</span>
+          <span
+            className="inline-flex h-5 items-center rounded-[5px] px-1.5 text-[11px] font-medium"
+            style={{
+              color: passed ? 'var(--score-pass-text)' : 'var(--score-fail-text)',
+              background: passed ? 'var(--score-pass-tint)' : 'var(--score-fail-tint)',
+            }}
+          >
+            {passed ? 'Passed' : 'Failed'}
+          </span>
+        </div>
+      )}
       {isFallback && (
         <p className="border-b border-[var(--border)] px-3.5 py-2 text-[11px] text-[var(--muted)]">
           Showing site-wide real-user data — this page does not have enough traffic of its own.
@@ -84,11 +104,6 @@ export function FieldDataPanel({ field }: { field: FieldDataDTO }) {
           );
         })}
       </div>
-      {field.overall && (
-        <p className="border-t border-[var(--border)] px-3.5 py-2 text-[11px]">
-          Overall: <strong style={{ color: COLOR[field.overall] }}>{BUCKET_LABEL[field.overall]}</strong>
-        </p>
-      )}
     </div>
   );
 }
