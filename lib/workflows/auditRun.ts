@@ -58,11 +58,17 @@ async function auditOnePageStep(runId: string, pageId: string, url: string, stra
 
       const isLastAttempt = attempt >= maxAttempts;
 
-      if (e instanceof RetryableError && isLastAttempt) {
+      if (isLastAttempt) {
         // LAST ATTEMPT. Recording a failure as a result instead of just
         // letting this throw is what keeps a run from hanging one job short
-        // of finalizing forever -- an unreachable page is a real finding.
-        log.error({ attempts: attempt, message: e.message }, 'retries exhausted — recording an error row');
+        // of finalizing forever -- an unreachable page is a real finding,
+        // whatever kind of error caused it. This used to only cover
+        // RetryableError; anything else (e.g. a rate-limiter/Redis blip) fell
+        // through to a bare throw, which Promise.allSettled in
+        // auditRunWorkflow swallows silently -- the page just vanished from
+        // the run's count instead of showing up as a tracked failure.
+        const message = e instanceof Error ? e.message : String(e);
+        log.error({ attempts: attempt, message }, 'retries exhausted — recording an error row');
         const extracted = errorResultFor('RETRIES_EXHAUSTED');
         const outcome = await recordAuditResult(prisma, {
           runId, pageId, url, strategy,
@@ -73,8 +79,6 @@ async function auditOnePageStep(runId: string, pageId: string, url: string, stra
         if (outcome.readyToFinalize) await finalizeAndNotify(runId);
         return;
       }
-
-      if (isLastAttempt) throw e;
 
       const wait = e instanceof RetryableError ? (e.retryAfterMs ?? backoffMs(attempt)) : backoffMs(attempt);
       await sleepMs(wait);

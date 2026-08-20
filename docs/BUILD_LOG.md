@@ -1015,3 +1015,48 @@ progresses. The SDK's docs say it "currently work[s] best when deployed to
 Vercel," so this was treated as a local-only wrinkle. **Before trusting any
 change to `lib/workflows/*`, verify a real audit run completes against a
 Vercel preview deployment** — this was not yet done as of this entry.
+
+## 20 Aug 2026 (later still) — production run finalized short (5/8), pages lost silently
+
+Reported as "the workflow is stuck" against `pagespeed-auditor.vercel.app` —
+a run's progress banner had read "5 of 8 audits complete" for 20+ minutes.
+
+Two separate things, confirmed live rather than guessed:
+
+1. **Not actually stuck.** `/api/runs/active` returned `{"runs": []}` and
+   Settings → Automation → Recent checks already showed this exact run
+   terminal: `completed 5/8`, ~40 minutes before the report. The open browser
+   tab's `ActiveRunBar` poll just never refreshed after the run finished —
+   a page reload cleared it. Not a bug worth chasing further; a stale tab.
+2. **The real bug: 3 of 8 pages vanished with no `AuditResult` row at all** —
+   not `ok`, not `error`. In `auditOnePageStep` (`lib/workflows/auditRun.ts`),
+   only a `RetryableError` on the last attempt got converted into a recorded
+   error row; anything else reaching `isLastAttempt` hit a bare `throw e`.
+   `auditRunWorkflow` dispatches each batch with
+   `Promise.allSettled(batch.map(...))` and never inspects the settled
+   results, so that rejection was swallowed with no DB row and no log line
+   — the page just disappeared from the run's count instead of showing up
+   as a tracked failure. `auditPage()` calls the shared Upstash-backed
+   `PsiRateLimiter.acquire()` as its very first line, before any PSI call —
+   a plausible trigger, since §11 already flags Upstash as not fully
+   reliability-proven for this migration, and today's automation history
+   also showed a `cancelled 0/8` and a `failed 1/8` alongside clean `8/8`
+   runs, consistent with an intermittent connection blip rather than a
+   wholesale outage.
+
+**Fixed:** the last-attempt branch in `auditOnePageStep` now records the
+error row (and checks `readyToFinalize`) for *any* exception on the final
+attempt, not just `RetryableError` — a page can no longer silently drop out
+of a run's count regardless of what throws.
+
+### Verified
+
+`npx tsc --noEmit` clean. `npm run lint` 0 errors (same 6 pre-existing
+warnings, unrelated). `npm test` 127/127.
+
+**Still not verified:** this specific fix has not yet been exercised against
+a live production run with a forced Redis failure — the reasoning is
+code-level (the `Promise.allSettled` + last-attempt gap is unambiguous) but
+whether Upstash connectivity is really the trigger, versus some other
+unclassified exception, remains circumstantial until it's caught in the act
+with a log line attached.
