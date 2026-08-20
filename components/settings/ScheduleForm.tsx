@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useEffect, useState } from 'react';
+import { useActionState, useEffect, useOptimistic, useState, useTransition } from 'react';
 import { saveScheduleAction, previewCronAction } from '@/app/actions/settings';
 import {
   choiceToCron, cronToChoice, describeChoice, describeCron, toTimeValue, fromTimeValue,
@@ -54,6 +54,9 @@ export function ScheduleForm({
   const [custom, setCustom] = useState(initial.cronExpr !== null && parsed === null);
   const [customCron, setCustomCron] = useState(initial.cronExpr ?? '0 3 * * *');
   const [enabled, setEnabled] = useState(initial.enabled);
+  const [optimisticEnabled, setOptimisticEnabled] = useOptimistic(enabled);
+  const [enabledError, setEnabledError] = useState<string | null>(null);
+  const [, startEnabledTransition] = useTransition();
   const [timezone, setTimezone] = useState(initial.timezone || 'Asia/Kolkata');
   const [preview, setPreview] = useState<{ valid: boolean; error?: string; next: string[] } | null>(null);
 
@@ -76,17 +79,42 @@ export function ScheduleForm({
 
   const set = (patch: Partial<ScheduleChoice>) => setChoice({ ...choice, ...patch });
 
+  /**
+   * The on/off switch alone saves itself, instantly and in the background --
+   * the frequency/day/time picker below it still needs the explicit "Save
+   * schedule" button, because those are deliberate configuration, not a
+   * single low-stakes flip. useOptimistic shows the new value right away;
+   * if the save fails, NOT updating `enabled` is what makes it snap back on
+   * its own once the transition settles, rather than needing a manual revert.
+   */
+  function toggleEnabled(next: boolean) {
+    startEnabledTransition(async () => {
+      setOptimisticEnabled(next);
+      setEnabledError(null);
+      const fd = new FormData();
+      fd.set('cronExpr', cron);
+      fd.set('timezone', timezone);
+      if (next) fd.set('enabled', 'on');
+      const r = await saveScheduleAction(null, fd);
+      if (r.ok) setEnabled(next);
+      else setEnabledError(r.error);
+    });
+  }
+
   return (
     <form action={action} className="space-y-4">
       <input type="hidden" name="cronExpr" value={cron} />
       <input type="hidden" name="timezone" value={timezone} />
 
       <label className="flex items-center gap-2 text-[13px]">
-        <input type="checkbox" name="enabled" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
+        <input type="checkbox" name="enabled" checked={optimisticEnabled} onChange={(e) => toggleEnabled(e.target.checked)} />
         <span>Check the whole site automatically</span>
       </label>
+      {enabledError && (
+        <p role="alert" className="-mt-2 text-[11px]" style={{ color: 'var(--score-fail-text)' }}>{enabledError}</p>
+      )}
 
-      <div className={enabled ? '' : 'pointer-events-none opacity-45'}>
+      <div className={optimisticEnabled ? '' : 'pointer-events-none opacity-45'}>
         {!custom ? (
           <div className="flex flex-wrap items-end gap-3">
             <label>

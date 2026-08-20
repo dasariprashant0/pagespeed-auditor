@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useOptimistic, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { controlRunAction } from '@/app/actions/runControl';
 
@@ -20,17 +20,23 @@ export function RunControls({
   compact?: boolean;
 }) {
   const [pending, start] = useTransition();
+  // Flips the button and hides a stopped run's controls the instant an
+  // action is clicked, without waiting on router.refresh()'s round trip. If
+  // the server call fails, NOT updating `status` (the real prop) is what
+  // snaps this back to the true state on its own once the transition ends.
+  const [optimisticStatus, setOptimisticStatus] = useOptimistic(status);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const router = useRouter();
 
-  if (!['queued', 'running', 'paused'].includes(status)) return null;
+  if (!['queued', 'running', 'paused'].includes(optimisticStatus)) return null;
 
   const act = (action: 'pause' | 'resume' | 'stop') =>
     start(async () => {
       setError(null);
       setNote(null);
+      setOptimisticStatus(action === 'pause' ? 'paused' : action === 'resume' ? 'running' : 'cancelled');
       const r = await controlRunAction({ runId, action });
       if (!r.ok) {
         setError(r.error);
@@ -52,7 +58,7 @@ export function RunControls({
 
   return (
     <span className={compact ? 'flex items-center gap-1.5' : 'flex flex-wrap items-center gap-2'}>
-      {status === 'paused' ? (
+      {optimisticStatus === 'paused' ? (
         <button
           type="button" onClick={() => act('resume')} disabled={pending}
           className={`${btn} border-[var(--border-strong)] hover:bg-[var(--surface-subtle)]`}

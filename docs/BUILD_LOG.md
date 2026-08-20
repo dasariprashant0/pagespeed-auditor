@@ -1119,3 +1119,50 @@ row — including the 1,494-page scheduled sweep — was left untouched.
 Production cleanup itself was deliberately left to the user to do through
 this same UI once deployed, rather than run from here, so the choice of
 which checks survive stays theirs.
+
+## 20 Aug 2026 (later still) — a scroll fix, and optimistic UI on the three high-value actions
+
+Two small, separately-committed fixes plus one pattern applied three times.
+
+**Mobile/tablet nav couldn't be scrolled.** The rail's disclosure on narrow
+viewports sat inside `<header className="sticky top-0 ...">` with no bounded
+height of its own. A `sticky` element can't scroll past its own height once
+stuck, so on a 68-section site the menu grew taller than the viewport with
+no way to reach the bottom half of it. `max-h-[70dvh] overflow-y-auto` on the
+disclosure's content div gives it an independent scroll region regardless of
+section count. Verified at a 834×1112 (tablet) viewport: `scrollHeight` (888)
+vs `clientHeight` (777) confirmed it actually scrolls, and the bottom row
+(Settings/Theme/Sign out) became reachable.
+
+**Optimistic UI, via React 19's `useOptimistic`** rather than hand-rolled
+revert logic, on the three highest-value mutations:
+
+- `RunControls` (Hold/Continue/Stop): the button flips the instant it's
+  clicked, not after `controlRunAction` resolves. Not updating the real
+  `status` prop on failure is what snaps it back on its own once the
+  transition settles.
+- `RunHistoryList`'s delete picker: selected rows disappear immediately on
+  confirm; a failed `deleteRunsAction` call leaves `runs` (the prop)
+  unchanged, so the optimistic list reverts to the full set automatically.
+- `ScheduleForm`'s "Check the whole site automatically" checkbox now saves
+  itself instantly in the background (a direct call to `saveScheduleAction`
+  with the current cron/timezone), separate from the frequency/day/time
+  picker below it, which still needs the explicit "Save schedule" button —
+  that's deliberate configuration, not a single low-stakes flip.
+
+All three share the same shape: seed `useOptimistic` from the real
+prop/state, mutate it synchronously before the `await`, and let a failure
+revert for free by simply not updating the base value.
+
+### Verified
+
+`npx tsc --noEmit` clean. `npm run lint` 0 errors (same 6 pre-existing
+warnings — one, `react-hooks/set-state-in-effect`, was caught and fixed
+along the way in an earlier ThemeToggle draft, not left as a warning here).
+`npm test` 127/127. All three exercised live against local dev with a real
+in-flight run: clicked Hold and saw the row's button flip to "Continue"
+before the sibling `ActiveRunBar` instance (a separate poll loop) had
+caught up; toggled the schedule checkbox off and back on, confirmed
+persistence across a reload each time; selected and deleted one run and
+watched it disappear with "Deleted 1 check — 2 results removed," while
+every other row (including the 1,494-page scheduled sweep) stayed put.

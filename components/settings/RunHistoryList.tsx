@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
+import { useMemo, useOptimistic, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { RunControls } from '@/components/runs/RunControls';
@@ -61,7 +61,19 @@ export function RunHistoryList({
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
-  const deletableIds = useMemo(() => runs.filter((r) => !ACTIVE.has(r.status)).map((r) => r.id), [runs]);
+  // Selected rows vanish the instant "Delete" is confirmed rather than after
+  // the round trip. Not updating `runs` (the prop) when the delete fails is
+  // what brings them back on its own once the transition settles -- no
+  // separate revert path to keep in sync with the happy one.
+  const [optimisticRuns, removeOptimistically] = useOptimistic(
+    runs,
+    (current: HistoryRun[], deleted: Set<string>) => current.filter((r) => !deleted.has(r.id)),
+  );
+
+  const deletableIds = useMemo(
+    () => optimisticRuns.filter((r) => !ACTIVE.has(r.status)).map((r) => r.id),
+    [optimisticRuns],
+  );
   const allSelected = deletableIds.length > 0 && deletableIds.every((id) => selected.has(id));
 
   function toggle(id: string) {
@@ -78,10 +90,12 @@ export function RunHistoryList({
   }
 
   function runDelete() {
+    const ids = selected;
     start(async () => {
       setError(null);
       setMessage(null);
-      const r = await deleteRunsAction(siteId, [...selected]);
+      removeOptimistically(ids);
+      const r = await deleteRunsAction(siteId, [...ids]);
       setConfirming(false);
       if (!r.ok) {
         setError(r.error);
@@ -93,7 +107,7 @@ export function RunHistoryList({
     });
   }
 
-  if (runs.length === 0) {
+  if (optimisticRuns.length === 0) {
     return <p className="text-[11px] text-[var(--muted)]">Nothing has run yet. The first scheduled check will appear here.</p>;
   }
 
@@ -143,7 +157,7 @@ export function RunHistoryList({
       )}
 
       <ul className="space-y-1">
-        {runs.map((r) => {
+        {optimisticRuns.map((r) => {
           const active = ACTIVE.has(r.status);
           return (
             <li key={r.id} className="text-[11px]">
