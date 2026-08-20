@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui/Button';
+import { InfoTooltip } from '@/components/ui/InfoTooltip';
 
 /**
  * The titled block every auth screen opens with.
@@ -74,9 +75,10 @@ export function Field({
   const id = `f-${name}`;
   return (
     <div>
-      <label htmlFor={id} className="mb-1.5 block text-[11.5px] font-medium text-[var(--foreground)]">
+      <label htmlFor={id} className="mb-1.5 flex items-center gap-1.5 text-[11.5px] font-medium text-[var(--foreground)]">
         {label}
-        {!required && <span className="ml-1.5 font-normal text-[var(--faint)]">optional</span>}
+        {!required && <span className="font-normal text-[var(--faint)]">optional</span>}
+        {hint && <InfoTooltip text={hint} />}
       </label>
       <input
         id={id}
@@ -88,7 +90,6 @@ export function Field({
         readOnly={readOnly}
         autoFocus={autoFocus}
         aria-invalid={invalid || undefined}
-        aria-describedby={hint ? `${id}-hint` : undefined}
         className={`w-full rounded-[var(--radius)] border bg-[var(--surface)] px-3 py-2 text-[13px]
           transition-[border-color,box-shadow] duration-[var(--t-fast)] ease-[var(--ease)]
           placeholder:text-[var(--faint)]
@@ -97,11 +98,6 @@ export function Field({
           focus:shadow-[0_0_0_3px_var(--info-tint)]
           ${readOnly ? 'bg-[var(--surface-subtle)] text-[var(--muted)]' : ''}`}
       />
-      {hint && (
-        <p id={`${id}-hint`} className="mt-1.5 text-[11px] text-[var(--muted)]">
-          {hint}
-        </p>
-      )}
     </div>
   );
 }
