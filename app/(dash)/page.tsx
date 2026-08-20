@@ -2,6 +2,8 @@ import { requireSession } from '@/lib/http/auth-guard';
 import { defaultSite } from '@/lib/services/tenant.service';
 import { onboardingState } from '@/lib/services/onboarding.service';
 import { SetupChecklist } from '@/components/onboarding/SetupChecklist';
+import { RoleTourBanner } from '@/components/onboarding/RoleTourBanner';
+import { WaitingOnAdmin } from '@/components/onboarding/WaitingOnAdmin';
 import { can } from '@/lib/auth/roles';
 import { listGroupsWithAggregates } from '@/lib/services/results.service';
 import { getTopIssues } from '@/lib/services/issues.service';
@@ -41,8 +43,9 @@ export default async function HomePage({
           title="Let's measure your site"
           subtitle="Point this at a sitemap and it will check every page on it — on mobile and desktop — and keep the results so you can see what improves and what slips."
         />
-        <div className="max-w-2xl">
-          <SetupChecklist state={setup} canManage={canManage} />
+        <div className="max-w-2xl space-y-3">
+          {!ctx.hasSeenRoleTour && <RoleTourBanner role={ctx.role} />}
+          {canManage ? <SetupChecklist state={setup} canManage={canManage} /> : <WaitingOnAdmin role={ctx.role} />}
         </div>
       </>
     );
@@ -107,7 +110,17 @@ export default async function HomePage({
         )}
       </PageHeader>
 
-      <SetupChecklist state={setup} canManage={canManage} />
+      {!ctx.hasSeenRoleTour && <RoleTourBanner role={ctx.role} />}
+      {canManage ? (
+        <SetupChecklist state={setup} canManage={canManage} />
+      ) : (
+        // Setup steps an admin hasn't finished aren't this role's to act on --
+        // showing them a checklist full of "an admin needs to do this" is
+        // worse guidance than one honest line, and only while there is
+        // nothing real to look at yet. Once there is data, the dashboard
+        // below speaks for itself.
+        !setup.complete && summary.auditedCount === 0 && <WaitingOnAdmin role={ctx.role} />
+      )}
 
       {summary.auditedCount === 0 ? (
         <EmptyState

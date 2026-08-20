@@ -1166,3 +1166,52 @@ caught up; toggled the schedule checkbox off and back on, confirmed
 persistence across a reload each time; selected and deleted one run and
 watched it disappear with "Deleted 1 check — 2 results removed," while
 every other row (including the 1,494-page scheduled sweep) stayed put.
+
+## 20 Aug 2026 (later still) — role-aware onboarding, replacing the admin-only checklist for everyone else
+
+`SetupChecklist` was always an *admin* setup checklist that happened to
+render for every role -- a Viewer or Editor joining an org saw either a
+wall of "an admin needs to do this" placeholders, or, once setup was done,
+a cold dashboard with no introduction to what their own role could do.
+Split into two concerns:
+
+- **`WaitingOnAdmin`** replaces the checklist for anyone without
+  `site:manage`, but only while there's truly nothing to look at yet
+  (`!setup.complete && auditedCount === 0`) -- once there's real data, a
+  non-admin sees nothing extra there; the dashboard speaks for itself.
+- **`RoleTourBanner`** — "here's what your role can do," 2-3 concrete
+  bullets per role (reusing the language already in `ROLE_DESCRIPTION`
+  where it fit) — shown once, ever, per person, then dismissed for good.
+  Added `User.roleTourSeenAt` (migration
+  `20260820123701_add_role_tour_seen_at`) rather than localStorage,
+  specifically because it needs to survive across devices and browsers, not
+  just the one that happened to see it first. Folded into the same
+  `contextFor()`/`login()` query that already runs on every request, so
+  checking it costs nothing extra.
+
+Dismiss is local-state-first, action-second, deliberately not wrapped in
+`useOptimistic` like the previous change's three cases: seeing the banner
+once more on a rare failure is harmless, so a plain "hide now, persist in
+the background" is enough without a revert path to maintain.
+
+### Verified
+
+`npx tsc --noEmit` clean, `npm run lint` 0 errors, `npm test` 127/127.
+Live-checked the data-present path end to end: banner rendered with the
+Admin role's real bullets, "Got it" hid it instantly, and it stayed gone
+after a full reload (server-persisted, not just the tab). The no-data,
+non-admin `WaitingOnAdmin` path was **not** click-tested — reaching it
+needs a second, non-admin user in an org with no site, which means a full
+invite-and-accept flow just to verify a static, unchanged-logic component.
+Confirmed by reading the code instead: `canManage` is `can(role,
+'site:manage')`, which only `admin` has, so the ternary can't route an
+admin into `WaitingOnAdmin` or vice versa.
+
+Also: a schema change requires restarting the dev server (the running
+process caches the generated Prisma client, per the gotcha already in
+CLAUDE.md) — killing the stale `next-server` process this time briefly
+took the whole preview down (502) rather than hot-swapping, because the
+supervising `next dev` CLI process had died with it. Restarting via
+`npm run dev -- --port 3381` in the background brought it back within
+seconds; worth remembering that killing the inner worker process alone
+isn't always safe to assume recoverable.

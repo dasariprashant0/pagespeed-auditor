@@ -19,6 +19,8 @@ export interface SessionContext {
   organizationId: string;
   organizationName: string;
   role: Role;
+  /** Whether the "here's what your role can do" banner has been dismissed. */
+  hasSeenRoleTour: boolean;
 }
 
 export function normalizeEmail(email: string): string {
@@ -93,7 +95,7 @@ export async function login(email: string, password: string): Promise<LoginOutco
   const normalized = normalizeEmail(email);
   const user = await prisma.user.findUnique({
     where: { email: normalized },
-    select: { id: true, email: true, name: true, passwordHash: true },
+    select: { id: true, email: true, name: true, passwordHash: true, roleTourSeenAt: true },
   });
 
   // Always run a compare, even for an unknown address, so response time does
@@ -121,6 +123,7 @@ export async function login(email: string, password: string): Promise<LoginOutco
       organizationId: membership.organizationId,
       organizationName: membership.organization.name,
       role: isRole(membership.role) ? membership.role : 'viewer',
+      hasSeenRoleTour: user.roleTourSeenAt !== null,
     },
   };
 }
@@ -129,7 +132,7 @@ export async function login(email: string, password: string): Promise<LoginOutco
 export async function contextFor(userId: string, organizationId?: string): Promise<SessionContext | null> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, email: true, name: true },
+    select: { id: true, email: true, name: true, roleTourSeenAt: true },
   });
   if (!user) return null;
 
@@ -147,7 +150,13 @@ export async function contextFor(userId: string, organizationId?: string): Promi
     organizationId: membership.organizationId,
     organizationName: membership.organization.name,
     role: isRole(membership.role) ? membership.role : 'viewer',
+    hasSeenRoleTour: user.roleTourSeenAt !== null,
   };
+}
+
+/** Dismissed for good, regardless of how many organisations the person is in. */
+export async function markRoleTourSeen(userId: string): Promise<void> {
+  await prisma.user.update({ where: { id: userId }, data: { roleTourSeenAt: new Date() } });
 }
 
 // --- invitations -----------------------------------------------------------

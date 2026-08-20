@@ -19,6 +19,10 @@ model User {
   passwordHash String
   createdAt    DateTime  @default(now())
   lastLoginAt  DateTime?
+  /// Null until dismissed. Per-user, not per-organisation: someone who
+  /// belongs to two tenants sees the "here's what your role can do" banner
+  /// once ever, not once per site they're a member of.
+  roleTourSeenAt DateTime?
 
   memberships Membership[]
   invitesSent Invitation[] @relation("InvitedBy")
