@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from 'react';
 import { createSiteAction, updateSiteAction, updatePsiKeyAction } from '@/app/actions/site';
+import { InfoTooltip } from '@/components/ui/InfoTooltip';
 import type { SiteRef } from '@/lib/services/tenant.service';
 
 type Result = { ok: true; message: string } | { ok: false; error: string } | null;
@@ -24,9 +25,11 @@ function Notice({ state }: { state: Result }) {
 function Labelled({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="eyebrow mb-1 block">{label}</span>
+      <span className="eyebrow mb-1 flex items-center gap-1">
+        {label}
+        {hint && <InfoTooltip text={hint} />}
+      </span>
       {children}
-      {hint && <span className="mt-1 block text-[10px] text-[var(--faint)]">{hint}</span>}
     </label>
   );
 }

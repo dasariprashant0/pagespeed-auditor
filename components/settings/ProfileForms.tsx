@@ -2,6 +2,7 @@
 
 import { useActionState } from 'react';
 import { updateProfileAction, changePasswordAction } from '@/app/actions/members';
+import { InfoTooltip } from '@/components/ui/InfoTooltip';
 import { ROLE_DESCRIPTION, ROLE_LABEL, type Role } from '@/lib/auth/roles';
 
 type Result = { ok: true; message: string } | { ok: false; error: string } | null;
@@ -48,7 +49,10 @@ export function ProfileForms({
             <input name="name" defaultValue={name ?? ''} className={input} />
           </label>
           <label className="block">
-            <span className="mb-1 block text-[11px] text-[var(--muted)]">Email — this is also your sign-in</span>
+            <span className="mb-1 flex items-center gap-1 text-[11px] text-[var(--muted)]">
+              Email
+              <InfoTooltip text="This is also your sign-in — changing it changes what you type on the login page next time." />
+            </span>
             <input name="email" type="email" defaultValue={email} className={input} />
           </label>
           <div className="flex items-center gap-3">
@@ -68,9 +72,11 @@ export function ProfileForms({
             <input name="currentPassword" type="password" autoComplete="current-password" className={input} />
           </label>
           <label className="block">
-            <span className="mb-1 block text-[11px] text-[var(--muted)]">New password</span>
+            <span className="mb-1 flex items-center gap-1 text-[11px] text-[var(--muted)]">
+              New password
+              <InfoTooltip text="At least 12 characters. Any characters are fine — length matters more than complexity rules." />
+            </span>
             <input name="newPassword" type="password" autoComplete="new-password" className={input} />
-            <span className="mt-1 block text-[10px] text-[var(--muted)]">At least 12 characters.</span>
           </label>
           <div className="flex items-center gap-3">
             <button type="submit" disabled={savingPw} className={button}>

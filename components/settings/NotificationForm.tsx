@@ -2,6 +2,7 @@
 
 import { useActionState, useState, useTransition } from 'react';
 import { saveNotificationsAction, sendTestNotificationAction } from '@/app/actions/settings';
+import { InfoTooltip } from '@/components/ui/InfoTooltip';
 
 export function NotificationForm({
   initial,
@@ -33,8 +34,9 @@ export function NotificationForm({
             Email when the automatic site check finishes or fails
           </label>
           <label className="block max-w-md">
-            <span className="mb-1 block text-[11px] text-[var(--muted)]">
-              Send to — any addresses, separated by commas
+            <span className="mb-1 flex items-center gap-1 text-[11px] text-[var(--muted)]">
+              Send to
+              <InfoTooltip text="Any email addresses, separated by commas. They don't need to belong to anyone with an account here." />
             </span>
             <input
               name="emailTo"
@@ -62,12 +64,18 @@ export function NotificationForm({
             <input type="checkbox" name="slackEnabled" defaultChecked={initial.slackEnabled} />
             Slack when the automatic site check finishes or fails
           </label>
-          <input
-            name="slackWebhookUrl"
-            defaultValue={initial.slackWebhookMasked ?? ''}
-            placeholder="https://hooks.slack.com/services/..."
-            className="w-full max-w-md rounded-[5px] border border-[var(--border)] bg-[var(--background)] px-2 py-1.5 font-mono text-[11px]"
-          />
+          <label className="block max-w-md">
+            <span className="mb-1 flex items-center gap-1 text-[11px] text-[var(--muted)]">
+              Webhook URL
+              <InfoTooltip text="In Slack: create an app at api.slack.com/apps, add an Incoming Webhook, and choose the channel it should post to — Slack gives you a URL to paste here." />
+            </span>
+            <input
+              name="slackWebhookUrl"
+              defaultValue={initial.slackWebhookMasked ?? ''}
+              placeholder="https://hooks.slack.com/services/..."
+              className="w-full rounded-[5px] border border-[var(--border)] bg-[var(--background)] px-2 py-1.5 font-mono text-[11px]"
+            />
+          </label>
         </div>
 
         <div className="flex items-center gap-2">
