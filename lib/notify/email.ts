@@ -76,8 +76,15 @@ function transporterFor(override?: SmtpOverride) {
 }
 
 function gmailHint(msg: string): string {
-  // Gmail's auth rejection is cryptic; name the usual cause.
-  return /invalid login|username and password|BadCredentials|534|535/i.test(msg)
+  // Gmail's auth rejection is cryptic; name the usual cause. Bare "534"/"535"
+  // used to be in this pattern too, matching Gmail's actual SMTP response
+  // code -- but those same digits also show up incidentally in a plain
+  // ETIMEDOUT's "host:port" (port 535 is a real, if wrong, port number), so a
+  // bare network-connection failure was getting a false "Gmail rejected your
+  // credentials" hint glued onto it. "Invalid login"/"Username and Password"
+  // are the actual, specific phrases nodemailer/Gmail use for a real auth
+  // rejection and don't have that collision.
+  return /invalid login|username and password|BadCredentials/i.test(msg)
     ? ' — Gmail rejected the credentials. The password must be a 16-character App Password (no spaces), not the account password, and 2-Step Verification must be on for that account.'
     : '';
 }
