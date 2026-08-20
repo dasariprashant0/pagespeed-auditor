@@ -13,18 +13,22 @@ modelled on pagespeed.web.dev.
 | **`docs/BUILD_LOG.md`** | What's built, what's next, what's blocking. Updated as work lands. |
 | `docs/DECISIONS.md` | Why it's built this way, and what was rejected. Read before changing a design. |
 | `docs/SPEC.md` | The original brief the plan was derived from. |
+| `docs/PRD.md` / `docs/TRD.md` / `docs/APP_FLOW.md` / `docs/UI_UX.md` / `docs/BACKEND_SCHEMA.md` / `docs/IMPLEMENTATION_PLAN.md` | Reference-format current-state doc suite — start with `IMPLEMENTATION_PLAN.md` for status by stage. |
 
 Everything needed to continue this work is in the repo. If the plan and the code
 disagree, the plan is probably right and the code is behind — check the Session
 Log in `docs/BUILD_LOG.md` before assuming otherwise.
 
-**All six stages are built**: ingestion, PSI integration, the rate-limited
-queue, the dashboard, scheduling, notifications, regression detection, on-demand
-AI recommendations, and the MCP server.
+**All six stages are built**: ingestion, PSI integration, durable audit
+execution (Vercel Workflow, not a queue worker), the dashboard, scheduling,
+notifications, regression detection, on-demand AI recommendations, and a
+9-tool MCP server.
 
 ## Setup
 
-Requires **OrbStack** (or any `docker compose` runtime) and Node 26+.
+Requires **OrbStack** (or any `docker compose` runtime) and Node 26+ for local
+dev. Production runs on Vercel with Neon (Postgres), Upstash (Redis), and
+Vercel Blob — see `docs/TRD.md` §1–2 for the full deployment topology.
 
 ```bash
 brew install orbstack        # then launch it once
@@ -33,8 +37,11 @@ cp .env.example .env         # then: npm run env -- PSI_API_KEY <your-key>
 npm run db:up                # Postgres 17 + Redis 7
 npm run db:migrate
 npm run dev                  # web app (Ship Studio may already be running this)
-npm run worker               # queue worker, separate terminal
 ```
+
+There is no separate worker process to start — audits run as a durable
+Vercel Workflow, dispatched from Server Actions, the MCP server, and the
+cron route. `npm run worker` doesn't exist.
 
 A **PSI API key is mandatory** — the keyless endpoint's shared quota is
 permanently exhausted and returns `429`. Get one from
@@ -56,25 +63,27 @@ Without this Prisma silently has no engine and fails at first use.
 | Command | What it does |
 |---|---|
 | `npm run dev` | Next dev server |
-| `npm run worker` | Long-running PSI queue worker (cannot be serverless) |
+| `npm run build` | `prisma generate && prisma migrate deploy && next build` — migrations apply as part of the build itself, see `docs/DECISIONS.md` §12 |
 | `npm run db:up` / `db:down` | Postgres + Redis via Docker Compose |
 | `npm run db:migrate` / `db:studio` | Prisma migrate / data browser |
 | `npm test` | `node --test` with native TS stripping — no jest/vitest |
 | `npm run lint` / `typecheck` | ESLint (incl. the architecture boundary) / tsc |
 | `npm run throughput-dryrun` | Validates the ~0.75 req/s sweep assumption without spending quota |
-| `npm run audit:queue -- <group>` | Queue a group through the worker |
+| `npm run audit:queue -- <group>` | Runs a group through the real audit path sequentially, outside the dashboard |
 | `npm run canary -- 50` | Bounded real slice before ever scheduling a full sweep |
-| `npm run set-password -- '...'` | Set the login password (writes to .env) |
+| `npm run reset-password -- you@x.com '...'` | Reset a real user's password from the CLI (locked-out admin recovery) |
 | `npm run env` | Show every setting, secrets masked |
 | `npm run env -- KEY value` | Change one setting without opening the file |
 | `npm run inspect-sitemap` | Crawl/normalize/group report, writes nothing |
 
 ## Two rules worth knowing before you edit
 
-**1. `lib/services`, `lib/psi`, `lib/queue`, `lib/report`, `lib/sitemap` are a
-framework-free zone.** No `next/*`, no `react`. The worker imports them as plain
-Node, and the same boundary lets the MCP server reuse them later. ESLint enforces
-this; if you change the rule, re-verify it still fails on a deliberate bad import.
+**1. `lib/services`, `lib/psi`, `lib/report`, `lib/sitemap` are a
+framework-free zone.** No `next/*`, no `react`. This is what lets the MCP
+server and `lib/workflows/*` both reuse them. ESLint enforces this; if you
+change the rule, re-verify it still fails on a deliberate bad import.
+`lib/queue` used to be in this list; it no longer exists — see
+`docs/DECISIONS.md` §11.
 
 **2. `AuditResult` contains error rows** (`status: 'error'`, null scores) so that
 failed jobs still let a run finalize. Every average, trend, and aggregate query
@@ -85,11 +94,16 @@ must filter `status: 'ok'` or the numbers will be wrong.
 ```
 Next.js app ──┐
               ├──> lib/services/* ──> Postgres (Prisma 7 + pg adapter)
-MCP server ───┘         │
-                        └──────────> BullMQ + Redis ──> PSI API
-                                          ▲
-                              worker process (long-running)
+MCP server ───┤         │
+Vercel Cron ──┘         ├──> Redis (rate limiter, live run log, heartbeat)
+                        ├──> Vercel Blob (pruned Lighthouse JSON)
+                        └──> Vercel Workflow (lib/workflows/auditRun.ts) ──> PSI API
 ```
+
+No standalone worker process. Audits run as a durable Workflow, not a queue
+a long-running Node process drains — see `docs/DECISIONS.md` §11 for why
+(Vercel can't host one) and `docs/TRD.md` §2 for the full deployment
+topology diagram.
 
 Full sweeps are **schedule-only** by design — 1,000–2,000 PSI calls at a
 sustainable ~0.75 req/s takes 30 minutes to a few hours. There is no "audit

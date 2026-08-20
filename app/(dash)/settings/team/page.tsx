@@ -1,7 +1,6 @@
 import { PageHeader } from '@/components/ui/PageHeader';
 import { requireCapability } from '@/lib/http/auth-guard';
 import { prisma } from '@/lib/db';
-import { defaultSite } from '@/lib/services/tenant.service';
 import { SettingsNav } from '@/components/settings/SettingsNav';
 import { TeamManager, type MemberRow, type InviteRow } from '@/components/settings/TeamManager';
 import { isRole } from '@/lib/auth/roles';
@@ -11,7 +10,7 @@ export const dynamic = 'force-dynamic';
 export default async function TeamPage() {
   const ctx = await requireCapability('members:manage');
 
-  const [memberships, invitations, site] = await Promise.all([
+  const [memberships, invitations] = await Promise.all([
     prisma.membership.findMany({
       where: { organizationId: ctx.organizationId },
       orderBy: { createdAt: 'asc' },
@@ -25,7 +24,6 @@ export default async function TeamPage() {
       orderBy: { createdAt: 'desc' },
       select: { id: true, email: true, role: true, expiresAt: true },
     }),
-    defaultSite(ctx.organizationId),
   ]);
 
   const members: MemberRow[] = memberships.map((m) => ({

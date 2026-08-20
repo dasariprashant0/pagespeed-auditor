@@ -143,7 +143,7 @@ export async function deleteRunsAction(siteId: string, runIds: string[]): Promis
     if (runIds.length === 0) return { ok: false, error: 'Select at least one check to delete.' };
 
     const { deleteRuns } = await import('@/lib/services/retention.service');
-    const { runsDeleted, resultsDeleted } = await deleteRuns(siteId, runIds);
+    const { runsDeleted, resultsDeleted } = await deleteRuns(prisma, siteId, runIds);
 
     if (runsDeleted === 0) {
       return { ok: false, error: 'Nothing was deleted — a run still in progress cannot be removed this way.' };

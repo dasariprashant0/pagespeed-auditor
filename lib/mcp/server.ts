@@ -5,6 +5,7 @@ import { listGroupsWithAggregates, listPagesInGroup, getScoreHistory } from '../
 import { getPageReport } from '../services/report.service.ts';
 import { getTopIssues } from '../services/issues.service.ts';
 import { getRunProgress } from '../services/site.service.ts';
+import { requireRunAccess } from '../services/tenant.service.ts';
 import { getOrCreateRecommendation } from '../services/recommendation.service.ts';
 import { BOTH_STRATEGIES, createRun, expandScope, findActiveRun } from '../services/run.service.ts';
 import { startAuditRun } from '../workflows/auditRun.ts';
@@ -277,6 +278,13 @@ export const mcpHandler = createMcpHandler((server) => {
       annotations: { readOnlyHint: true },
     },
     async ({ runId }, ctx) => {
+      // Same reasoning as orgIdOf's own comment above: runId arrives as a
+      // caller-supplied argument, not proof the token's organisation owns
+      // it. Every other tool here resolves its site through orgIdOf first;
+      // this one used to skip straight to getRunProgress(runId), which
+      // would have let one tenant's agent read another's run status by
+      // guessing or reusing a runId from anywhere it had seen one.
+      await requireRunAccess(orgIdOf(ctx), runId);
       const p = await getRunProgress(runId);
       if (!p) throw new Error(`No run ${runId}.`);
       const eta = p.etaSeconds === null ? '' : `, ~${Math.round(p.etaSeconds / 60)} min left`;

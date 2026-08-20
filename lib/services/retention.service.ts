@@ -1,4 +1,4 @@
-import { prisma } from '../db.ts';
+import type { PrismaClient } from '@prisma/client';
 import { logger } from '../logger.ts';
 import { deleteRawJsonBlobs } from '../blob.ts';
 
@@ -14,6 +14,10 @@ import { deleteRawJsonBlobs } from '../blob.ts';
  * days of daily ones. Older results are removed ENTIRELY rather than hollowed
  * out: a row that still exists but has lost its rawJson renders an agent report
  * with no evidence tables, which is worse than saying the run has aged out.
+ *
+ * `prisma` is a parameter, not a module-level import, the same as
+ * run.service.ts/audit.service.ts -- it's what lets a test pass a fake one
+ * instead of needing a real database (see test/retention.test.ts).
  */
 
 export const DEFAULT_KEEP_RUNS = 10;
@@ -37,8 +41,16 @@ function keepRuns(): number {
  *
  * Scoped to one site so a large tenant cannot stall another's pruning, and so
  * it can run straight after that site's sweep finalizes.
+ *
+ * `deleteBlobs` defaults to the real Blob delete and only exists as a
+ * parameter so a test can substitute a spy and assert on which keys were
+ * collected, without attempting a real network call.
  */
-export async function pruneSiteHistory(siteId: string): Promise<RetentionSummary> {
+export async function pruneSiteHistory(
+  prisma: PrismaClient,
+  siteId: string,
+  deleteBlobs: (pathnames: string[]) => Promise<void> = deleteRawJsonBlobs,
+): Promise<RetentionSummary> {
   const keep = keepRuns();
 
   // DISTINCT-ON-style windowing in one statement: doing it per page would be
@@ -83,7 +95,7 @@ export async function pruneSiteHistory(siteId: string): Promise<RetentionSummary
     const res = await prisma.auditResult.deleteMany({ where: { id: { in: chunk } } });
     deleted += res.count;
   }
-  await deleteRawJsonBlobs(blobKeys);
+  await deleteBlobs(blobKeys);
 
   const summary: RetentionSummary = {
     keepRuns: keep,
@@ -108,8 +120,10 @@ export async function pruneSiteHistory(siteId: string): Promise<RetentionSummary
  * mid-flight, not just lose history.
  */
 export async function deleteRuns(
+  prisma: PrismaClient,
   siteId: string,
   runIds: string[],
+  deleteBlobs: (pathnames: string[]) => Promise<void> = deleteRawJsonBlobs,
 ): Promise<{ runsDeleted: number; resultsDeleted: number }> {
   if (runIds.length === 0) return { runsDeleted: 0, resultsDeleted: 0 };
 
@@ -130,43 +144,26 @@ export async function deleteRuns(
   const blobKeys = results.map((r) => r.rawJsonBlobKey).filter((k): k is string => k !== null);
 
   const { count: runsDeleted } = await prisma.auditRun.deleteMany({ where: { id: { in: ids } } });
-  await deleteRawJsonBlobs(blobKeys);
+  await deleteBlobs(blobKeys);
   return { runsDeleted, resultsDeleted: results.length };
 }
 
-/** Removes runs that no longer have any results, so the run list stays honest. */
-export async function pruneEmptyRuns(siteId: string): Promise<number> {
-  const res = await prisma.auditRun.deleteMany({
-    where: {
-      siteId,
-      results: { none: {} },
-      status: { in: ['completed', 'failed', 'skipped'] },
-      // Never touch anything recent: a run that is finalizing legitimately has
-      // no results for a moment.
-      startedAt: { lt: new Date(Date.now() - 24 * 3600_000) },
-    },
-  });
-  return res.count;
-}
-
-export interface HistoryDepth {
-  pageId: string;
-  path: string;
-  strategy: string;
-  runs: number;
-  oldest: Date | null;
-  newest: Date | null;
-}
-
 /** What history actually exists, for the Settings storage panel. */
-export async function historyOverview(siteId: string): Promise<{
+export async function historyOverview(
+  prisma: PrismaClient,
+  siteId: string,
+): Promise<{
   keepRuns: number;
   totalResults: number;
   distinctRuns: number;
   oldest: Date | null;
   storageBytes: number;
+  /** Results whose JSON lives in Vercel Blob rather than inline -- not
+   * counted in storageBytes above, which is Postgres-only. Billed
+   * separately, and much cheaper per GB -- see docs/DECISIONS.md §13. */
+  blobBackedResults: number;
 }> {
-  const [agg, runs, storage] = await Promise.all([
+  const [agg, runs, storage, blobBackedResults] = await Promise.all([
     prisma.auditResult.aggregate({
       where: { page: { siteId } },
       _count: { id: true },
@@ -183,6 +180,7 @@ export async function historyOverview(siteId: string): Promise<{
       FROM "AuditResult" r JOIN "Page" p ON p.id = r."pageId"
       WHERE p."siteId" = ${siteId}
     `,
+    prisma.auditResult.count({ where: { page: { siteId }, rawJsonBlobKey: { not: null } } }),
   ]);
 
   return {
@@ -193,5 +191,6 @@ export async function historyOverview(siteId: string): Promise<{
     // On-disk, after Postgres compresses the JSON. Smaller than the raw
     // payload, and the honest number for "how much space is this costing".
     storageBytes: Number(storage[0]?.bytes ?? 0),
+    blobBackedResults,
   };
 }

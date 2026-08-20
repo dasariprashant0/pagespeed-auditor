@@ -64,6 +64,19 @@ function looksComplete(j: unknown): j is PsiResponse {
   return !!lr.categories && !!lr.audits;
 }
 
+/**
+ * Defense in depth: `buildPsiUrl` puts the API key in the query string, and
+ * a fetch-level failure (DNS, connect timeout, undici's own error messages)
+ * can embed the full request URL in `Error#message`. That message used to
+ * only ever reach a server log; since RunTerminal now shows it directly in
+ * the browser, to every role, a key sitting in it is no longer "somewhere
+ * only ops looks" -- so it's scrubbed at the source, before it becomes a
+ * `message` field anyone downstream can display.
+ */
+export function redactKey(text: string, apiKey: string): string {
+  return apiKey ? text.split(apiKey).join('[redacted]') : text;
+}
+
 export async function runPagespeed(
   url: string,
   strategy: PsiStrategy,
@@ -82,7 +95,7 @@ export async function runPagespeed(
   } catch (e) {
     // Timeouts, DNS, connection resets -- all worth another go.
     const msg = e instanceof Error ? e.message : String(e);
-    return { ok: false, kind: 'retryable', message: `network: ${msg}`, elapsedMs: elapsed() };
+    return { ok: false, kind: 'retryable', message: redactKey(`network: ${msg}`, opts.apiKey), elapsedMs: elapsed() };
   }
 
   const text = await res.text().catch(() => '');
@@ -97,6 +110,10 @@ export async function runPagespeed(
     } catch {
       apiMessage = text.slice(0, 200);
     }
+    // Covers both branches above: a JSON error message Google composed, or
+    // the raw-text fallback slice when the body isn't JSON at all -- either
+    // could in principle contain the request URL this response came from.
+    apiMessage = redactKey(apiMessage, opts.apiKey);
 
     // Verified against the live API: a Lighthouse *content* failure arrives as
     // HTTP 400 with reason "lighthouseUserError" (e.g. "Lighthouse returned

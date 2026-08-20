@@ -139,8 +139,6 @@ export default async function SettingsPage() {
               ['Sitemap', site.sitemapUrl],
               ['Pages tracked', `${activePages} active`],
               ['PSI API key', masked(env.PSI_API_KEY)],
-              ['Login user', env.AUTH_USERNAME],
-              ['Password', env.AUTH_PASSWORD_HASH ? 'configured' : 'NOT SET — run npm run set-password'],
               ['Pages tested at once', String(env.WORKER_CONCURRENCY)],
               ['Google rate limit', `${env.PSI_RATE_MAX} requests per ${env.PSI_RATE_WINDOW_MS / 1000}s`],
               ['Typical time per page', sweepEstimate.measured ? `${Math.round(sweepEstimate.medianCallMs / 1000)} seconds (measured)` : 'not measured yet'],

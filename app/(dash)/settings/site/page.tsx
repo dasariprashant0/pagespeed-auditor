@@ -1,5 +1,6 @@
 import { PageHeader } from '@/components/ui/PageHeader';
 import { requireCapability } from '@/lib/http/auth-guard';
+import { prisma } from '@/lib/db';
 import { listSites } from '@/lib/services/tenant.service';
 import { listGroupsWithAggregates } from '@/lib/services/results.service';
 import { historyOverview } from '@/lib/services/retention.service';
@@ -34,7 +35,7 @@ export default async function SiteSettingsPage() {
 
   const [groups, history] = await Promise.all([
     site ? listGroupsWithAggregates(site.id, { strategy: 'mobile' }) : Promise.resolve([]),
-    site ? historyOverview(site.id) : Promise.resolve(null),
+    site ? historyOverview(prisma, site.id) : Promise.resolve(null),
   ]);
   const pageCount = groups.reduce((n, g) => n + g.pageCount, 0);
 
@@ -86,6 +87,13 @@ export default async function SiteSettingsPage() {
                     </div>
                   ))}
                 </dl>
+                {history.blobBackedResults > 0 && (
+                  <p className="mt-3 text-[11px] text-[var(--muted)]">
+                    {history.blobBackedResults.toLocaleString()} of those results have their full report
+                    stored in Vercel Blob rather than here — billed separately, at a much lower per-GB
+                    rate, and not included in &ldquo;Storage used&rdquo; above.
+                  </p>
+                )}
               </Panel>
             )}
           </>

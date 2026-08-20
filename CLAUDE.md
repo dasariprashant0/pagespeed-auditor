@@ -34,12 +34,21 @@ tool's session.
 
 Audits every page of one website (~500–1,000 pages) via the Google PageSpeed
 Insights API on mobile and desktop, keeps every run as history, and shows it in a
-dashboard modelled on pagespeed.web.dev. A later stage adds an MCP server over the
-same service layer.
+dashboard modelled on pagespeed.web.dev. An MCP server exposes the same service
+layer to an AI agent.
 
-**Current scope: stages 1–2** — ingestion, PSI, queue, storage, dashboard.
-Scheduling, notifications, trends, AI recommendations, and MCP are deliberately
-out of scope until this pass is reviewed. Don't build ahead.
+**Everything is built: stages 1–6 plus MCP.** Ingestion, PSI, durable
+execution (Vercel Workflow, not the original BullMQ queue), storage,
+dashboard, scheduling, notifications, trends/regressions, AI
+recommendations, and a 9-tool MCP server are all live — see
+`docs/IMPLEMENTATION_PLAN.md` for the current status table and
+`docs/PRD.md`/`docs/TRD.md`/`docs/APP_FLOW.md`/`docs/UI_UX.md`/
+`docs/BACKEND_SCHEMA.md` for the rest of the reference doc suite. This
+paragraph used to say "current scope: stages 1–2, MCP deliberately out of
+scope" — that was stale by 20 Aug 2026 and is corrected here rather than
+left for the next reader to discover the hard way. MCP is feature-complete
+and, per direct instruction, not being extended further for now — that's a
+pause, not a scope boundary to re-derive.
 
 ## Rules that will bite you
 
@@ -60,11 +69,17 @@ only from CrUX. `tbt` has its own column as the lab proxy.
 
 **4. Field CLS percentile is CLS × 100.** Raw `11` means CLS `0.11`. Divide.
 
-**5. Audit batch size (`WORKER_CONCURRENCY`) is 20, not 2.** The limiter caps the
-rate; the batch must sit *above* what it needs (Little's Law: 0.75 req/s × ~25 s
-latency ≈ 19). Lowering it turns a 44-minute sweep into seven hours with no error.
-This used to also gate BullMQ's `lockDuration`; there's no queue lock anymore
-(see `docs/DECISIONS.md` §11) — retries now live inside one Workflow step.
+**5. Audit batch size (`WORKER_CONCURRENCY`) is 48, not 2 and not 20.** The
+limiter caps the rate; the batch must sit *above* what it needs (Little's Law:
+in-flight = rate × latency). Measured against the real site, not a guess:
+www.zuddl.com averages ~60s per PSI call, so 0.75 req/s × 60s ≈ 45 in flight,
+and 48 gives headroom — see `.env.example`. (An earlier version of this rule
+said 20, from a rougher ~25s latency assumption before the real site was
+measured; that number is stale, not a floor to preserve.) Lowering it below
+what the measured latency needs turns a sub-hour sweep into many hours with no
+error. This used to also gate BullMQ's `lockDuration`; there's no queue lock
+anymore (see `docs/DECISIONS.md` §11) — retries now live inside one Workflow
+step.
 
 **6. Full sweeps are schedule-only.** No "audit everything now" button, ever, and
 no `run_full_sweep` MCP tool. See `docs/DECISIONS.md` §2.2.

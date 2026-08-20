@@ -1,157 +1,101 @@
 # Resume here
 
-> Written 2026-08-19 because the session's usage was running out. This is the
-> single page to read if you are picking this up cold — a different tool, a new
-> session, or a different person.
+> Rewritten 20 Aug 2026 — the previous version described a mid-flight state
+> from 19 Aug 2026 (dashboard not yet built, a since-finished multi-agent
+> workflow's verification checklist, `npm run worker` as a real command).
+> Everything in that version is done now; this file describes what's
+> actually true today, not a snapshot to reconcile against.
 
 ## Read order
 
-1. **This file** — current state and the exact next action
-2. `docs/PLAN.md` — the approved plan (source of truth for design)
-3. `docs/DECISIONS.md` — why things are this way; read before changing a design
-4. `docs/BUILD_LOG.md` — full history of what was built and what was learned
-5. `docs/SPEC.md` — the original brief
+1. **This file** — current state and what's actually open
+2. `docs/IMPLEMENTATION_PLAN.md` — status by stage, open items, the
+   verification bar for anything new
+3. `docs/PLAN.md` / `docs/DECISIONS.md` — original architecture plan, and
+   why things are the way they are (numbered, §1–§13)
+4. `docs/BUILD_LOG.md` — full chronological history, most recent first
+   read at the bottom
+5. `docs/PRD.md`, `docs/TRD.md`, `docs/APP_FLOW.md`, `docs/UI_UX.md`,
+   `docs/BACKEND_SCHEMA.md` — reference-format current-state doc suite
+6. `docs/SPEC.md` — the original brief
 
 Nothing needed to continue lives outside this repo.
 
 ## State as of the last commit
 
-**All stages complete, and rebuilt as a multi-tenant SaaS.** 137 unit tests
-plus two integration checks (`npm run verify:tenants`, `npm run verify:ingest`).
+**Everything is built**: ingestion, PSI, durable audit execution (Vercel
+Workflow, not a queue worker — see `docs/DECISIONS.md` §11), the
+dashboard, scheduling, notifications, regressions, AI recommendations, a
+9-tool MCP server, and a multi-tenant `Organization`/`Membership`/role
+model throughout. Deployed to Vercel with Neon (Postgres), Upstash
+(Redis), and Vercel Blob (see `docs/TRD.md` §1–2).
 
-Sign up at `/signup` — the first account becomes admin of a new organisation.
-Everything is configured in the app; `.env` holds only infrastructure.
-
-```
-git log --oneline
-```
-should show 5 commits ending at "Shared service DTOs and the small-group
-display decision".
-
-| Thing | State |
-|---|---|
-| Postgres + Redis | Running via OrbStack. `npm run db:up` if not. |
-| Database | Migrated, seeded. **747 real zuddl.com pages, 68 groups.** |
-| PSI API key | Set in `.env` and verified working |
-| Tests | 96 passing (`npm test`) |
-| Typecheck / lint | Both clean |
-| Throughput gate | **PASSED** — 0.695 req/s, ~33 min for a full 1,494-call sweep |
-
-## Everything is built
-
-Stages 1–6 plus the canary are done: ingestion, PSI, queue, dashboard,
-scheduling, notifications, regressions, AI recommendations, and MCP. What
-remains is operational — schedule the sweep, and decide whether the AI provider
-should stay on the Claude Code CLI or move to an API key.
-
-## Historical note: the multi-agent workflow (finished)
-
-A background multi-agent workflow (`psa-stages-5-8`) building three lanes in
-parallel, each adversarially verified, then integrated:
-
-- **M5** — BullMQ queue, worker, processors, audit write path
-  (`lib/queue/**`, `lib/services/audit.service.ts`, `run.service.ts`)
-- **M6** — dashboard read services
-  (`lib/services/{results,issues,site,report}.service.ts`)
-- **M7** — auth, session, `proxy.ts`, login page
-  (`lib/auth/**`, `lib/http/**`, `proxy.ts`, `app/(auth)/**`, `app/actions/auth.ts`)
-
-**Check whether it landed:**
+Sign up at `/signup` — the first account becomes admin of a new
+organisation. `.env` holds only infrastructure secrets; everything else
+is configured in the app.
 
 ```bash
-git status --short          # uncommitted agent output?
-npx tsc --noEmit            # must be clean
-npx eslint .                # must be clean
-npm test                    # must pass
+npx tsc --noEmit   # must be clean
+npm run lint       # must be clean
+npm test           # must pass — 138 tests as of this writing
 ```
 
-**If the working tree has uncommitted changes**, the workflow wrote code that
-was never verified by a human. Run the three commands above before trusting it.
-If it is broken and not worth salvaging:
+## Two things that will cost you real time if you don't know them first
 
-```bash
-git checkout -- . && git clean -fd    # discard, back to the last good commit
-```
+1. **Vercel Workflow's local `next dev` transport is flaky.** Steps get
+   queued but sometimes never execute, no error, no log line. Confirmed
+   again 20 Aug 2026. **Verify any change to `lib/workflows/*` against a
+   real Vercel deployment, never trust local dev alone.**
+2. **Two env vars can't be pulled locally for this project's production
+   environment**: `DATABASE_URL` and `BLOB_READ_WRITE_TOKEN` both come
+   back empty from `vercel env pull`, with no local fallback for the
+   latter. Migrations run inside the build itself now
+   (`docs/DECISIONS.md` §12); Blob's read/write path can only be verified
+   against a live deployment (§13).
 
-That is safe — the last commit is green.
+## Things a fresh agent will get wrong unless told
 
-## The next action
+Still-current gotchas, verified this session or earlier — see
+`CLAUDE.md`'s own "Environment gotchas" section for the full list this
+duplicates a few of intentionally, since this is the file someone reads
+first:
 
-If the workflow output is green: commit it, then **M8 — the dashboard**
-(see `docs/PLAN.md` → "Dashboard (stage 2)"). Build order within M8 is specified
-there: tokens/shell/login first, then `ScoreGauge` + `Sparkline` against
-fixtures, then `/g/[slug]` **before** `/`, then `/p/[pageId]`.
-
-If it is not green: fix it or discard it and rebuild M5 alone, which is the
-piece everything else needs.
-
-## Things a fresh agent WILL get wrong unless told
-
-These each cost real time to discover. They are all verified, not guessed.
-
-1. **Next 16 uses `proxy.ts`, not `middleware.ts`.** `next lint` is also gone —
+1. **Next 16 uses `proxy.ts`, not `middleware.ts`.** `next lint` is gone —
    use `npm run lint`.
 2. **Prisma 7 removed `url` from the datasource block.** It lives in
-   `prisma.config.ts`; the runtime client uses the `PrismaPg` driver adapter.
-   Prisma reads `.env`, **not** `.env.local`.
-3. **npm 12 blocks install scripts.** A fresh clone needs
-   `npm install-scripts approve prisma @prisma/engines sharp unrs-resolver esbuild fsevents`
-   or Prisma silently has no query engine.
-4. **`lib/` must not use the `@/` alias.** Node's native TS stripping does not
-   resolve it, so `node --test` and the bare worker both break. Use relative
-   imports with explicit `.ts` extensions. ESLint enforces this.
-5. **Lighthouse 13 has no `load-opportunities` group** — it is `insights` /
-   `diagnostics` / `metrics` / `hidden`. `weight` is 0 everywhere, and
-   `metricSavings` replaced `details.overallSavingsMs`.
-6. **`AuditResult` holds error rows** (`status:'error'`, null scores) so failed
-   jobs still let a run finalize. Every aggregate MUST filter `status:'ok'`.
-7. **Never write TBT into `inp`.** INP is field-only. Field CLS percentile is
-   CLS × 100 (raw `11` = `0.11`).
-8. **Worker concurrency is 20, not 2–4.** Measured: at 4 the rate collapses to
-   0.225 req/s and a sweep goes from 48 to 148 minutes, silently.
-   `QUEUE_LOCK_DURATION_MS` must exceed `PSI_TIMEOUT_MS`; `lib/env.ts` refuses
-   to boot otherwise.
-9. **Ship Studio runs `next dev` on the host.** Do not containerize the web app
-   locally — it breaks the live preview. `docker-compose.dev.yml` is DB + Redis
-   only.
-10. **tsx scripts need an async `main()`** — top-level await fails because the
-    package is CJS.
+   `prisma.config.ts`. Prisma reads `.env`, **not** `.env.local`.
+3. **npm 12 blocks install scripts** — see `CLAUDE.md` for the exact
+   `install-scripts approve` command, which now also covers `@swc/core`
+   and `cbor-extract` for the Workflow SDK.
+4. **`lib/` must not use the `@/` alias** — `node --test`'s native TS
+   stripping doesn't resolve it. Relative imports with explicit `.ts`
+   extensions. ESLint enforces this.
+5. **`AuditResult` holds error rows** (`status: 'error'`, null scores) —
+   every aggregate query MUST filter `status: 'ok'`.
+6. **Never write TBT into `inp`.** INP is field-only. Field CLS percentile
+   is CLS × 100 (raw `11` = `0.11`).
+7. **`WORKER_CONCURRENCY` must sit above what the rate limiter needs**, not
+   below — see `docs/PLAN.md` §3 and `docs/TRD.md` §4 for the throughput
+   math. There is no `QUEUE_LOCK_DURATION_MS` anymore; that was BullMQ-era
+   and has been removed (retries live inside one Workflow step now).
+8. **`tsx` scripts need an async `main()`** — top-level await fails
+   because the package is CJS.
 
-## Outstanding, in priority order
+## Outstanding
 
-| # | Item | Notes |
-|---|---|---|
-| 1 | Verify/commit the workflow output | See above |
-| 2 | M8 dashboard | The last piece of stages 1–2 |
-| 3 | `AUTH_PASSWORD_HASH` is empty | `npm run hash-password -- 'your-password'`, paste into `.env`. Login cannot work until then. |
-| 4 | `SITE_NAME` is `"Company Site"` | Cosmetic; probably want `Zuddl` |
-| 5 | Two PSI fixtures never captured | A page with NO CrUX data, and one with `origin_fallback: true`. Every URL sampled had page-level data. Grab from low-traffic deep pages during the M9 canary. |
-| 6 | M9 canary before any full sweep | 50 pages first, watch the Google quota dashboard, spot-check 3 reports against pagespeed.web.dev |
-| 7 | Stages 3–6 | Scheduling, notifications, trends/regressions, AI recommendations, MCP. All deferred by design. |
-
-## Useful commands
-
-```bash
-npm run db:up              # Postgres + Redis
-npm run db:migrate         # apply migrations
-npm run db:studio          # browse the data
-npm run ingest             # re-ingest the sitemap (idempotent)
-npm run ingest -- --dry    # crawl and report, write nothing
-npm run inspect-sitemap    # crawl/normalize/group report, no DB writes
-npm run verify:ingest      # 15 DB invariant checks on a throwaway site
-npm run throughput-dryrun  # re-prove the 0.75 req/s gate, zero quota cost
-npm test                   # 96 tests, offline
-npm run worker             # the long-running queue worker (once M5 lands)
-```
+See `docs/IMPLEMENTATION_PLAN.md` §4 for the current open-items table.
+Nothing here is blocking; there is no unverified in-flight work the way
+there was when this file was last written.
 
 ## Decisions that are settled — do not re-litigate
 
-Full reasoning in `docs/DECISIONS.md`. In brief: Postgres + Prisma + BullMQ (no
-SQLite fallback); worker concurrency 20; full sweeps are schedule-only with no
-manual button and no `run_full_sweep` MCP tool, ever; group aggregate is the
-mean with the worst page shown beside it; the `AuditIssue` side table (never
-aggregate over `rawJson`); `GroupAlias` so merged groups don't reappear; pages
-are deactivated not deleted; Server Actions for all UI mutations with
-`requireSession()` first in every one; no charting library; OrbStack as the
-container runtime; and the 42 single-page groups are collapsed in the
-dashboard rather than changed in the data model.
+Full reasoning in `docs/DECISIONS.md` (§1–§13). In brief: Postgres +
+Prisma + Vercel Workflow (BullMQ was replaced, not the original plan);
+batch size sits above the rate limiter's throughput need, not below; full
+sweeps are schedule-only with no manual button and no `run_full_sweep`
+MCP tool, ever; group aggregate is the mean with the worst page shown
+beside it; the `AuditIssue` side table (never aggregate over `rawJson`);
+`GroupAlias` so merged groups don't reappear; pages are deactivated not
+deleted; Server Actions for all UI mutations with `requireSession()`/
+`requireCapability()` first in every one; no charting library; the pruned
+Lighthouse JSON lives in Vercel Blob for new rows, not inline in Postgres.

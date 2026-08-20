@@ -12,11 +12,18 @@ change or quietly got worse.
 
 ## Getting in
 
-Open **http://localhost:3000** and sign in.
+Open the app and sign in with your email and password. If you're the first
+person setting it up, sign up — that account becomes the admin of a new
+organisation. After that, an admin invites everyone else from
+**Settings → Team**, choosing what each person can do:
 
-- Username: `admin`
-- Password: whatever you set (change it any time with
-  `npm run set-password -- 'a-new-password'`, then restart)
+- **Viewer** — see everything, change nothing
+- **Editor** — reorder sections, generate recommendations
+- **Developer** — also run audits on demand
+- **Admin** — also manage the schedule, notifications, teammates, and history
+
+A light/dark toggle lives in the app shell if the default doesn't match your
+system.
 
 ## The screens
 
@@ -54,6 +61,9 @@ order you can't see.
   pages will say "not enough real-user data", which is normal, not an error.
 - **Lab metrics** — the simulated test. LCP is how long the biggest thing takes
   to appear; CLS is how much the page jumps around while loading.
+- A **Passed / Failed** badge next to Field data — whether the page meets
+  Google's real-user Core Web Vitals thresholds, the same pass/fail line
+  Google Search Console and pagespeed.web.dev use.
 - What to fix, in order, with the actual files named
 - **What to fix first** — press Generate for a written explanation. Press
   Regenerate and the old answer is kept, not replaced: "Earlier answers" lists
@@ -65,12 +75,14 @@ order you can't see.
   device-specific problem from a page-wide one.
 - History charts showing whether each score is climbing or falling
 
-**Settings → Automation** — whether the background worker is actually alive,
-when the next check runs, the last ten checks, and the schedule and
-notification settings. Section order lives on the Overview now, as dragging.
+**Settings → Automation** — whether the scheduler is actually alive, when the
+next check runs, the run history (with a picker to delete old runs you no
+longer need), and the schedule and notification settings. Section order lives
+on the Overview now, as dragging.
 
 **While a check is running** — a progress bar appears at the top of every
-screen with **Hold**, **Continue** and **Stop**.
+screen with **Hold**, **Continue** and **Stop**, plus a live terminal-style
+log you can expand to see which page is being measured right now.
 - *Hold* stops new pages being sent. Pages already being measured finish, so a
   few more results will land after you press it. Nothing is lost, and Continue
   picks up where it stopped.
@@ -98,8 +110,9 @@ under Field data instead.
 
 - **Scores did not update** — check the progress bar at the top; a run may still
   be going. It links to whatever is being tested.
-- **Nothing happens when you press a button** — the background worker may not be
-  running. Start it with `npm run worker`.
+- **Nothing happens when you press a button** — check Settings → Automation
+  for whether the scheduler is alive; if it's not, that's an infrastructure
+  problem for whoever maintains the app, not something to fix from the UI.
 - **A page shows dashes everywhere** — it has not been tested yet. Press
   "Re-run this page".
 

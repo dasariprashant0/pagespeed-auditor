@@ -71,7 +71,7 @@ and §11 for the reasoning:
   polls. The run executes in Vercel Workflow and writes to Postgres/Redis;
   a stream would still just be polling that state and re-emitting it.
 - **MCP is feature-complete but explicitly not being extended right now**
-  (per direct instruction, 20 Aug 2026) — 8 tools exist (`list_groups`,
+  (per direct instruction, 20 Aug 2026) — 9 tools exist (`list_groups`,
   `list_pages`, `get_report`, `get_trend`, `top_issues`,
   `get_recommendation`, `run_page_audit`, `run_group_audit`,
   `get_run_status`); no new MCP surface is planned this pass.

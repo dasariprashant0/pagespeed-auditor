@@ -28,7 +28,7 @@ export async function finalizeAndNotify(runId: string): Promise<void> {
   if (!run) return;
 
   try {
-    const pruned = await pruneSiteHistory(run.siteId);
+    const pruned = await pruneSiteHistory(prisma, run.siteId);
     if (pruned.resultsDeleted > 0) log.info({ ...pruned }, 'aged-out history removed');
   } catch (e) {
     log.error({ err: e instanceof Error ? e.message : String(e) }, 'history prune failed');

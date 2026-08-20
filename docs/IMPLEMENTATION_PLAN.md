@@ -13,11 +13,11 @@
 |---|---|---|
 | 1. Ingestion, PSI, queue, storage | **Done** | Queue is now Vercel Workflow, not BullMQ — `docs/DECISIONS.md` §11 |
 | 2. Dashboard | **Done** | Full interface rebuild 20 Aug 2026 — `docs/DECISIONS.md` §10 |
-| 3. Scheduling | **Done** | Vercel Cron, Hobby-plan daily-only limit — `docs/DECISIONS.md` §12 area |
+| 3. Scheduling | **Done** | Vercel Cron, Hobby-plan daily-only limit — `docs/DECISIONS.md` §11 |
 | 4. Notifications | **Done** | Email (Resend/SMTP) + Slack, sweeps only |
 | 5. Trends / regressions | **Done** | Score history per page, regression badges |
 | 6. AI recommendations | **Done** | Versioned, Claude via `@anthropic-ai/sdk` |
-| MCP server | **Done, not being extended this pass** | 8 tools, see `docs/TRD.md` §... and `docs/PRD.md` §4 |
+| MCP server | **Done, not being extended this pass** | 9 tools, full list in `docs/PRD.md` §4 |
 | Multi-tenant rebuild | **Done** | `Organization`/`Membership`/role model throughout |
 
 `CLAUDE.md`'s scope note ("current scope: stages 1–2... MCP deliberately
@@ -78,10 +78,10 @@ and a local build are necessary, not sufficient.
 
 | # | Item | Why it's still open |
 |---|---|---|
-| 1 | `CLAUDE.md`'s stale scope note | Flagged, not fixed — needs a deliberate pass, not a side effect |
+| 1 | ~~`CLAUDE.md`'s stale scope note~~ | **Resolved** — `CLAUDE.md`'s "What this is" section now reflects the built system rather than the original stage-1/2 scope |
 | 2 | Storage panel doesn't show Blob usage | `historyOverview` reports Postgres bytes only; Blob is a separate, cheaper line not yet surfaced anywhere in the UI |
 | 3 | Two PSI fixtures never captured (per `docs/RESUME_HERE.md`) | A page with no CrUX data, and one with `origin_fallback: true` |
-| 4 | `AUTH_PASSWORD_HASH`/single-tenant leftovers in `.env.example` | The app is multi-tenant now; some original single-tenant env docs may be stale |
+| 4 | ~~`AUTH_USERNAME`/`AUTH_PASSWORD_HASH` single-tenant leftovers~~ | **Resolved** — these were dead: read only by a display panel and by `scripts/hash-password.ts`/`set-password.ts`, never by the real per-user login path in `lib/services/account.service.ts`. Removed from `lib/env.ts`, `.env`/`.env.example`, the Settings → Automation panel, `package.json`, and the two scripts deleted. `scripts/reset-password.ts` is unrelated and stays — it resets a real `User` row's password hash |
 | 5 | MCP tool surface | Feature-complete, explicitly not being extended this pass (direct instruction, 20 Aug 2026) |
 
 ## 5. Verification bar for anything added to this list

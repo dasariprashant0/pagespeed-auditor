@@ -14,7 +14,7 @@ import { put, get, del } from '@vercel/blob';
  * case on a rolled-back replay, an orphaned object costing a fraction of a
  * cent.
  */
-function pathnameFor(runId: string, pageId: string, strategy: string): string {
+export function pathnameFor(runId: string, pageId: string, strategy: string): string {
   return `audit-raw-json/${runId}/${pageId}-${strategy}.json`;
 }
 
