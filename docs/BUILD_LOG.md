@@ -1215,3 +1215,72 @@ supervising `next dev` CLI process had died with it. Restarting via
 `npm run dev -- --port 3381` in the background brought it back within
 seconds; worth remembering that killing the inner worker process alone
 isn't always safe to assume recoverable.
+
+## 20 Aug 2026 (later still) — the production migration, and the live "what's running" terminal
+
+Two things picked back up after being deferred: running the pending
+migration against production, and the live per-page activity view from
+earlier in the session (deliberately skipped that round in favour of the
+delete-checks picker and optimistic UI).
+
+### The production migration turned into a real architecture finding
+
+Asked to run `roleTourSeenAt`'s migration directly rather than hand it to
+the user. `vercel env pull --environment=production` returns
+`DATABASE_URL=""` — genuinely empty, confirmed with `vercel env ls
+production` (a normal Encrypted project variable, not a special one) — so
+**no local machine can run `prisma migrate deploy` against this project's
+production database**, regardless of who's asked. The deployed app
+obviously has a working connection; it just isn't retrievable through the
+CLI the way the rest of the env vars are.
+
+Fix, not a workaround: moved the migration into the build itself --
+`"build": "prisma generate && prisma migrate deploy && next build"`
+(`docs/DECISIONS.md` §12). Vercel's own build step is the one place that
+demonstrably has a working `DATABASE_URL`. Verified in the actual build
+log of the deploy that shipped it:
+
+```
+Applying migration `20260820123701_add_role_tour_seen_at`
+All migrations have been successfully applied.
+```
+
+This replaces the manual "pull env, run migrate deploy" instructions given
+earlier the same day — those cannot work for this project, full stop, not
+just inconvenient. Every future schema change now ships itself.
+
+### Live "what's running" terminal
+
+Per-page activity while a sweep runs, requested earlier and skipped in
+favour of the picker/optimistic-UI pass. Redis-backed, not Postgres --
+`lib/redis.ts` gained `pushRunLogEvent`/`readRunLog`, a capped (300),
+TTL'd (1h) list per run, keyed the same way the PSI rate limiter already
+is. `auditOnePageStep` (`lib/workflows/auditRun.ts`) pushes a `start` on
+the first attempt and an `ok`/`retry`/`error` on each outcome, **awaited**
+rather than fire-and-forget -- a serverless container frozen right after a
+step returns can drop an un-awaited call, and `pushRunLogEvent` already
+swallows its own errors, so awaiting it costs a few ms without risking the
+audit itself.
+
+`GET /api/runs/[runId]/log` serves the last 150 events, oldest first.
+`RunTerminal` (collapsed by default, one per run in `ActiveRunBar`) polls
+it every 2s while expanded and the run is active, monospace, colour-coded
+by kind, auto-scrolling. Deliberately not a new subscription/stream --
+same reasoning `ActiveRunBar` already documents for polling over SSE.
+
+**Verified in two parts, because local dev couldn't do both at once:**
+the read/write path (`pushRunLogEvent` → the API route → `RunTerminal`'s
+rendering) was confirmed directly by pushing synthetic events into Redis
+for a real run id and watching them appear correctly ordered and
+coloured in the UI. The actual `auditOnePageStep` step never ran locally
+to produce *real* events, though -- no PSI call, no job-logger output, no
+"fetch failed" this time either, just silence -- consistent with the
+already-documented (`docs/DECISIONS.md` §11) Workflow local-dev transport
+issue, not a bug in this feature. Full end-to-end verification (a real
+audit actually producing real log lines) happens against the Vercel
+deployment this ships in, once it's live -- local `next dev` was never a
+reliable place to trust this SDK, and today's session didn't change that.
+
+### Verified
+
+`npx tsc --noEmit` clean, `npm run lint` 0 errors, `npm test` 127/127.

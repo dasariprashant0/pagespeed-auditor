@@ -76,3 +76,63 @@ export async function schedulerHealth(): Promise<SchedulerHealth> {
     return { alive: false, lastTickSecondsAgo: null };
   }
 }
+
+// --- live run log ------------------------------------------------------------
+
+/**
+ * "What is actually happening right now" for a run in flight -- the thing
+ * BullMQ's delayed-job introspection used to answer and the Workflow
+ * migration dropped (see the comment in app/api/runs/active/route.ts). Not
+ * durable and not meant to be: a Redis list, capped and TTL'd, purely for a
+ * live terminal-style view while someone is watching. Postgres already has
+ * the durable record (AuditResult); this is not a second copy of it.
+ */
+export type RunLogEventKind = 'start' | 'ok' | 'retry' | 'error';
+
+export interface RunLogEvent {
+  ts: number;
+  kind: RunLogEventKind;
+  pageId: string;
+  url: string;
+  strategy: string;
+  message?: string;
+}
+
+const RUN_LOG_MAX_LINES = 300;
+const RUN_LOG_TTL_MS = 60 * 60_000;
+
+function runLogKey(runId: string): string {
+  return `${getEnv().QUEUE_PREFIX}:run:${runId}:log`;
+}
+
+/** Never lets a logging failure break the actual audit -- swallows its own errors. */
+export async function pushRunLogEvent(runId: string, event: RunLogEvent): Promise<void> {
+  const key = runLogKey(runId);
+  const redis = getRedis();
+  try {
+    await redis.lpush(key, JSON.stringify(event));
+    await redis.ltrim(key, 0, RUN_LOG_MAX_LINES - 1);
+    await redis.pexpire(key, RUN_LOG_TTL_MS);
+  } catch {
+    /* the terminal view missing a line is not worth failing a step over */
+  }
+}
+
+/** Oldest first, so new lines append at the bottom like a real terminal. */
+export async function readRunLog(runId: string, limit = 150): Promise<RunLogEvent[]> {
+  try {
+    const raw = await getRedis().lrange(runLogKey(runId), 0, limit - 1);
+    return raw
+      .map((r) => {
+        try {
+          return JSON.parse(r) as RunLogEvent;
+        } catch {
+          return null;
+        }
+      })
+      .filter((e): e is RunLogEvent => e !== null)
+      .reverse();
+  } catch {
+    return [];
+  }
+}

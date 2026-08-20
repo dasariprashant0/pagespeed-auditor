@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { RunProgressDTO } from '@/lib/services/types';
 import { RunControls } from './RunControls';
+import { RunTerminal } from './RunTerminal';
 
 const TERMINAL = new Set(['completed', 'failed', 'cancelled', 'skipped']);
 
@@ -98,45 +99,49 @@ function RunRow({ run: r }: { run: RunProgressDTO }) {
       }${tail}`;
 
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 sm:px-4">
-      {/* Linked, because "something is running" without "where" is the moment
-          you actually want to go and look at it. */}
-      {r.scopeHref ? (
-        <Link href={r.scopeHref} className="shrink-0 text-[11px] font-medium underline-offset-2 hover:underline">
-          {r.scopeName ?? r.scopeLabel ?? r.type} ↗
-        </Link>
-      ) : (
-        <span className="shrink-0 text-[11px] font-medium">{r.scopeLabel ?? r.type}</span>
-      )}
+    <div className="px-3 py-2 sm:px-4">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        {/* Linked, because "something is running" without "where" is the moment
+            you actually want to go and look at it. */}
+        {r.scopeHref ? (
+          <Link href={r.scopeHref} className="shrink-0 text-[11px] font-medium underline-offset-2 hover:underline">
+            {r.scopeName ?? r.scopeLabel ?? r.type} ↗
+          </Link>
+        ) : (
+          <span className="shrink-0 text-[11px] font-medium">{r.scopeLabel ?? r.type}</span>
+        )}
 
-      <div
-        role="progressbar"
-        aria-valuemin={0}
-        aria-valuemax={r.totalJobs}
-        aria-valuenow={r.completedJobs}
-        aria-valuetext={text}
-        aria-label={`Audit progress for ${r.scopeLabel ?? r.type}`}
-        className="h-1.5 min-w-[8rem] flex-1 overflow-hidden rounded-full bg-[var(--surface-sunken)]"
-      >
         <div
-          className="h-full rounded-full transition-[width] duration-500"
-          style={{
-            width: `${r.percentComplete}%`,
-            // Amber while waiting on a retry, so a paused run does not look
-            // like a healthy one that has simply gone quiet.
-            background: held
-              ? 'var(--faint)'
-              : allRemainingRetrying
-                ? 'var(--score-average)'
-                : 'var(--info)',
-          }}
-        />
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={r.totalJobs}
+          aria-valuenow={r.completedJobs}
+          aria-valuetext={text}
+          aria-label={`Audit progress for ${r.scopeLabel ?? r.type}`}
+          className="h-1.5 min-w-[8rem] flex-1 overflow-hidden rounded-full bg-[var(--surface-sunken)]"
+        >
+          <div
+            className="h-full rounded-full transition-[width] duration-500"
+            style={{
+              width: `${r.percentComplete}%`,
+              // Amber while waiting on a retry, so a paused run does not look
+              // like a healthy one that has simply gone quiet.
+              background: held
+                ? 'var(--faint)'
+                : allRemainingRetrying
+                  ? 'var(--score-average)'
+                  : 'var(--info)',
+            }}
+          />
+        </div>
+
+        {/* The same string the bar announces, so nothing is read out that isn't visible. */}
+        <span className="tnum text-[11px] text-[var(--muted)]">{text}</span>
+
+        <RunControls runId={r.runId} status={r.status} compact />
       </div>
 
-      {/* The same string the bar announces, so nothing is read out that isn't visible. */}
-      <span className="tnum text-[11px] text-[var(--muted)]">{text}</span>
-
-      <RunControls runId={r.runId} status={r.status} compact />
+      <RunTerminal runId={r.runId} active={r.status === 'running' || r.status === 'queued'} />
     </div>
   );
 }

@@ -3,7 +3,7 @@ import { start } from 'workflow/api';
 import { prisma } from '../db.ts';
 import { getEnv } from '../env.ts';
 import { jobLogger } from '../logger.ts';
-import { getPsiRateLimiter } from '../redis.ts';
+import { getPsiRateLimiter, pushRunLogEvent } from '../redis.ts';
 import { auditPage, errorResultFor, recordAuditResult } from '../services/audit.service.ts';
 import { buildMarkdownReport } from '../report/markdown.ts';
 import { RetryableError, PermanentError } from '../errors.ts';
@@ -41,6 +41,12 @@ async function auditOnePageStep(runId: string, pageId: string, url: string, stra
   const log = jobLogger(runId, pageId, strategy);
   const maxAttempts = getEnv().PSI_MAX_ATTEMPTS;
 
+  // For the live "what's running" terminal view only -- awaited so a
+  // container frozen right after this step returns can't drop it (a
+  // fire-and-forget call has no such guarantee in a serverless runtime), but
+  // pushRunLogEvent swallows its own errors, so it can never fail the audit.
+  await pushRunLogEvent(runId, { ts: Date.now(), kind: 'start', pageId, url, strategy });
+
   for (let attempt = 1; ; attempt++) {
     try {
       const outcome = await auditPage({ prisma, limiter: getPsiRateLimiter() }, { runId, pageId, url, strategy });
@@ -48,11 +54,13 @@ async function auditOnePageStep(runId: string, pageId: string, url: string, stra
         log.info('replay — result already recorded, counter untouched');
         return;
       }
+      await pushRunLogEvent(runId, { ts: Date.now(), kind: 'ok', pageId, url, strategy });
       if (outcome.readyToFinalize) await finalizeAndNotify(runId);
       return;
     } catch (e) {
       if (e instanceof PermanentError) {
         log.error({ message: e.message }, 'permanent failure — not retrying');
+        await pushRunLogEvent(runId, { ts: Date.now(), kind: 'error', pageId, url, strategy, message: e.message });
         return;
       }
 
@@ -69,6 +77,7 @@ async function auditOnePageStep(runId: string, pageId: string, url: string, stra
         // the run's count instead of showing up as a tracked failure.
         const message = e instanceof Error ? e.message : String(e);
         log.error({ attempts: attempt, message }, 'retries exhausted — recording an error row');
+        await pushRunLogEvent(runId, { ts: Date.now(), kind: 'error', pageId, url, strategy, message });
         const extracted = errorResultFor('RETRIES_EXHAUSTED');
         const outcome = await recordAuditResult(prisma, {
           runId, pageId, url, strategy,
@@ -81,6 +90,8 @@ async function auditOnePageStep(runId: string, pageId: string, url: string, stra
       }
 
       const wait = e instanceof RetryableError ? (e.retryAfterMs ?? backoffMs(attempt)) : backoffMs(attempt);
+      const message = e instanceof Error ? e.message : String(e);
+      await pushRunLogEvent(runId, { ts: Date.now(), kind: 'retry', pageId, url, strategy, message: `${message} — retrying in ${Math.round(wait / 1000)}s` });
       await sleepMs(wait);
     }
   }
