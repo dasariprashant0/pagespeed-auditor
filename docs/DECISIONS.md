@@ -690,13 +690,17 @@ near-empty `BLOB_READ_WRITE_TOKEN` for this project, the same pattern as
 `DATABASE_URL` — and local `.env` has no `BLOB_*` variables of its own
 (no separate dev store was ever provisioned). So unlike the DB migration,
 which at least runs correctly inside Vercel's build, **the actual
-`put`/`get`/`del` round trip could not be exercised at all during this
-session** — not locally (no token), not standalone (no script has one
-either). What's verified is narrower than usual: `tsc --noEmit`, lint, and
-a full `next build` all pass with the real `@vercel/blob` types, and the
-code was checked line-by-line against the SDK's actual `.d.ts` (not
-memory) for the exact shape of `get()`'s discriminated `GetBlobResult` and
-`put`'s `PutCommandOptions`. **The real upload/download/delete behaviour
-against a live store has not been observed by anyone yet** — verify a real
-audit run against the Vercel deployment this ships in before trusting it,
-the same way §11 already asks for Workflow.
+`put`/`get`/`del` round trip could not be exercised locally at all** — not
+via `next dev` (no token), not standalone (no script has one either).
+
+**Verified for real against the Vercel deployment this shipped in**,
+immediately after: triggered a live "Measure again" on
+`https://www.zuddl.com/`, watched the run's own `start`/`ok` events (the
+terminal feature from earlier the same day) confirm both strategies
+completed, then reloaded the report page and confirmed Opportunities (6),
+Diagnostics (4), Passed audits (76) and Not applicable all rendered with
+real, specific findings — every one of those sections is derived from
+`rawJson` via `report.service.ts`, and this was a brand-new row (fresh
+timestamp, changed scores), so there was no legacy inline `rawJson` for it
+to be silently falling back to. That is the full write-then-read-back
+round trip, observed working, not inferred from types.

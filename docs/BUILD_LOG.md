@@ -1312,12 +1312,15 @@ sounds" math and the exact trade-offs accepted: `docs/DECISIONS.md` §13.
 
 `npx tsc --noEmit`, `npm run lint`, `npm test` (127/127), and a full
 `npm run build` all pass with the real `@vercel/blob` package (not a stub)
-and the regenerated Prisma client. **The actual Blob upload/download/
-delete round trip was not exercised** — production's `BLOB_READ_WRITE_TOKEN`
-pulls empty via the CLI the same way `DATABASE_URL` does (§12), and local
-`.env` has no Blob credentials of its own to fall back to. The `get()`/
-`put()`/`del()` call shapes were checked against the SDK's actual `.d.ts`
-rather than memory, but nobody has watched a real audit write to Blob and
-a real report page read it back yet. That has to happen against the
-Vercel deployment this ships in before it's trusted the way the rest of
-this session's work was.
+and the regenerated Prisma client. Local exercise wasn't possible —
+production's `BLOB_READ_WRITE_TOKEN` pulls empty via the CLI the same way
+`DATABASE_URL` does (§12), and local `.env` has no Blob credentials of its
+own — so this shipped on type-level confidence alone and was checked for
+real immediately after deploying: triggered "Measure again" on
+`https://www.zuddl.com/`, watched the new terminal feature's own
+`start`/`ok` events confirm both strategies completed, then confirmed the
+report page's Opportunities (6), Diagnostics (4), Passed audits (76) and
+Not applicable sections all rendered real findings for that brand-new row
+— every one of those is derived from `rawJson` via `report.service.ts`,
+so this is the write-then-read-back round trip actually observed, not
+inferred from passing types. `docs/DECISIONS.md` §13 has the detail.
