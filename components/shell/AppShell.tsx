@@ -96,7 +96,12 @@ export function AppShell({
                   <span aria-hidden="true" className="ml-1.5 inline-block transition-transform group-open:rotate-180">▾</span>
                 </span>
               </summary>
-              <div className="border-t border-[var(--border)] bg-[var(--chrome)] px-3 py-3">
+              {/* max-h + its own overflow-y-auto: this sits inside a `sticky`
+                  header, which has no way to scroll ITS content once that
+                  content is taller than the viewport -- a site with dozens of
+                  sections otherwise renders a menu with no way to reach the
+                  bottom half of it. */}
+              <div className="max-h-[70dvh] overflow-y-auto border-t border-[var(--border)] bg-[var(--chrome)] px-3 py-3">
                 <GroupRail groups={groups} canReorder={canReorder} variant="compact" />
                 <div className="mt-3 flex items-center gap-3 border-t border-[var(--border)] pt-3 text-[12px]">
                   <Link href="/settings/profile" className="text-[var(--muted)] hover:text-[var(--foreground)]">
