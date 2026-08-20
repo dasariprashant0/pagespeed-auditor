@@ -1,5 +1,6 @@
 import { prisma } from '../db.ts';
 import { logger } from '../logger.ts';
+import { deleteRawJsonBlobs } from '../blob.ts';
 
 /**
  * How much history is kept.
@@ -42,12 +43,15 @@ export async function pruneSiteHistory(siteId: string): Promise<RetentionSummary
 
   // DISTINCT-ON-style windowing in one statement: doing it per page would be
   // ~1,500 round trips on a site this size.
-  const stale = await prisma.$queryRaw<Array<{ id: string; pageId: string; bytes: number }>>`
-    SELECT id, "pageId", COALESCE(LENGTH("rawJson"::text), 0) AS bytes
+  const stale = await prisma.$queryRaw<
+    Array<{ id: string; pageId: string; bytes: number; rawJsonBlobKey: string | null }>
+  >`
+    SELECT id, "pageId", COALESCE(LENGTH("rawJson"::text), 0) AS bytes, "rawJsonBlobKey"
     FROM (
       SELECT r.id,
              r."pageId",
              r."rawJson",
+             r."rawJsonBlobKey",
              ROW_NUMBER() OVER (
                PARTITION BY r."pageId", r.strategy
                ORDER BY r."createdAt" DESC
@@ -64,16 +68,22 @@ export async function pruneSiteHistory(siteId: string): Promise<RetentionSummary
   }
 
   const ids = stale.map((s) => s.id);
+  // Postgres bytes only -- a blob's bytes aren't in this table to begin
+  // with, so freeing them isn't part of "how much did THIS query reclaim".
   const bytes = stale.reduce((n, s) => n + Number(s.bytes), 0);
+  const blobKeys = stale.map((s) => s.rawJsonBlobKey).filter((k): k is string => k !== null);
 
   // AuditIssue and Recommendation cascade from AuditResult, so one delete takes
-  // the whole run with it and cannot leave orphans behind.
+  // the whole run with it and cannot leave orphans behind. The Blob objects
+  // are a separate store the DB cascade can't reach -- cleaned up explicitly,
+  // best-effort, after the rows that reference them are actually gone.
   let deleted = 0;
   for (let i = 0; i < ids.length; i += 500) {
     const chunk = ids.slice(i, i + 500);
     const res = await prisma.auditResult.deleteMany({ where: { id: { in: chunk } } });
     deleted += res.count;
   }
+  await deleteRawJsonBlobs(blobKeys);
 
   const summary: RetentionSummary = {
     keepRuns: keep,
@@ -110,9 +120,18 @@ export async function deleteRuns(
   const ids = deletable.map((r) => r.id);
   if (ids.length === 0) return { runsDeleted: 0, resultsDeleted: 0 };
 
-  const resultsDeleted = await prisma.auditResult.count({ where: { auditRunId: { in: ids } } });
+  // Fetched before the cascade, not after: once the AuditRun rows are gone,
+  // so are the AuditResult rows that name their Blob objects -- there is no
+  // reading them back afterwards to know what to clean up.
+  const results = await prisma.auditResult.findMany({
+    where: { auditRunId: { in: ids } },
+    select: { rawJsonBlobKey: true },
+  });
+  const blobKeys = results.map((r) => r.rawJsonBlobKey).filter((k): k is string => k !== null);
+
   const { count: runsDeleted } = await prisma.auditRun.deleteMany({ where: { id: { in: ids } } });
-  return { runsDeleted, resultsDeleted };
+  await deleteRawJsonBlobs(blobKeys);
+  return { runsDeleted, resultsDeleted: results.length };
 }
 
 /** Removes runs that no longer have any results, so the run list stays honest. */

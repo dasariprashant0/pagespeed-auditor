@@ -96,6 +96,11 @@ from Server Actions, the MCP server, and `/api/cron/schedule-tick`. See
   machine — the migration has to run inside Vercel's own build (see the
   `package.json` line above), which is the one place that demonstrably has
   the real value.
+- **`BLOB_READ_WRITE_TOKEN` has the exact same problem, and there is no
+  local fallback for it either** — local `.env` has no `BLOB_*` variables
+  of its own. `AuditResult.rawJson` lives in Vercel Blob now (`lib/blob.ts`,
+  `docs/DECISIONS.md` §13); the real upload/download/delete round trip can
+  only be verified against a Vercel deployment, never locally.
 - **Deploying pulls in more blocked install scripts.** `workflow`/
   `@workflow/core` need `@swc/core` and `cbor-extract`'s native builds — add
   them to `package.json`'s `allowScripts` (`npm install-scripts approve

@@ -9,6 +9,7 @@ import { getEnv } from '../env.ts';
 import { isUniqueViolation, PermanentError, RetryableError } from '../errors.ts';
 import { jobLogger } from '../logger.ts';
 import { shouldFinalize } from './run.service.ts';
+import { storeRawJson } from '../blob.ts';
 
 /**
  * The audit WRITE path: one (page, strategy) measured and persisted.
@@ -56,6 +57,12 @@ export async function recordAuditResult(
 ): Promise<RecordOutcome> {
   const { runId, pageId, strategy, extracted, isFailure } = args;
 
+  // Uploaded before the transaction, not after: see the pathname comment in
+  // lib/blob.ts for why this doesn't need the row's own id. Nothing to
+  // upload for an error row (args.rawJson is already null there).
+  const rawJsonBlobKey =
+    args.rawJson != null ? await storeRawJson(runId, pageId, strategy, args.rawJson) : null;
+
   try {
     const run = await prisma.$transaction(
       async (tx) => {
@@ -88,7 +95,14 @@ export async function recordAuditResult(
             fieldJson: (args.fieldJson ?? undefined) as never,
             finalUrl: extracted.finalUrl,
             lighthouseVersion: extracted.lighthouseVersion,
-            rawJson: (args.rawJson ?? undefined) as never,
+            // Never inline for new rows -- the pruned JSON lives in Blob
+            // (rawJsonBlobKey) now. See docs/DECISIONS.md §13. undefined
+            // (not null) omits the field, which is how the rest of this
+            // create() already spells "leave this JSON column null" -- a
+            // bare `null` needs Prisma.JsonNull instead, which is more
+            // ceremony than this needs.
+            rawJson: undefined as never,
+            rawJsonBlobKey,
             markdownReport: args.markdownReport,
             durationMs: args.durationMs ?? null,
           },

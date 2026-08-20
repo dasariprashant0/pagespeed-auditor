@@ -297,7 +297,15 @@ model AuditResult {
 
   // Pruned before storage (screenshots/treemap/i18n/timing stripped).
   // Never SELECT * on this table -- use the shared summary select.
+  //
+  // Legacy inline storage. New rows write null here and put the JSON in
+  // Vercel Blob instead (rawJsonBlobKey) -- see docs/DECISIONS.md §13. Kept,
+  // not backfilled: existing rows still have their data here, and the
+  // 10-per-page retention window ages them out naturally within weeks.
   rawJson        Json?
+  /// Pathname in Vercel Blob holding the pruned JSON, when it isn't inline
+  /// in rawJson above. Null for legacy rows and for error rows (nothing to store).
+  rawJsonBlobKey String?
   markdownReport String
 
   createdAt DateTime @default(now())

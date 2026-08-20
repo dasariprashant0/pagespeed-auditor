@@ -633,3 +633,70 @@ instructions given after the `roleTourSeenAt` migration) that someone would
 `vercel env pull` + `prisma migrate deploy` by hand before/after a deploy.
 That path is now understood to not reliably work for this project's
 production database regardless of who runs it, not just inconvenient.
+
+## 13. `AuditResult.rawJson` moved to Vercel Blob (20 Aug 2026)
+
+**Chosen:** new audit results store the pruned Lighthouse JSON in Vercel
+Blob (`lib/blob.ts`) instead of inline in Postgres. `AuditResult.rawJson`
+stays as a column (legacy rows still use it) but every new row writes
+`rawJson: null` and points `rawJsonBlobKey` at the Blob pathname instead.
+
+**Why:** raised directly — "one whole-site sweep is ~200 MB, how does Neon
+survive three of them, and at $5/month will the infra cost more than the
+revenue." The real numbers (fetched live, not memorized): Neon storage
+**$0.35/GB-month**, free tier only 0.5 GB; Vercel Blob storage
+**$0.023/GB-month** — ~15× cheaper for the exact same bytes — plus
+$0.40/1M read ops and $5/1M write ops. `rawJson` (the pruned Lighthouse
+payload) is the dominant contributor to the 154.8 MB one full sweep
+already costs on disk (`pg_column_size`, confirmed via Settings → Site).
+Moving it doesn't just cut the Neon bill; it also shrinks what Postgres has
+to TOAST/detoast on every write and on the one read path that touches it
+(`report.service.ts`'s single-report page), which is the more likely driver
+of Neon *compute* cost, not just storage.
+
+**Not a backfill.** Existing rows keep their inline `rawJson` exactly as
+they are — no migration script rewrote history. `pruneSiteHistory`'s
+existing 10-per-page retention window ages the old inline rows out within
+weeks on its own, so a backfill would have been risk for no real payoff.
+The read path (`report.service.ts`) checks `rawJsonBlobKey` first and falls
+back to the inline column, so both generations of row render identically.
+
+**Pathname, not the row's id.** `lib/blob.ts` keys each blob by
+`audit-raw-json/{runId}/{pageId}-{strategy}.json` — the same
+`@@unique([auditRunId, pageId, strategy])` triple the DB already treats as
+unique — uploaded *before* the `$transaction` in `recordAuditResult`, not
+after. The row's own id only exists once the DB assigns it on insert; using
+it would mean uploading after the transaction and a second `UPDATE` to
+attach the key, a two-phase write for no real benefit. Trade-off accepted:
+a transaction that rolls back (a replayed job racing the unique constraint)
+leaves one orphaned blob object, costing a fraction of a cent — not worth
+building cleanup for.
+
+**Private access, not public.** This is performance data about an internal
+site, read only through the app's own session auth (`report.service.ts`),
+never a bare public URL — `access: 'private'` on both `put` and `get`.
+
+**Cleanup follows the row, not just the cascade.** Postgres cascades
+(`AuditIssue`/`Recommendation` from `AuditResult`, `AuditResult` from
+`AuditRun`) can't reach a separate object store. Both places that delete
+`AuditResult` rows (`pruneSiteHistory`'s age-based prune, and `deleteRuns`'
+operator-picked delete) now collect `rawJsonBlobKey` **before** deleting and
+call `deleteRawJsonBlobs()` **after** — best-effort, since a leaked blob
+costs a fraction of a cent and isn't worth failing either operation over.
+
+**Not retrievable locally, same as `DATABASE_URL` (§12), and no local
+fallback either:** `vercel env pull --environment=production` returns a
+near-empty `BLOB_READ_WRITE_TOKEN` for this project, the same pattern as
+`DATABASE_URL` — and local `.env` has no `BLOB_*` variables of its own
+(no separate dev store was ever provisioned). So unlike the DB migration,
+which at least runs correctly inside Vercel's build, **the actual
+`put`/`get`/`del` round trip could not be exercised at all during this
+session** — not locally (no token), not standalone (no script has one
+either). What's verified is narrower than usual: `tsc --noEmit`, lint, and
+a full `next build` all pass with the real `@vercel/blob` types, and the
+code was checked line-by-line against the SDK's actual `.d.ts` (not
+memory) for the exact shape of `get()`'s discriminated `GetBlobResult` and
+`put`'s `PutCommandOptions`. **The real upload/download/delete behaviour
+against a live store has not been observed by anyone yet** — verify a real
+audit run against the Vercel deployment this ships in before trusting it,
+the same way §11 already asks for Workflow.

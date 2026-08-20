@@ -4,6 +4,7 @@ import { bucketOf } from '../psi/buckets.ts';
 import type { Bucket, MetricId, PsiStrategy } from '../psi/types.ts';
 import { issueKindFromGroup } from './issues.service.ts';
 import { getPageScoreHistory } from './results.service.ts';
+import { fetchRawJson } from '../blob.ts';
 import type {
   AuditDetailTable,
   AuditItemDTO,
@@ -284,14 +285,21 @@ export async function getPageReport(
     getPageScoreHistory(pageId, strategy, opts.historyLimit),
     // Always fetched now: the report view needs both descriptions and the
     // evidence tables, and this is a single row rather than a list query.
-    prisma.auditResult.findUnique({ where: { id: latest.id }, select: { rawJson: true } }),
+    prisma.auditResult.findUnique({ where: { id: latest.id }, select: { rawJson: true, rawJsonBlobKey: true } }),
   ]);
 
-  const descriptions = descriptionsFromRawJson(rawRow?.rawJson ?? null);
-  const detailTables = detailsFromRawJson(rawRow?.rawJson ?? null);
-  const { passed, notApplicable } = passedAuditsFromRawJson(rawRow?.rawJson ?? null);
-  const screenshot = screenshotFromRawJson(rawRow?.rawJson ?? null);
-  const environment = environmentFromRawJson(rawRow?.rawJson ?? null);
+  // Blob first (where every new row's JSON actually lives), falling back to
+  // the inline column for rows written before the move -- see
+  // docs/DECISIONS.md §13. Never both: recordAuditResult never sets both.
+  const rawJson = rawRow?.rawJsonBlobKey
+    ? await fetchRawJson(rawRow.rawJsonBlobKey)
+    : rawRow?.rawJson ?? null;
+
+  const descriptions = descriptionsFromRawJson(rawJson);
+  const detailTables = detailsFromRawJson(rawJson);
+  const { passed, notApplicable } = passedAuditsFromRawJson(rawJson);
+  const screenshot = screenshotFromRawJson(rawJson);
+  const environment = environmentFromRawJson(rawJson);
 
   const items: AuditItemDTO[] = issues.map((i) => ({
     auditId: i.auditId,

@@ -1284,3 +1284,40 @@ reliable place to trust this SDK, and today's session didn't change that.
 ### Verified
 
 `npx tsc --noEmit` clean, `npm run lint` 0 errors, `npm test` 127/127.
+
+### `AuditResult.rawJson` moved to Vercel Blob
+
+The storage-architecture fix proposed earlier in the session (Neon storage
+at $0.35/GB-month vs. Blob at $0.023/GB-month for the same bytes) and
+deliberately deferred at the time in favour of the delete-checks picker.
+Picked back up now, alongside the terminal and the migration fix, per the
+instruction not to let deferred work quietly stay dropped.
+
+New rows: `recordAuditResult` uploads the pruned JSON to Blob
+(`lib/blob.ts`, private access) *before* its `$transaction`, keyed by
+`audit-raw-json/{runId}/{pageId}-{strategy}.json` — the existing
+`@@unique([auditRunId, pageId, strategy])` triple, not the row's own id,
+which doesn't exist until the DB assigns it on insert — and writes
+`rawJson: null` / `rawJsonBlobKey: <pathname>`. Old rows are untouched; no
+backfill script ran. `report.service.ts`'s single read site checks
+`rawJsonBlobKey` first, falls back to the inline column for legacy rows.
+`pruneSiteHistory` and `deleteRuns` both now collect blob keys before
+deleting their `AuditResult` rows and clean up the Blob objects after —
+Postgres's cascade can't reach a separate store.
+
+Full reasoning, including the "why 15× cheaper matters more than it
+sounds" math and the exact trade-offs accepted: `docs/DECISIONS.md` §13.
+
+### Verified (rawJson/Blob specifically)
+
+`npx tsc --noEmit`, `npm run lint`, `npm test` (127/127), and a full
+`npm run build` all pass with the real `@vercel/blob` package (not a stub)
+and the regenerated Prisma client. **The actual Blob upload/download/
+delete round trip was not exercised** — production's `BLOB_READ_WRITE_TOKEN`
+pulls empty via the CLI the same way `DATABASE_URL` does (§12), and local
+`.env` has no Blob credentials of its own to fall back to. The `get()`/
+`put()`/`del()` call shapes were checked against the SDK's actual `.d.ts`
+rather than memory, but nobody has watched a real audit write to Blob and
+a real report page read it back yet. That has to happen against the
+Vercel deployment this ships in before it's trusted the way the rest of
+this session's work was.
