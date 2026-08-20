@@ -24,6 +24,7 @@ export function AppShell({
   siteName,
   groups,
   canReorder = false,
+  canRunAudits = false,
   children,
 }: {
   /** The tenant. Always shown, because a person can belong to several. */
@@ -32,6 +33,8 @@ export function AppShell({
   siteName?: string | null;
   groups: RailGroup[];
   canReorder?: boolean;
+  /** Whether Hold/Continue/Stop show on the global run bar -- audits:run. */
+  canRunAudits?: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -118,7 +121,7 @@ export function AppShell({
             </details>
           </header>
 
-          <ActiveRunBar />
+          <ActiveRunBar canRunAudits={canRunAudits} />
 
           <main id="main" className="mx-auto w-full max-w-[1440px] flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
             {children}

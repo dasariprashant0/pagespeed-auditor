@@ -40,6 +40,7 @@ export default async function DashLayout({ children }: { children: React.ReactNo
       siteName={site?.name}
       groups={toRailGroups(groups)}
       canReorder={can(ctx.role, 'groups:manage')}
+      canRunAudits={can(ctx.role, 'audits:run')}
     >
       {children}
     </AppShell>

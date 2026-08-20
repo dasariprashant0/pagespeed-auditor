@@ -14,10 +14,19 @@ export function RunControls({
   runId,
   status,
   compact = false,
+  canControl = true,
 }: {
   runId: string;
   status: string;
   compact?: boolean;
+  /**
+   * Hiding is presentation, not protection -- controlRunAction re-checks
+   * audits:run itself. But a viewer clicking Hold/Stop and getting back a
+   * rejected Server Action (rather than a friendly message) is a worse
+   * experience than never seeing the buttons, so this is threaded down from
+   * the session's own role the same way AppShell's canReorder already is.
+   */
+  canControl?: boolean;
 }) {
   const [pending, start] = useTransition();
   // Flips the button and hides a stopped run's controls the instant an
@@ -30,6 +39,7 @@ export function RunControls({
   const [confirming, setConfirming] = useState(false);
   const router = useRouter();
 
+  if (!canControl) return null;
   if (!['queued', 'running', 'paused'].includes(optimisticStatus)) return null;
 
   const act = (action: 'pause' | 'resume' | 'stop') =>

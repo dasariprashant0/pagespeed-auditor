@@ -1471,3 +1471,64 @@ the password is never typed into this chat.
 
 Verified: `npx tsc --noEmit`, `npm run lint`, `npm test` (138/138), `npm
 run build` all clean.
+
+## 21 Aug 2026 (later) — role-gated controls: frontend showed them, backend crashed instead of rejecting them
+
+Reported as "settings screens write everyone can see it but not everyone
+can edit them... can't [be stopped] from frontend and backend." Audited
+every mutating Server Action's permission check plus every place a
+capability-gated control is rendered, rather than guessing at one
+component.
+
+**Two distinct, compounding gaps, both systemic:**
+
+1. **Frontend**: `RunAuditButton` (page and group reports) and
+   `RunControls`/`ActiveRunBar` (the global Hold/Continue/Stop bar,
+   mounted for every signed-in screen via `app/(dash)/layout.tsx`) and
+   `RecommendationPanel`'s Generate/Regenerate button were all rendered
+   unconditionally, with no role check anywhere in the component tree.
+   A viewer (who has `reports:read` only) would see every one of these
+   and be able to click them. Group-reorder (`GroupRail`, `SectionGrid`)
+   turned out to already be correctly gated via a `canReorder` prop
+   threaded from `layout.tsx`'s `can(ctx.role, 'groups:manage')` — that
+   existing pattern is what the fix below extends to the other controls,
+   not a new invention.
+
+2. **Backend**: almost every action's `requireCapability(...)` call sat
+   **outside** its function's `try/catch` — `queueAuditAction`,
+   `retryFailedAction` (`app/actions/audits.ts`), `controlRunAction`
+   (`app/actions/runControl.ts`), `generateRecommendationAction`
+   (`app/actions/recommendation.ts`), all three of `app/actions/groups.ts`,
+   and all four of `app/actions/settings.ts` had this shape. A rejected
+   `ForbiddenError` therefore threw **uncaught** out of the Server Action
+   instead of resolving to `{ok:false, error}` — which a Server Action
+   client call turns into an opaque rejected promise, not the friendly
+   inline message every other action in the codebase already shows. Data
+   safety was never at risk (the rejection did stop the action), but a
+   viewer who clicked one of the buttons from (1) would have hit a raw
+   crash instead of a clean "your role does not allow this" message.
+   `settings.ts`'s four actions are only reachable through a page that is
+   itself admin-gated already, so their exposure was defense-in-depth
+   only; the rest were genuinely reachable by an unprivileged role through
+   normal navigation.
+
+**Fix.** Backend: moved every `requireCapability`/`requireRunAccess`/
+`requirePageAccess` call inside the function's `try` block (adding one
+where none existed), so `ForbiddenError`'s own message — already a clean,
+safe, user-facing string ("Your role does not allow this (audits:run).")
+— surfaces the same way every other rejection in these files already
+does. Frontend: added `canRunAudits` (threaded `layout.tsx` → `AppShell`
+→ `ActiveRunBar` → `RunControls`, exactly mirroring the existing
+`canReorder` wiring) and `canGenerate` on `RecommendationPanel`, and
+wrapped both `RunAuditButton` call sites (`p/[pageId]`, `g/[slug]`) in a
+`can(ctx.role, 'audits:run')` check. Viewing an existing recommendation
+and its history stays open to every role with `reports:read`; only the
+button that spends money generating a new one is hidden.
+
+**Noted, not fixed:** `components/settings/PriorityForm.tsx` turned out
+to be dead code — nothing imports or renders it, anywhere. Left alone;
+out of scope for this pass, and removing unused code wasn't what was
+asked.
+
+Verified: `npx tsc --noEmit`, `npm run lint`, `npm test` (138/138), `npm
+run build` all clean.

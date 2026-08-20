@@ -16,7 +16,7 @@ const TERMINAL = new Set(['completed', 'failed', 'cancelled', 'skipped']);
  * writing to Postgres, so an SSE handler would poll Postgres and re-emit --
  * identical query load plus a long-lived connection. See docs/PLAN.md.
  */
-export function ActiveRunBar() {
+export function ActiveRunBar({ canRunAudits = false }: { canRunAudits?: boolean }) {
   const [runs, setRuns] = useState<RunProgressDTO[]>([]);
   const router = useRouter();
   const wasRunning = useRef(false);
@@ -63,13 +63,13 @@ export function ActiveRunBar() {
   return (
     <div className="border-b border-[var(--border)] bg-[var(--surface-subtle)]">
       {runs.map((r) => (
-        <RunRow key={r.runId} run={r} />
+        <RunRow key={r.runId} run={r} canRunAudits={canRunAudits} />
       ))}
     </div>
   );
 }
 
-function RunRow({ run: r }: { run: RunProgressDTO }) {
+function RunRow({ run: r, canRunAudits }: { run: RunProgressDTO; canRunAudits: boolean }) {
   const remaining = r.totalJobs - r.completedJobs;
 
   /*
@@ -138,7 +138,7 @@ function RunRow({ run: r }: { run: RunProgressDTO }) {
         {/* The same string the bar announces, so nothing is read out that isn't visible. */}
         <span className="tnum text-[11px] text-[var(--muted)]">{text}</span>
 
-        <RunControls runId={r.runId} status={r.status} compact />
+        <RunControls runId={r.runId} status={r.status} compact canControl={canRunAudits} />
       </div>
 
       <RunTerminal runId={r.runId} active={r.status === 'running' || r.status === 'queued'} />

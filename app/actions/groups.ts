@@ -15,9 +15,8 @@ export type ActionResult = { ok: true } | { ok: false; error: string };
  * to sitemap order.
  */
 export async function reorderGroupsAction(slugsInOrder: string[]): Promise<ActionResult> {
-  const ctx = await requireCapability('groups:manage');
-
   try {
+    const ctx = await requireCapability('groups:manage');
     await prisma.$transaction(async (tx) => {
       // Scoped to this organisation: an unscoped updateMany keyed on slug would
       // reorder another tenant's sections, since slugs are only unique per site.
@@ -41,8 +40,8 @@ export async function reorderGroupsAction(slugsInOrder: string[]): Promise<Actio
 
 /** Drops every manual position, returning to the sitemap's own order. */
 export async function resetGroupOrderAction(): Promise<ActionResult> {
-  const ctx = await requireCapability('groups:manage');
   try {
+    const ctx = await requireCapability('groups:manage');
     await prisma.group.updateMany({
       where: { site: { organizationId: ctx.organizationId } },
       data: { priority: null },
@@ -55,9 +54,8 @@ export async function resetGroupOrderAction(): Promise<ActionResult> {
 }
 
 export async function setGroupPriorityAction(slugsInOrder: string[]): Promise<ActionResult> {
-  await requireCapability('groups:manage');
-
   try {
+    await requireCapability('groups:manage');
     await prisma.$transaction(async (tx) => {
       // Clear first: a group dropped from the list must fall back to sitemap
       // order rather than keeping a stale number.

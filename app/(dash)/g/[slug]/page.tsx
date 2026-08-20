@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
 import { requireSession } from '@/lib/http/auth-guard';
+import { can } from '@/lib/auth/roles';
 import { defaultSite, requireGroupAccess } from '@/lib/services/tenant.service';
 import { listPagesInGroup } from '@/lib/services/results.service';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -74,12 +75,14 @@ export default async function GroupPage({
         }
         actions={
           <>
-            <RunAuditButton
-              kind="group"
-              target={slug}
-              label={`Measure all ${pages.length}`}
-              hint={`Both mobile and desktop — about ${formatDuration(rerunSeconds)}.`}
-            />
+            {can(ctx.role, 'audits:run') && (
+              <RunAuditButton
+                kind="group"
+                target={slug}
+                label={`Measure all ${pages.length}`}
+                hint={`Both mobile and desktop — about ${formatDuration(rerunSeconds)}.`}
+              />
+            )}
             <DownloadMarkdown
               href={`/api/reports/bulk?group=${slug}`}
               currentStrategy={strategy}

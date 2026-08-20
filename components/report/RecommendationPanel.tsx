@@ -20,10 +20,18 @@ export function RecommendationPanel({
   pageId,
   strategy,
   initial,
+  canGenerate = true,
 }: {
   pageId: string;
   strategy: PsiStrategy;
   initial: { content: string; model: string; generatedAt: string; version: number } | null;
+  /**
+   * Hiding is presentation, not protection -- generateRecommendationAction
+   * re-checks recommendations:generate itself. Viewing an existing answer
+   * and its history stays open to everyone with reports:read; only the
+   * button that spends money on a new generation is gated.
+   */
+  canGenerate?: boolean;
 }) {
   const [content, setContent] = useState(initial?.content ?? null);
   const [meta, setMeta] = useState(
@@ -78,14 +86,16 @@ export function RecommendationPanel({
               {history ? 'Hide earlier answers' : 'Earlier answers'}
             </button>
           )}
-          <button
-            type="button"
-            onClick={() => run(Boolean(content))}
-            disabled={pending}
-            className="rounded-[5px] border border-[var(--border-strong)] px-2.5 py-1 text-[12px] font-medium hover:bg-[var(--surface-subtle)] disabled:opacity-50"
-          >
-            {pending ? 'Thinking…' : content ? 'Regenerate' : 'Generate'}
-          </button>
+          {canGenerate && (
+            <button
+              type="button"
+              onClick={() => run(Boolean(content))}
+              disabled={pending}
+              className="rounded-[5px] border border-[var(--border-strong)] px-2.5 py-1 text-[12px] font-medium hover:bg-[var(--surface-subtle)] disabled:opacity-50"
+            >
+              {pending ? 'Thinking…' : content ? 'Regenerate' : 'Generate'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -156,7 +166,9 @@ export function RecommendationPanel({
 
       {!content && !pending && !error && (
         <p className="border-t border-[var(--border)] px-3.5 py-3 text-[12px] text-[var(--muted)]">
-          Not generated yet. This reads the findings above and returns a prioritised fix list.
+          {canGenerate
+            ? 'Not generated yet. This reads the findings above and returns a prioritised fix list.'
+            : 'Not generated yet.'}
         </p>
       )}
     </section>

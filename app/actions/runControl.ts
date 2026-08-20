@@ -16,12 +16,12 @@ export async function controlRunAction(input: {
   runId: string;
   action: RunControl;
 }): Promise<RunControlActionResult> {
-  const ctx = await requireCapability('audits:run');
-  // Server Actions are public endpoints; the run id in the form is not proof
-  // the caller's organisation owns it.
-  await requireRunAccess(ctx.organizationId, input.runId);
-
   try {
+    const ctx = await requireCapability('audits:run');
+    // Server Actions are public endpoints; the run id in the form is not proof
+    // the caller's organisation owns it.
+    await requireRunAccess(ctx.organizationId, input.runId);
+
     const r = await controlRun(prisma, input.runId, input.action, workflowRunQueue(input.runId));
     revalidatePath('/runs');
     revalidatePath(`/runs/${input.runId}`);

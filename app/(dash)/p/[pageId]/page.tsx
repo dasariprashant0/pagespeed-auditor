@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
 import { requireSession } from '@/lib/http/auth-guard';
+import { can } from '@/lib/auth/roles';
 import { defaultSite, requirePageAccess } from '@/lib/services/tenant.service';
 import { getPageReport } from '@/lib/services/report.service';
 import { DownloadMarkdown } from '@/components/report/DownloadMarkdown';
@@ -86,7 +87,7 @@ export default async function PageReport({
         }
         actions={
           <>
-            <RunAuditButton kind="page" target={pageId} label="Measure again" />
+            {can(ctx.role, 'audits:run') && <RunAuditButton kind="page" target={pageId} label="Measure again" />}
             <DownloadMarkdown
               href={`/api/reports/${pageId}`}
               currentStrategy={strategy}
@@ -172,6 +173,7 @@ export default async function PageReport({
               pageId={pageId}
               strategy={strategy}
               initial={report.recommendation}
+              canGenerate={can(ctx.role, 'recommendations:generate')}
             />
           </section>
 

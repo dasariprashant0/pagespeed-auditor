@@ -19,12 +19,12 @@ export async function generateRecommendationAction(input: {
   strategy: PsiStrategy;
   force?: boolean;
 }): Promise<RecommendationActionResult> {
-  const ctx = await requireCapability('recommendations:generate');
-  // A Server Action is a public endpoint: the capability check says this ROLE
-  // may generate, and this says the page belongs to their organisation.
-  await requirePageAccess(ctx.organizationId, input.pageId);
-
   try {
+    const ctx = await requireCapability('recommendations:generate');
+    // A Server Action is a public endpoint: the capability check says this ROLE
+    // may generate, and this says the page belongs to their organisation.
+    await requirePageAccess(ctx.organizationId, input.pageId);
+
     const r = await getOrCreateRecommendation(input.pageId, input.strategy, { force: input.force });
     revalidatePath(`/p/${input.pageId}`);
     return {
@@ -45,9 +45,9 @@ export async function recommendationHistoryAction(input: {
   pageId: string;
   strategy: PsiStrategy;
 }): Promise<{ ok: true; versions: RecommendationVersion[] } | { ok: false; error: string }> {
-  const ctx = await requireCapability('reports:read');
-  await requirePageAccess(ctx.organizationId, input.pageId);
   try {
+    const ctx = await requireCapability('reports:read');
+    await requirePageAccess(ctx.organizationId, input.pageId);
     return { ok: true, versions: await listRecommendations(input.pageId, input.strategy) };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'Could not load earlier answers.' };

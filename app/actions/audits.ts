@@ -30,47 +30,55 @@ export async function queueAuditAction(input: {
   ref: string;
   strategies?: PsiStrategy[];
 }): Promise<QueueResult> {
-  // Server Actions are public HTTP endpoints regardless of what proxy.ts
-  // matches, so this is the actual authorization boundary. Running audits
-  // spends the organisation's PSI quota, so a viewer must not be able to.
-  const ctx = await requireCapability('audits:run');
+  try {
+    // Server Actions are public HTTP endpoints regardless of what proxy.ts
+    // matches, so this is the actual authorization boundary. Running audits
+    // spends the organisation's PSI quota, so a viewer must not be able to.
+    // Caught below rather than left to throw: the button that calls this is
+    // rendered for every role reports:read allows, since a viewer should
+    // still see progress -- only running one is restricted, and that must
+    // fail as a clean message, not an uncaught rejection.
+    const ctx = await requireCapability('audits:run');
 
-  const site = await defaultSite(ctx.organizationId);
-  if (!site) return { ok: false, error: 'No site configured.' };
+    const site = await defaultSite(ctx.organizationId);
+    if (!site) return { ok: false, error: 'No site configured.' };
 
-  const strategies = input.strategies?.length ? input.strategies : BOTH_STRATEGIES;
-  const scope = { kind: input.kind, ref: input.ref, strategies };
+    const strategies = input.strategies?.length ? input.strategies : BOTH_STRATEGIES;
+    const scope = { kind: input.kind, ref: input.ref, strategies };
 
-  // One run at a time per site. Two concurrent runs would share the rate
-  // limiter and each appear stalled for twice as long.
-  const active = await findActiveRun(prisma, site.id);
-  if (active) {
-    return { ok: false, error: `Another audit is already running (${active.type}). Wait for it to finish.` };
+    // One run at a time per site. Two concurrent runs would share the rate
+    // limiter and each appear stalled for twice as long.
+    const active = await findActiveRun(prisma, site.id);
+    if (active) {
+      return { ok: false, error: `Another audit is already running (${active.type}). Wait for it to finish.` };
+    }
+
+    const pairs = await expandScope(prisma, site.id, scope);
+    if (pairs.length === 0) return { ok: false, error: 'Nothing to audit here.' };
+
+    const runId = await createRun(prisma, {
+      siteId: site.id,
+      type: input.kind,
+      triggeredBy: 'manual',
+      scope,
+      totalJobs: pairs.length,
+    });
+
+    await startAuditRun(runId, pairs);
+
+    const estimate = await estimateRun(pairs.length, site.id);
+    revalidatePath('/', 'layout');
+
+    return {
+      ok: true,
+      runId,
+      jobs: pairs.length,
+      eta: formatDuration(estimate.seconds),
+      measured: estimate.measured,
+    };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not start the audit.' };
   }
-
-  const pairs = await expandScope(prisma, site.id, scope);
-  if (pairs.length === 0) return { ok: false, error: 'Nothing to audit here.' };
-
-  const runId = await createRun(prisma, {
-    siteId: site.id,
-    type: input.kind,
-    triggeredBy: 'manual',
-    scope,
-    totalJobs: pairs.length,
-  });
-
-  await startAuditRun(runId, pairs);
-
-  const estimate = await estimateRun(pairs.length, site.id);
-  revalidatePath('/', 'layout');
-
-  return {
-    ok: true,
-    runId,
-    jobs: pairs.length,
-    eta: formatDuration(estimate.seconds),
-    measured: estimate.measured,
-  };
 }
 
 /**
@@ -83,43 +91,47 @@ export async function queueAuditAction(input: {
  * which is a mistake this codebase has already made once, on resume.
  */
 export async function retryFailedAction(input: { runId: string }): Promise<QueueResult> {
-  const ctx = await requireCapability('audits:run');
-  await requireRunAccess(ctx.organizationId, input.runId);
+  try {
+    const ctx = await requireCapability('audits:run');
+    await requireRunAccess(ctx.organizationId, input.runId);
 
-  const site = await defaultSite(ctx.organizationId);
-  if (!site) return { ok: false, error: 'No site configured.' };
+    const site = await defaultSite(ctx.organizationId);
+    if (!site) return { ok: false, error: 'No site configured.' };
 
-  const active = await findActiveRun(prisma, site.id);
-  if (active) {
-    return { ok: false, error: 'Something is already running. Wait for it to finish, then retry.' };
+    const active = await findActiveRun(prisma, site.id);
+    if (active) {
+      return { ok: false, error: 'Something is already running. Wait for it to finish, then retry.' };
+    }
+
+    const scope = { kind: 'retry' as const, ref: input.runId, strategies: BOTH_STRATEGIES };
+    const pairs = await expandScope(prisma, site.id, scope);
+    if (pairs.length === 0) {
+      return { ok: false, error: 'Nothing left to retry — those pages are no longer in your sitemap.' };
+    }
+
+    const runId = await createRun(prisma, {
+      siteId: site.id,
+      type: 'group',
+      triggeredBy: 'manual',
+      scope,
+      totalJobs: pairs.length,
+    });
+
+    await startAuditRun(runId, pairs);
+
+    const estimate = await estimateRun(pairs.length, site.id);
+    revalidatePath('/', 'layout');
+
+    return {
+      ok: true,
+      runId,
+      jobs: pairs.length,
+      eta: formatDuration(estimate.seconds),
+      measured: estimate.measured,
+    };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not start the retry.' };
   }
-
-  const scope = { kind: 'retry' as const, ref: input.runId, strategies: BOTH_STRATEGIES };
-  const pairs = await expandScope(prisma, site.id, scope);
-  if (pairs.length === 0) {
-    return { ok: false, error: 'Nothing left to retry — those pages are no longer in your sitemap.' };
-  }
-
-  const runId = await createRun(prisma, {
-    siteId: site.id,
-    type: 'group',
-    triggeredBy: 'manual',
-    scope,
-    totalJobs: pairs.length,
-  });
-
-  await startAuditRun(runId, pairs);
-
-  const estimate = await estimateRun(pairs.length, site.id);
-  revalidatePath('/', 'layout');
-
-  return {
-    ok: true,
-    runId,
-    jobs: pairs.length,
-    eta: formatDuration(estimate.seconds),
-    measured: estimate.measured,
-  };
 }
 
 /** The pages a run could not measure, for the failures panel. */
