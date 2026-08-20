@@ -1,7 +1,7 @@
 import { can } from '@/lib/auth/roles';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { prisma } from '@/lib/db';
-import { requireCapability } from '@/lib/http/auth-guard';
+import { requireSession } from '@/lib/http/auth-guard';
 import { defaultSite, orgEmailRef } from '@/lib/services/tenant.service';
 import { redirect } from 'next/navigation';
 import { SettingsNav } from '@/components/settings/SettingsNav';
@@ -35,9 +35,10 @@ function Section({ title, hint, children }: { title: string; hint?: string; chil
 
 export default async function SettingsPage() {
   const env = getEnv();
-  // Automation is admin-only; anyone else lands on their profile instead of a
-  // page that would reject every control on it.
-  const ctx = await requireCapability('automation:manage');
+  // Visible to every role -- only automation:manage decides whether the
+  // schedule/email/notification forms below actually accept input.
+  const ctx = await requireSession();
+  const canEdit = can(ctx.role, 'automation:manage');
   const site = await defaultSite(ctx.organizationId);
   if (!site) redirect('/');
 
@@ -92,7 +93,7 @@ export default async function SettingsPage() {
   return (
     <>
       <PageHeader crumbs={[{ label: 'Overview', href: '/' }, { label: 'Settings' }]} title="Automation" subtitle="When it runs and who hears about it" />
-      <SettingsNav role={ctx.role} active="/settings/automation" />
+      <SettingsNav active="/settings/automation" />
 
       <div className="max-w-3xl space-y-3">
         <AutomationStatus
@@ -116,14 +117,19 @@ export default async function SettingsPage() {
               enabled: schedule?.enabled ?? false,
               nextRunAt: schedule?.nextRunAt ? schedule.nextRunAt.toISOString() : null,
             }}
+            canEdit={canEdit}
           />
         </Section>
 
         <Section
           title="Email sending"
-          hint="Your own mailbox for invitations and sweep notifications, instead of sharing the one everyone else on this deployment uses. Leave blank to keep using the shared default."
+          hint={
+            canEdit
+              ? 'Your own mailbox for invitations and sweep notifications, instead of sharing the one everyone else on this deployment uses. Leave blank to keep using the shared default.'
+              : 'Only an admin can change this.'
+          }
         >
-          <OrgEmailForm email={orgEmail} />
+          <OrgEmailForm email={orgEmail} canEdit={canEdit} />
         </Section>
 
         <Section
@@ -143,6 +149,7 @@ export default async function SettingsPage() {
               slackEnabled: notif?.slackEnabled ?? false,
               slackWebhookMasked: notif?.slackWebhookUrl ? masked(notif.slackWebhookUrl) : null,
             }}
+            canEdit={canEdit}
           />
         </Section>
 

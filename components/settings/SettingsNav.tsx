@@ -1,20 +1,24 @@
 import Link from 'next/link';
-import { can, type Role } from '@/lib/auth/roles';
 
 /**
- * Sections a person can actually use are the only ones shown.
+ * Every section is shown to every role.
  *
- * Hiding is presentation, not protection -- every action re-checks the
- * capability server-side -- but offering a viewer a "Team" tab that rejects
- * them on arrival is a worse experience than not offering it.
+ * Previously hidden per role ("hiding is presentation, not protection" --
+ * every action still re-checks the capability server-side either way), but
+ * that meant a viewer had no way to even SEE the current schedule, the
+ * team list, or the site config -- only an admin could look. Visibility and
+ * edit rights are different questions now: everyone can see every settings
+ * screen; each page decides for itself whether its forms are editable for
+ * this role (see the canEdit prop threaded through each one) or shown
+ * disabled with a note about who can change it.
  */
-export function SettingsNav({ role, active }: { role: Role; active: string }) {
+export function SettingsNav({ active }: { active: string }) {
   const tabs = [
-    { href: '/settings/profile', label: 'Profile', show: true },
-    { href: '/settings/team', label: 'Teammates', show: can(role, 'members:manage') },
-    { href: '/settings/site', label: 'Site', show: can(role, 'site:manage') },
-    { href: '/settings/automation', label: 'Automation', show: can(role, 'automation:manage') },
-  ].filter((t) => t.show);
+    { href: '/settings/profile', label: 'Profile' },
+    { href: '/settings/team', label: 'Teammates' },
+    { href: '/settings/site', label: 'Site' },
+    { href: '/settings/automation', label: 'Automation' },
+  ];
 
   return (
     <nav aria-label="Settings sections" className="mb-5 flex flex-wrap gap-1 border-b border-[var(--border)]">

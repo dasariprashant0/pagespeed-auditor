@@ -1,14 +1,16 @@
 import { PageHeader } from '@/components/ui/PageHeader';
-import { requireCapability } from '@/lib/http/auth-guard';
+import { requireSession } from '@/lib/http/auth-guard';
 import { prisma } from '@/lib/db';
 import { SettingsNav } from '@/components/settings/SettingsNav';
 import { TeamManager, type MemberRow, type InviteRow } from '@/components/settings/TeamManager';
-import { isRole } from '@/lib/auth/roles';
+import { can, isRole } from '@/lib/auth/roles';
 
 export const dynamic = 'force-dynamic';
 
 export default async function TeamPage() {
-  const ctx = await requireCapability('members:manage');
+  // Visible to every role -- only members:manage decides whether TeamManager's
+  // forms actually accept input. See docs/DECISIONS.md.
+  const ctx = await requireSession();
 
   const [memberships, invitations] = await Promise.all([
     prisma.membership.findMany({
@@ -42,12 +44,13 @@ export default async function TeamPage() {
   return (
     <>
       <PageHeader crumbs={[{ label: 'Overview', href: '/' }, { label: 'Settings' }]} title="Teammates" subtitle="Who can see and change things" />
-      <SettingsNav role={ctx.role} active="/settings/team" />
+      <SettingsNav active="/settings/team" />
       <div className="max-w-2xl">
         <TeamManager
           members={members}
           invites={invites}
           adminCount={members.filter((m) => m.role === 'admin').length}
+          canEdit={can(ctx.role, 'members:manage')}
         />
       </div>
     </>

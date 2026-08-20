@@ -1571,3 +1571,60 @@ Verified: `npx tsc --noEmit`, `npm run lint`, `npm test` (138/138) clean.
 Shipped urgently, mid-incident, rather than batched with anything else,
 since the live run was actively burning retries on it while this was
 being written.
+
+## 21 Aug 2026 (later still) — eye-toggle on every confidential field; settings tabs visible but read-only per role
+
+Two related requests: "can I get an eye option wherever we're filling
+confidential stuff" and, separately, "every role can see all the
+settings tabs but not edit them" -- reversing this session's own earlier
+decision to hide Team/Site/Automation entirely from non-admins.
+
+**Eye toggle.** New `components/ui/PasswordInput.tsx` -- a drop-in
+replacement for `<input type="password">` with an eye/eye-off button that
+toggles visibility, tracking its own state rather than needing the field
+to stay focused. Replaces the "reveal on focus, hide on blur" pattern
+`PsiKeyForm`/`OrgEmailForm` had, and the plain unmasked `type="password"`
+in `AuthCard`'s shared `Field` (login, signup, reset, accept-invite) and
+`ProfileForms`' password-change fields. Motivated directly by the SMTP
+port/host mix-up earlier today -- being able to actually check what got
+typed, after typing it, would have caught that immediately instead of
+several rounds of guessing from error messages alone.
+
+**Settings visibility reversed.** `SettingsNav` no longer filters tabs by
+`can(role, ...)` -- all four (Profile, Team, Site, Automation) show for
+every role now. Each of the three admin-only pages (`team`, `site`,
+`automation`) changed from `requireCapability(X)` (which threw
+`ForbiddenError` before the page ever rendered) to `requireSession()` +
+computing `const canEdit = can(ctx.role, X)`, threaded down to every form
+on the page. Every form wraps its actual controls in
+`<fieldset disabled={!canEdit}>` -- one native HTML mechanism that
+disables every nested input/select/button in one shot, rather than
+threading a disabled prop into each field individually -- and shows a
+plain-text "Only an admin can change this" note when `!canEdit`.
+Touched: `TeamManager` (invite form, per-row role/remove, revoke-invite),
+`SiteForms` (add/edit site, PSI key), `IngestButton`, `ScheduleForm`,
+`NotificationForm`, `OrgEmailForm`. `AutomationStatus`/`RunHistoryList`
+already worked this way (`canDelete`/`canRetry` props tied to their own
+specific capabilities) and needed no change.
+
+Backend is unchanged and was already correct going into this: every
+action still calls `requireCapability` and rejects cleanly (see the
+"role-gated controls" entry above this same day) -- this pass only
+changes what renders, never what's accepted.
+
+**Also fixed along the way, found while reading these same files:**
+- `AcceptInviteForm`'s read-only, pre-filled email field showed an
+  "optional" badge, because `AuthCard`'s `Field` showed it for any
+  `required={false}` field regardless of whether it was also `readOnly`.
+  "Optional" means "you may leave this blank" -- meaningless on a field
+  that's locked to one value and can never be blank. Fixed to
+  `!required && !readOnly`.
+- Explained, not a bug: a teammate accepting an invite wasn't asked for a
+  name/password because `hasAccount` (an existing `User` row for that
+  email) was already true -- a `User` is a global identity shared across
+  every `Organization` it holds `Membership` in, so someone who already
+  has a login elsewhere is only ever asked to join, not to set a second,
+  separate password for the same email address.
+
+Verified: `npx tsc --noEmit`, `npm run lint`, `npm test` (138/138), `npm
+run build` all clean.

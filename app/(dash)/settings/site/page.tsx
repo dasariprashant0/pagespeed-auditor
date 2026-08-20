@@ -1,5 +1,6 @@
 import { PageHeader } from '@/components/ui/PageHeader';
-import { requireCapability } from '@/lib/http/auth-guard';
+import { requireSession } from '@/lib/http/auth-guard';
+import { can } from '@/lib/auth/roles';
 import { prisma } from '@/lib/db';
 import { listSites } from '@/lib/services/tenant.service';
 import { listGroupsWithAggregates } from '@/lib/services/results.service';
@@ -29,7 +30,10 @@ function bytes(n: number): string {
 }
 
 export default async function SiteSettingsPage() {
-  const ctx = await requireCapability('site:manage');
+  // Visible to every role -- only site:manage decides whether these forms
+  // actually accept input. See docs/DECISIONS.md.
+  const ctx = await requireSession();
+  const canEdit = can(ctx.role, 'site:manage');
   const sites = await listSites(ctx.organizationId);
   const site = sites[0] ?? null;
 
@@ -42,31 +46,42 @@ export default async function SiteSettingsPage() {
   return (
     <>
       <PageHeader crumbs={[{ label: 'Overview', href: '/' }, { label: 'Settings' }]} title="Site" subtitle="What gets measured" />
-      <SettingsNav role={ctx.role} active="/settings/site" />
+      <SettingsNav active="/settings/site" />
 
       <div className="max-w-2xl space-y-3">
         {!site ? (
-          <Panel title="Add your first site" hint="Point it at a sitemap and every page in it gets tracked.">
-            <AddSiteForm />
+          <Panel
+            title="Add your first site"
+            hint={canEdit ? 'Point it at a sitemap and every page in it gets tracked.' : 'Only an admin can add a site.'}
+          >
+            <AddSiteForm canEdit={canEdit} />
           </Panel>
         ) : (
           <>
             <Panel title="Site">
-              <EditSiteForm site={site} />
+              <EditSiteForm site={site} canEdit={canEdit} />
             </Panel>
 
             <Panel
               title="API key"
-              hint="Google measures the pages. The key is stored for this organisation only and is never shown again once saved."
+              hint={
+                canEdit
+                  ? 'Google measures the pages. The key is stored for this organisation only and is never shown again once saved.'
+                  : 'Only an admin can view or change the API key.'
+              }
             >
-              <PsiKeyForm site={site} />
+              <PsiKeyForm site={site} canEdit={canEdit} />
             </Panel>
 
             <Panel
               title="Pages"
-              hint={`${pageCount} pages are being tracked. Re-read the sitemap after publishing or removing pages — existing pages keep their history, and anything no longer listed stops being checked without losing its past results.`}
+              hint={`${pageCount} pages are being tracked.${
+                canEdit
+                  ? ' Re-read the sitemap after publishing or removing pages — existing pages keep their history, and anything no longer listed stops being checked without losing its past results.'
+                  : ' Only an admin can re-read the sitemap.'
+              }`}
             >
-              <IngestButton siteId={site.id} pageCount={pageCount} />
+              <IngestButton siteId={site.id} pageCount={pageCount} canEdit={canEdit} />
             </Panel>
 
             {history && (

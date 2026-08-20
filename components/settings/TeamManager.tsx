@@ -29,10 +29,14 @@ export function TeamManager({
   members,
   invites,
   adminCount,
+  canEdit,
 }: {
   members: MemberRow[];
   invites: InviteRow[];
   adminCount: number;
+  /** members:manage. Visible to everyone regardless; only this decides
+   * whether the invite form and the per-row controls actually accept input. */
+  canEdit: boolean;
 }) {
   const [invite, inviteAction, inviting] = useActionState<
     { ok: true; message: string; inviteUrl?: string } | { ok: false; error: string } | null,
@@ -55,30 +59,33 @@ export function TeamManager({
       <section className="panel p-4">
         <h2 className="title-md">Invite someone</h2>
         <p className="mb-3 mt-1 text-[11px] text-[var(--muted)]">
-          They get a link that works for seven days. If email is not set up yet, copy the link and
-          send it yourself.
+          {canEdit
+            ? 'They get a link that works for seven days. If email is not set up yet, copy the link and send it yourself.'
+            : 'Only an admin can invite teammates.'}
         </p>
 
         <form action={inviteAction} className="flex flex-wrap items-end gap-2">
-          <label className="min-w-[14rem] flex-1">
-            <span className="eyebrow mb-1 block">Email</span>
-            <input
-              name="email" type="email" required placeholder="teammate@company.com"
-              className="w-full rounded-[6px] border border-[var(--border)] bg-[var(--background)] px-2.5 py-1.5 text-[12px]"
-            />
-          </label>
-          <label>
-            <span className="eyebrow mb-1 block">Role</span>
-            <select name="role" defaultValue="viewer" className={`${select} py-[7px]`}>
-              {ROLE_ORDER.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
-            </select>
-          </label>
-          <button
-            type="submit" disabled={inviting}
-            className="rounded-[6px] border border-[var(--border-strong)] px-3 py-1.5 text-[12px] font-medium hover:bg-[var(--surface-subtle)] disabled:opacity-50"
-          >
-            {inviting ? 'Inviting…' : 'Send invite'}
-          </button>
+          <fieldset disabled={!canEdit} className="flex flex-wrap items-end gap-2">
+            <label className="min-w-[14rem] flex-1">
+              <span className="eyebrow mb-1 block">Email</span>
+              <input
+                name="email" type="email" required placeholder="teammate@company.com"
+                className="w-full rounded-[6px] border border-[var(--border)] bg-[var(--background)] px-2.5 py-1.5 text-[12px] disabled:opacity-50"
+              />
+            </label>
+            <label>
+              <span className="eyebrow mb-1 block">Role</span>
+              <select name="role" defaultValue="viewer" className={`${select} py-[7px] disabled:opacity-50`}>
+                {ROLE_ORDER.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
+              </select>
+            </label>
+            <button
+              type="submit" disabled={inviting}
+              className="rounded-[6px] border border-[var(--border-strong)] px-3 py-1.5 text-[12px] font-medium hover:bg-[var(--surface-subtle)] disabled:opacity-50"
+            >
+              {inviting ? 'Inviting…' : 'Send invite'}
+            </button>
+          </fieldset>
         </form>
 
         {invite && !invite.ok && (
@@ -132,19 +139,27 @@ export function TeamManager({
                 <select
                   aria-label={`Role for ${m.email}`}
                   value={m.role}
-                  disabled={busy || lastAdmin}
+                  disabled={!canEdit || busy || lastAdmin}
                   onChange={(e) => act(() => changeRoleAction(m.userId, e.target.value))}
                   className={select}
-                  title={lastAdmin ? 'The only admin cannot be demoted. Promote someone else first.' : undefined}
+                  title={
+                    !canEdit
+                      ? 'Only an admin can change someone’s role.'
+                      : lastAdmin ? 'The only admin cannot be demoted. Promote someone else first.' : undefined
+                  }
                 >
                   {ROLE_ORDER.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
                 </select>
                 <button
                   type="button"
-                  disabled={busy || m.isYou || lastAdmin}
+                  disabled={!canEdit || busy || m.isYou || lastAdmin}
                   onClick={() => act(() => removeMemberAction(m.userId))}
                   className="text-[11px] text-[var(--muted)] hover:text-[var(--danger)] disabled:opacity-30"
-                  title={m.isYou ? 'You cannot remove yourself.' : lastAdmin ? 'The only admin cannot be removed.' : undefined}
+                  title={
+                    !canEdit
+                      ? 'Only an admin can remove teammates.'
+                      : m.isYou ? 'You cannot remove yourself.' : lastAdmin ? 'The only admin cannot be removed.' : undefined
+                  }
                 >
                   Remove
                 </button>
@@ -169,9 +184,10 @@ export function TeamManager({
                   expires {new Date(i.expiresAt).toLocaleDateString()}
                 </span>
                 <button
-                  type="button" disabled={busy}
+                  type="button" disabled={!canEdit || busy}
                   onClick={() => act(() => revokeInviteAction(i.id))}
                   className="text-[11px] text-[var(--muted)] hover:text-[var(--danger)] disabled:opacity-30"
+                  title={!canEdit ? 'Only an admin can revoke invitations.' : undefined}
                 >
                   Revoke
                 </button>

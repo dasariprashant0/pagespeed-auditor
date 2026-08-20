@@ -8,6 +8,7 @@ export function NotificationForm({
   initial,
   sentFrom,
   appSender = false,
+  canEdit,
 }: {
   initial: {
     emailEnabled: boolean;
@@ -20,6 +21,9 @@ export function NotificationForm({
   sentFrom: string | null;
   /** True when sending as the app (verified domain) rather than a person's mailbox. */
   appSender?: boolean;
+  /** automation:manage. Visible to everyone regardless; this only decides
+   * whether the controls below actually accept input. */
+  canEdit: boolean;
 }) {
   const [state, action, pending] = useActionState(saveNotificationsAction, null);
   const [testing, startTest] = useTransition();
@@ -28,6 +32,7 @@ export function NotificationForm({
   return (
     <div className="space-y-3">
       <form action={action} className="space-y-3">
+      <fieldset disabled={!canEdit} className="space-y-3">
         <div className="space-y-2">
           <label className="flex items-center gap-2 text-[12px]">
             <input type="checkbox" name="emailEnabled" defaultChecked={initial.emailEnabled} />
@@ -98,7 +103,12 @@ export function NotificationForm({
             {testing ? 'Sending…' : 'Send a test'}
           </button>
         </div>
+      </fieldset>
       </form>
+
+      {!canEdit && (
+        <p className="text-[11px] text-[var(--muted)]">Only an admin can change notification settings.</p>
+      )}
 
       {state?.ok === false && (
         <p role="alert" className="text-[11px]" style={{ color: 'var(--score-fail-text)' }}>{state.error}</p>

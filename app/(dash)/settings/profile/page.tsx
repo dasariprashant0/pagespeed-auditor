@@ -11,7 +11,7 @@ export default async function ProfilePage() {
   return (
     <>
       <PageHeader crumbs={[{ label: 'Overview', href: '/' }, { label: 'Settings' }]} title="Profile" subtitle="Your account" />
-      <SettingsNav role={ctx.role} active="/settings/profile" />
+      <SettingsNav active="/settings/profile" />
       <ProfileForms email={ctx.email} name={ctx.name} role={ctx.role} organizationName={ctx.organizationName} />
     </>
   );

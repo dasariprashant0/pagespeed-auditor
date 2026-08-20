@@ -1,5 +1,6 @@
 import { Button } from '@/components/ui/Button';
 import { InfoTooltip } from '@/components/ui/InfoTooltip';
+import { PasswordInput } from '@/components/ui/PasswordInput';
 
 /**
  * The titled block every auth screen opens with.
@@ -77,27 +78,33 @@ export function Field({
     <div>
       <label htmlFor={id} className="mb-1.5 flex items-center gap-1.5 text-[11.5px] font-medium text-[var(--foreground)]">
         {label}
-        {!required && <span className="font-normal text-[var(--faint)]">optional</span>}
+        {/* "Optional" means "you may leave this blank" -- meaningless on a
+            field that's readOnly, since it's never blank and can't be
+            edited either way. AcceptInviteForm's pre-filled, locked email
+            field was showing it regardless, which read as "this invite
+            doesn't actually need an email," not true. */}
+        {!required && !readOnly && <span className="font-normal text-[var(--faint)]">optional</span>}
         {hint && <InfoTooltip text={hint} />}
       </label>
-      <input
-        id={id}
-        name={name}
-        type={type}
-        required={required}
-        autoComplete={autoComplete}
-        defaultValue={defaultValue}
-        readOnly={readOnly}
-        autoFocus={autoFocus}
-        aria-invalid={invalid || undefined}
-        className={`w-full rounded-[var(--radius)] border bg-[var(--surface)] px-3 py-2 text-[13px]
+      {(() => {
+        const fieldClassName = `w-full rounded-[var(--radius)] border bg-[var(--surface)] px-3 py-2 text-[13px]
           transition-[border-color,box-shadow] duration-[var(--t-fast)] ease-[var(--ease)]
           placeholder:text-[var(--faint)]
           focus:outline-none focus-visible:outline-none
           ${invalid ? 'border-[var(--danger)]' : 'border-[var(--border-strong)] focus:border-[var(--info)]'}
           focus:shadow-[0_0_0_3px_var(--info-tint)]
-          ${readOnly ? 'bg-[var(--surface-subtle)] text-[var(--muted)]' : ''}`}
-      />
+          ${readOnly ? 'bg-[var(--surface-subtle)] text-[var(--muted)]' : ''}`;
+        const shared = {
+          id, name, required, autoComplete, defaultValue, readOnly, autoFocus,
+          'aria-invalid': invalid || undefined,
+        };
+        // A real eye toggle, not just type="text" on focus: someone should be
+        // able to check what they typed AFTER typing it, without having to
+        // keep the field focused -- see docs/BUILD_LOG.md, 21 Aug 2026.
+        return type === 'password'
+          ? <PasswordInput {...shared} className={fieldClassName} />
+          : <input {...shared} type={type} className={fieldClassName} />;
+      })()}
     </div>
   );
 }

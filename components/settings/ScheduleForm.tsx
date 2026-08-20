@@ -42,8 +42,12 @@ function formatInZone(iso: string, timeZone: string): string {
  */
 export function ScheduleForm({
   initial,
+  canEdit,
 }: {
   initial: { cronExpr: string | null; timezone: string; enabled: boolean; nextRunAt: string | null };
+  /** automation:manage. Visible to everyone regardless; this only decides
+   * whether the controls below actually accept input. */
+  canEdit: boolean;
 }) {
   const [state, action, pending] = useActionState(saveScheduleAction, null);
 
@@ -106,6 +110,7 @@ export function ScheduleForm({
       <input type="hidden" name="cronExpr" value={cron} />
       <input type="hidden" name="timezone" value={timezone} />
 
+      <fieldset disabled={!canEdit} className="space-y-4">
       <label className="flex items-center gap-2 text-[13px]">
         <input type="checkbox" name="enabled" checked={optimisticEnabled} onChange={(e) => toggleEnabled(e.target.checked)} />
         <span>Check the whole site automatically</span>
@@ -221,6 +226,11 @@ export function ScheduleForm({
           {custom ? 'Back to the simple picker' : 'Write a cron expression instead'}
         </button>
       </div>
+      </fieldset>
+
+      {!canEdit && (
+        <p className="text-[11px] text-[var(--muted)]">Only an admin can change the schedule.</p>
+      )}
 
       {state?.ok === false && (
         <p role="alert" className="text-[12px]" style={{ color: 'var(--score-fail-text)' }}>{state.error}</p>

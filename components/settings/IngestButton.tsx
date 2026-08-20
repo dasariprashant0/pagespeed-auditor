@@ -10,7 +10,15 @@ import { ingestSitemapAction } from '@/app/actions/site';
  * Reports what actually changed rather than a bare success: on a large site the
  * useful answer is "12 new, 3 no longer listed", not "done".
  */
-export function IngestButton({ siteId, pageCount }: { siteId: string; pageCount: number }) {
+export function IngestButton({
+  siteId,
+  pageCount,
+  canEdit,
+}: {
+  siteId: string;
+  pageCount: number;
+  canEdit: boolean;
+}) {
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -20,7 +28,8 @@ export function IngestButton({ siteId, pageCount }: { siteId: string; pageCount:
     <div className="flex flex-wrap items-center gap-3">
       <button
         type="button"
-        disabled={pending}
+        disabled={!canEdit || pending}
+        title={!canEdit ? 'Only an admin can re-read the sitemap.' : undefined}
         onClick={() =>
           start(async () => {
             setMsg(null); setError(null);

@@ -749,3 +749,39 @@ empty in **both** local `.env` and production, not just production. Only
 `SMTP_HOST`/`SMTP_USER`/`SMTP_PORT`/`SMTP_FROM` were ever actually filled
 in, in either place. The script was deleted after use; it never became
 part of the repo, and no password was fabricated to make the check pass.
+
+## 15. Settings tabs are visible to every role; editing is what's gated (21 Aug 2026)
+
+**Chosen:** `SettingsNav` shows Profile/Team/Site/Automation to every
+role, always. Each of the three admin-only pages now uses
+`requireSession()` rather than `requireCapability(X)`, computes
+`canEdit = can(ctx.role, X)`, and threads it into every form on the page,
+each of which wraps its controls in `<fieldset disabled={!canEdit}>` and
+shows a plain "only an admin can change this" note.
+
+**This reverses this same session's own earlier stance.** Not long
+before, `SettingsNav` was deliberately written to hide a tab entirely
+when a role couldn't use it, with the reasoning "hiding is presentation,
+not protection... offering a viewer a Team tab that rejects them on
+arrival is a worse experience than not offering it." That reasoning
+wasn't wrong on its own terms -- it's just answering a different
+question than the one actually asked afterward. Direct instruction:
+every role should be able to SEE what's configured (the current
+schedule, who's on the team, the site's API key is set), even if only
+some roles can change it. A hard `ForbiddenError` on arrival answers
+neither need; a read-only render of the real, current state answers
+both. Don't re-flip this back to hiding tabs without a similarly direct
+instruction -- it was tried, and changed on purpose.
+
+**Backend was already correct going in.** Every action under these
+pages already calls `requireCapability` and, since the same day's
+earlier "role-gated controls" pass (see `docs/BUILD_LOG.md`), already
+rejects cleanly rather than throwing uncaught. This decision only changes
+what renders; nothing about what the backend accepts.
+
+**Not touched:** `AutomationStatus`/`RunHistoryList`'s existing
+`canDelete`/`canRetry` props, which already worked this exact way --
+visible always, gated per-action against their own specific capability
+(`site:manage`, `audits:run`) rather than `automation:manage`. That
+pattern predates this decision and is what this one generalizes to the
+rest of the settings pages, not a new invention.

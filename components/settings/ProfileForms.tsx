@@ -3,6 +3,7 @@
 import { useActionState } from 'react';
 import { updateProfileAction, changePasswordAction } from '@/app/actions/members';
 import { InfoTooltip } from '@/components/ui/InfoTooltip';
+import { PasswordInput } from '@/components/ui/PasswordInput';
 import { ROLE_DESCRIPTION, ROLE_LABEL, type Role } from '@/lib/auth/roles';
 
 type Result = { ok: true; message: string } | { ok: false; error: string } | null;
@@ -69,14 +70,14 @@ export function ProfileForms({
         <form action={savePw} className="space-y-3">
           <label className="block">
             <span className="mb-1 block text-[11px] text-[var(--muted)]">Current password</span>
-            <input name="currentPassword" type="password" autoComplete="current-password" className={input} />
+            <PasswordInput name="currentPassword" autoComplete="current-password" className={input} />
           </label>
           <label className="block">
             <span className="mb-1 flex items-center gap-1 text-[11px] text-[var(--muted)]">
               New password
               <InfoTooltip text="At least 12 characters. Any characters are fine — length matters more than complexity rules." />
             </span>
-            <input name="newPassword" type="password" autoComplete="new-password" className={input} />
+            <PasswordInput name="newPassword" autoComplete="new-password" className={input} />
           </label>
           <div className="flex items-center gap-3">
             <button type="submit" disabled={savingPw} className={button}>
