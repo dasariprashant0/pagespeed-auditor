@@ -1380,3 +1380,50 @@ script; swapped for `reset-password`, which is real.
 
 Verified: `npx tsc --noEmit`, `npm run lint`, `npm test` (138/138), `npm
 run build` — all clean. Committed as `8dcca41`, pushed.
+
+## 20 Aug 2026 (later still) — the scheduler was never actually being ticked
+
+Reported as "the scheduler isn't working," then observed live: a schedule
+set for 11:45pm the same evening did not fire at 11:45pm.
+
+**Root cause**, found before the live report confirmed it: `lib/redis.ts`
+hardcodes `CRON_INTERVAL_MS = 15 * 60_000` and derives the "scheduler
+alive" heartbeat staleness threshold from it (31 minutes), and
+`app/api/cron/schedule-tick/route.ts`'s own comment says "Triggered by
+Vercel Cron every 15 minutes." `vercel.json` actually only fires that
+route **once a day** (`0 2 * * *`) — Vercel's Hobby plan cannot run cron
+more often than daily, full stop, a sub-daily expression fails at deploy
+time. CLAUDE.md's own "Environment gotchas" already named the fix this
+needed — a free external pinger — and noted it hadn't been set up yet.
+It stayed not-set-up until now.
+
+Consequence: `dueSchedules()` and the "scheduler alive" heartbeat were
+only ever checked roughly once every 24 hours, at whatever moment Vercel's
+own cron happened to land. The health indicator read "not alive" for
+essentially the entire day between ticks, and any configured schedule
+fired up to ~24 hours later than its configured time — not never, since
+`dueSchedules()` matches "due or overdue," but late enough to look broken
+for anything expecting same-day, same-time firing.
+
+**Fix**: `.github/workflows/schedule-tick.yml`, a GitHub Actions scheduled
+workflow (`*/15 * * * *`, free, no Vercel plan upgrade) that curls
+`/api/cron/schedule-tick` with the `CRON_SECRET` bearer token every 15
+minutes — the cadence the code already assumed. `CRON_SECRET` had to be
+rotated first: pulling the existing value to reuse it came back truncated
+to 2 characters, the same empty/broken-pull problem this project already
+has documented for `DATABASE_URL` and `BLOB_READ_WRITE_TOKEN`. A fresh
+64-char secret was generated locally, set directly in Vercel production
+and mirrored as a GitHub Actions repo secret by CLI, and never printed
+anywhere in the session transcript.
+
+**Verified**: after the redeploy picked up the rotated secret, manually
+triggered the new workflow (`gh workflow run schedule-tick.yml`) and
+confirmed the run's own log shows `response status: 200` against the live
+production route. The `*/15 * * * *` trigger is now active going forward.
+
+Considered and rejected: upgrading to Vercel Pro for native sub-daily
+cron (works, but costs money — explicitly against the "stay on free
+tiers" goal stated earlier the same day) and just changing the code's own
+thresholds to match once-daily reality (would stop the health check from
+lying, but schedules would still fire up to a day late — a symptom fix,
+not the root cause).
