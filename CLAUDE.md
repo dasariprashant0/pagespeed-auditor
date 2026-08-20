@@ -15,6 +15,18 @@
 | `docs/DECISIONS.md` | Why things are the way they are, and what was rejected. Read before changing a design. |
 | `docs/SPEC.md` | The original brief. |
 
+Reference-format companions to the above (current-state, not a second plan —
+where they disagree with the files above, the files above win):
+
+| File | What it is |
+|---|---|
+| `docs/PRD.md` | Product requirements: problem, roles, current feature set, success criteria. |
+| `docs/TRD.md` | Technical requirements: stack, deployment topology, the two things that can't be pulled locally. |
+| `docs/APP_FLOW.md` | Every navigable path through the app, with diagrams. |
+| `docs/UI_UX.md` | Design system, theming, component inventory. |
+| `docs/BACKEND_SCHEMA.md` | The Prisma schema, explained model by model. |
+| `docs/IMPLEMENTATION_PLAN.md` | Status by stage, open items, the verification bar. |
+
 Everything needed to continue lives in the repo. Nothing depends on a particular
 tool's session.
 
