@@ -1324,3 +1324,59 @@ Not applicable sections all rendered real findings for that brand-new row
 — every one of those is derived from `rawJson` via `report.service.ts`,
 so this is the write-then-read-back round trip actually observed, not
 inferred from passing types. `docs/DECISIONS.md` §13 has the detail.
+
+## 20 Aug 2026 (later still) — stale-code sweep: dead single-tenant auth, an env.example that was never actually in git, a real MCP tenant leak
+
+Per instruction to clean up whatever's stale before doing anything else,
+not a feature pass.
+
+**Dead single-tenant auth removed.** `AUTH_USERNAME`/`AUTH_PASSWORD_HASH`
+predate the multi-tenant rebuild. Confirmed by grep that nothing in the
+real login path (`lib/services/account.service.ts`, email+password against
+`User`/`Membership`) ever reads them — the only readers were the Settings
+→ Automation display panel and `scripts/hash-password.ts`/`set-password.ts`,
+both of which describe themselves in their own comments as managing "the
+only credential on the tool," a single-admin model that's no longer how
+this app works. Removed the two env vars from `lib/env.ts`, `.env` and
+`.env.example`, the Automation panel's display rows, and both `package.json`
+script entries; deleted the two scripts outright. `scripts/reset-password.ts`
+is unrelated — it resets a real `User` row's password hash and is the
+legitimate locked-out-admin recovery path — and was left alone.
+
+**`.env.example` was never actually committed.** `docs/BUILD_LOG.md` itself
+recorded it as "(committed)" back when the auth system was built, but
+`.gitignore`'s `.env*` pattern has silently swallowed it since this repo's
+very first commit (`git log --all --full-history` on the path returns
+nothing). Every fresh clone's documented first setup step, `cp
+.env.example .env`, had no source file to copy. Added a `!.env.example`
+exception and tracked the file for real.
+
+**Real cross-tenant bug in the MCP server.** While checking for dead code
+flagged by ESLint's unused-import warnings, `lib/mcp/server.ts`'s
+`get_run_status` tool turned out to resolve `runId` straight into
+`getRunProgress(runId)` with no ownership check — unlike every other tool
+in that file, which all call `orgIdOf(ctx)` first. A caller from one
+organisation could read another organisation's run status by guessing or
+reusing a `runId`. Fixed by calling `requireRunAccess(orgIdOf(ctx), runId)`
+before resolving, matching the pattern already used everywhere else in the
+file. This is a bug fix to existing MCP code, not the MCP feature
+extension that's explicitly out of scope this pass.
+
+**Other dead code and stale docs removed:** `pruneEmptyRuns` and the
+`HistoryDepth` interface in `retention.service.ts` (zero callers, zero
+references), the BullMQ-era `QUEUE_LOCK_DURATION_MS` line in `.env`/
+`.env.example`, unused imports in two page components, the entire
+`.playwright-mcp/` debug-artifact directory (one file inside it,
+`compare-cvent-mobile.md`, had been accidentally committed — checked its
+content first; it was a harmless downloaded PSI report for a public
+marketing page), and the untracked `prisma/migrations/migration_lock.toml`
+re-added after being accidentally dropped from git in an earlier commit
+despite Prisma requiring it under version control. `SITE.md` (the
+non-technical doc) still described single-admin username/password login
+and `npm run worker`; rewritten to describe the real email+password/role
+flow, the scheduler, the live terminal, and the CWV pass/fail badge.
+`README.md`'s commands table still listed the now-deleted `set-password`
+script; swapped for `reset-password`, which is real.
+
+Verified: `npx tsc --noEmit`, `npm run lint`, `npm test` (138/138), `npm
+run build` — all clean. Committed as `8dcca41`, pushed.
