@@ -1532,3 +1532,42 @@ asked.
 
 Verified: `npx tsc --noEmit`, `npm run lint`, `npm test` (138/138), `npm
 run build` all clean.
+
+## 21 Aug 2026 (later still) — a live run stuck retrying the same page forever, because of the Blob key's own determinism
+
+Caught live, mid-run, from the terminal feature's own log: one page
+(`/blog/upcoming-trends-and-tech-in-the-virtual-events-industry`, mobile)
+retrying repeatedly with `Vercel Blob: This blob already exists, use
+allowOverwrite: true...`, backing off 26s then 59s between attempts.
+
+**Root cause.** `storeRawJson` (`lib/blob.ts`) uploads to a path keyed
+deterministically by `(runId, pageId, strategy)` — deliberate, per
+`docs/DECISIONS.md` §13, so the pathname exists before the DB row does.
+But that determinism cuts the other way on a retry: if the Blob upload
+itself succeeds and something AFTER it throws (the `$transaction` in
+`recordAuditResult`, any transient error), the whole step retries from
+the top — and the retry's own `put()` call hits the exact same pathname,
+which Vercel Blob refuses to silently overwrite by default. The step's
+retry logic then retries THAT error too, except this one can never
+resolve on its own: every subsequent attempt re-uploads to the same
+already-occupied key and fails the same way, burning every retry
+attempt on an error that has nothing to do with PSI or the real audit.
+`PSI_MAX_ATTEMPTS` eventually exhausts and the page falls through to
+this session's earlier `RETRIES_EXHAUSTED` error-row fix — so it isn't
+an infinite hang, but it wastes every retry attempt and delays that page
+for no real reason.
+
+**Fix.** Added `allowOverwrite: true` to the `put()` call. Safe and
+correct here specifically because the key is scoped to one run: a retry
+that reaches this line again is re-uploading the SAME page's freshly
+re-fetched PSI result for the SAME run, and the latest attempt's bytes
+are exactly what should win. This isn't the accepted-tradeoff orphaned
+object §13 already reasoned about (a rolled-back transaction leaving one
+harmless stray blob) — it's a distinct failure mode that reasoning didn't
+cover, where the retry mechanism and the upload's own determinism fight
+each other.
+
+Verified: `npx tsc --noEmit`, `npm run lint`, `npm test` (138/138) clean.
+Shipped urgently, mid-incident, rather than batched with anything else,
+since the live run was actively burning retries on it while this was
+being written.

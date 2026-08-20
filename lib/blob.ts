@@ -24,9 +24,19 @@ export async function storeRawJson(
   strategy: string,
   json: unknown,
 ): Promise<string> {
+  // allowOverwrite: true is load-bearing, not cosmetic. The path is
+  // deterministic per (run, page, strategy) so a retry can re-upload to the
+  // same key -- and a retry happens whenever ANYTHING after this upload
+  // throws (the $transaction below, a transient error), which the workflow
+  // step retries from the top. Without this flag, that second attempt's put()
+  // itself throws "blob already exists," which the step also retries,
+  // burning every attempt on an error that can never resolve on its own
+  // rather than on the real PSI call. Observed live in production 21 Aug
+  // 2026 -- see docs/BUILD_LOG.md.
   const { pathname } = await put(pathnameFor(runId, pageId, strategy), JSON.stringify(json), {
     access: 'private',
     contentType: 'application/json',
+    allowOverwrite: true,
   });
   return pathname;
 }
