@@ -26,14 +26,27 @@ export function OrgEmailForm({ email }: { email: OrgEmailRef }) {
         <label className="block">
           <span className="eyebrow mb-1 block">SMTP host</span>
           <input name="smtpHost" defaultValue={email.host ?? ''} placeholder="smtp.gmail.com" className={input} />
+          <span className="mt-1 block text-[10px] text-[var(--faint)]">
+            Your mail provider&rsquo;s SMTP address — <code>smtp.gmail.com</code> for Gmail or Google
+            Workspace, <code>smtp.office365.com</code> for Microsoft 365, or check your provider&rsquo;s
+            mail settings / &ldquo;SMTP relay&rdquo; page for anything else.
+          </span>
         </label>
         <label className="block">
           <span className="eyebrow mb-1 block">Port</span>
           <input name="smtpPort" defaultValue={email.port ?? ''} placeholder="587" className={input} />
+          <span className="mt-1 block text-[10px] text-[var(--faint)]">
+            <code>587</code> almost always — that&rsquo;s the standard TLS port every major provider
+            uses. Only use <code>465</code> if your provider specifically says SSL-only.
+          </span>
         </label>
         <label className="block">
           <span className="eyebrow mb-1 block">Username</span>
           <input name="smtpUser" defaultValue={email.user ?? ''} placeholder="you@company.com" className={input} />
+          <span className="mt-1 block text-[10px] text-[var(--faint)]">
+            The full mailbox address that will send these emails, e.g. <code>you@company.com</code>.
+            This is the same account the password below belongs to.
+          </span>
         </label>
         <label className="block">
           <span className="eyebrow mb-1 block">Password</span>
@@ -47,6 +60,19 @@ export function OrgEmailForm({ email }: { email: OrgEmailRef }) {
             onFocus={() => setPassTouched(true)}
             className={`${input} font-mono`}
           />
+          <span className="mt-1 block text-[10px] text-[var(--faint)]">
+            Not your normal login password. For Gmail/Google Workspace: turn on 2-Step
+            Verification, then generate one at{' '}
+            <a
+              href="https://myaccount.google.com/apppasswords"
+              target="_blank" rel="noreferrer"
+              className="underline underline-offset-2 hover:text-[var(--muted)]"
+            >
+              myaccount.google.com/apppasswords
+            </a>
+            . For Microsoft 365 it&rsquo;s called an &ldquo;app password&rdquo; too, under Security settings. Other
+            providers usually call it an SMTP password or API key in their account settings.
+          </span>
         </label>
       </div>
       <label className="block max-w-md">
@@ -57,6 +83,11 @@ export function OrgEmailForm({ email }: { email: OrgEmailRef }) {
           placeholder='PageSpeed Auditor <you@company.com>'
           className={input}
         />
+        <span className="mt-1 block text-[10px] text-[var(--faint)]">
+          How the sender name shows up in someone&rsquo;s inbox. Leave blank to just show the username
+          above as the sender — most providers reject a &ldquo;from&rdquo; address that isn&rsquo;t the mailbox
+          you&rsquo;re actually authenticating as.
+        </span>
       </label>
 
       <div className="flex flex-wrap items-center gap-3">
