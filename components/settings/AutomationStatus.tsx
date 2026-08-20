@@ -3,8 +3,8 @@ import { RunControls } from '@/components/runs/RunControls';
 import { FailedPages } from '@/components/runs/FailedPages';
 
 export interface AutomationHealth {
-  workerAlive: boolean;
-  workerLastSeenSecondsAgo: number | null;
+  schedulerAlive: boolean;
+  schedulerLastTickSecondsAgo: number | null;
   scheduleEnabled: boolean;
   cronExpr: string | null;
   nextRunAt: string | null;
@@ -44,10 +44,11 @@ function when(iso: string | null, timeZone: string): string {
 /**
  * Answers "is the schedule actually going to run".
  *
- * The scheduler ticks inside the worker process, so a stopped worker means
- * nothing fires -- with no error and no missed-run record anywhere. That is the
- * worst failure a scheduler can have, and it is exactly what happened here
- * once. Liveness is therefore stated plainly rather than assumed.
+ * The scheduler is a Vercel Cron hitting /api/cron/schedule-tick -- if that
+ * stops firing, nothing runs with no error and no missed-run record anywhere.
+ * That is the worst failure a scheduler can have, and it is exactly what
+ * happened once with the old always-on worker process too. Liveness is
+ * therefore stated plainly rather than assumed.
  */
 export function AutomationStatus({
   health,
@@ -60,11 +61,11 @@ export function AutomationStatus({
 }) {
   const rows: Array<[string, React.ReactNode, boolean]> = [
     [
-      'Background worker',
-      health.workerAlive
-        ? `running · last seen ${ago(health.workerLastSeenSecondsAgo)}`
-        : 'not running — nothing will run on a schedule',
-      health.workerAlive,
+      'Scheduler',
+      health.schedulerAlive
+        ? `checking in · last tick ${ago(health.schedulerLastTickSecondsAgo)}`
+        : 'has not checked in yet — nothing will run on a schedule',
+      health.schedulerAlive,
     ],
     [
       'Schedule',
@@ -99,10 +100,10 @@ export function AutomationStatus({
         ))}
       </dl>
 
-      {!health.workerAlive && (
+      {!health.schedulerAlive && (
         <p className="border-t border-[var(--border)] px-4 py-2.5 text-[11px]" style={{ color: 'var(--score-average-text)' }}>
-          Start it with <code className="rounded bg-[var(--surface-sunken)] px-1">npm run worker</code>.
-          Until then, scheduled checks are skipped silently.
+          It should check in daily on its own via the deployed cron job. If it never has, the cron
+          job likely needs setting up — see Settings → Automation in the docs.
         </p>
       )}
 

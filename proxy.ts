@@ -114,8 +114,13 @@ export default async function proxy(req: NextRequest): Promise<NextResponse> {
 export const config = {
   /**
    * Everything except: Next's own static output, the favicon, the login page
-   * itself (redirect loop), the auth endpoints, and /api/mcp -- which carries
-   * its own bearer token in stage 6 and must never receive an HTML redirect.
+   * itself (redirect loop), the auth endpoints, /api/mcp -- which carries its
+   * own bearer token in stage 6 and must never receive an HTML redirect --
+   * /api/cron -- which carries CRON_SECRET instead of a session cookie -- and
+   * .well-known/workflow -- the Workflow SDK's own internal routes, which
+   * would otherwise get redirected to /login and break every run.
    */
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|login|signup|invite|forgot|reset|api/auth|api/mcp).*)'],
+  matcher: [
+    '/((?!_next/static|_next/image|favicon.ico|login|signup|invite|forgot|reset|api/auth|api/mcp|api/cron|\\.well-known/workflow).*)',
+  ],
 };

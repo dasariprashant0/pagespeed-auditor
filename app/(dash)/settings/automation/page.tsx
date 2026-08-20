@@ -11,7 +11,7 @@ import { estimateRun, formatDuration } from '@/lib/services/estimate.service';
 import { ScheduleForm } from '@/components/settings/ScheduleForm';
 import { NotificationForm } from '@/components/settings/NotificationForm';
 import { AutomationStatus, type AutomationHealth } from '@/components/settings/AutomationStatus';
-import { workerHealth } from '@/lib/queue/heartbeat';
+import { schedulerHealth } from '@/lib/redis';
 import { emailConfigProblem } from '@/lib/notify/email';
 
 export const dynamic = 'force-dynamic';
@@ -40,13 +40,13 @@ export default async function SettingsPage() {
   const site = await defaultSite(ctx.organizationId);
   if (!site) redirect('/');
 
-  const [groups, schedule, notif, worker, recentRuns] = await Promise.all([
+  const [groups, schedule, notif, scheduler, recentRuns] = await Promise.all([
     listGroupsWithAggregates(site.id, { strategy: 'mobile' }),
     prisma.schedule.findUnique({ where: { siteId: site.id } }),
     prisma.notificationSetting.findUnique({ where: { siteId: site.id } }),
     // Never let a Redis blip take the settings page down with it: not knowing
-    // whether the worker is up is a worse answer than a 500, but only just.
-    workerHealth().catch(() => ({ alive: false, lastSeenSecondsAgo: null })),
+    // whether the scheduler is ticking is a worse answer than a 500, but only just.
+    schedulerHealth().catch(() => ({ alive: false, lastTickSecondsAgo: null })),
     prisma.auditRun.findMany({
       where: { siteId: site.id },
       orderBy: { startedAt: 'desc' },
@@ -60,8 +60,8 @@ export default async function SettingsPage() {
   ]);
 
   const health: AutomationHealth = {
-    workerAlive: worker.alive,
-    workerLastSeenSecondsAgo: worker.lastSeenSecondsAgo,
+    schedulerAlive: scheduler.alive,
+    schedulerLastTickSecondsAgo: scheduler.lastTickSecondsAgo,
     scheduleEnabled: schedule?.enabled ?? false,
     cronExpr: schedule?.cronExpr ?? null,
     nextRunAt: schedule?.nextRunAt?.toISOString() ?? null,

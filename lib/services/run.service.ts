@@ -4,7 +4,30 @@ import type { RunProgressDTO, RunStatus } from './types.ts';
 import { NotFoundError } from '../errors.ts';
 import { logger } from '../logger.ts';
 import { getEnv } from '../env.ts';
-import { enqueueAuditJobs, enqueueFinalizeRun, type AuditPair } from '../queue/producers.ts';
+
+/**
+ * One (page, strategy) unit of work.
+ *
+ * Defined here (not in lib/workflows/auditRun.ts) so this file stays a leaf
+ * that lib/workflows/* depends on, never the other way -- auditRun.ts needs
+ * finalizeRun() from this file, and importing AuditPair back from there would
+ * make the two modules circular.
+ */
+export interface AuditPair {
+  pageId: string;
+  url: string;
+  strategy: PsiStrategy;
+}
+
+/**
+ * Starts (or restarts) audit dispatch for a run's pairs. Injected rather than
+ * imported directly -- see the AuditPair comment above for why. The real
+ * implementation is startAuditRun() in lib/workflows/auditRun.ts; passing an
+ * empty pairs array is how a "resume found nothing missing" immediately
+ * finalizes, since the workflow's own backstop does that when its batch loop
+ * has nothing to do.
+ */
+export type AuditDispatcher = (runId: string, pairs: AuditPair[]) => Promise<void>;
 
 /**
  * AuditRun lifecycle: create, progress accounting, finalize, resume.
@@ -396,7 +419,7 @@ export interface ResumeSummary {
  * the results are not, and a `completedJobs` left at its pre-crash value would
  * either finalize the run early or never finalize it at all.
  */
-export async function resumeRun(prisma: PrismaClient, runId: string): Promise<ResumeSummary> {
+export async function resumeRun(prisma: PrismaClient, runId: string, dispatch: AuditDispatcher): Promise<ResumeSummary> {
   const run = await prisma.auditRun.findUnique({
     where: { id: runId },
     select: { id: true, siteId: true, scopeLabel: true, totalJobs: true },
@@ -461,7 +484,7 @@ export async function resumeRun(prisma: PrismaClient, runId: string): Promise<Re
   });
 
   if (missing.length === 0) {
-    await enqueueFinalizeRun(runId);
+    await dispatch(runId, []);
     logger.info({ auditRunId: runId, expected: expected.length }, 'resume found nothing missing; finalizing');
     return {
       runId,
@@ -472,7 +495,7 @@ export async function resumeRun(prisma: PrismaClient, runId: string): Promise<Re
     };
   }
 
-  await enqueueAuditJobs(runId, missing);
+  await dispatch(runId, missing);
   logger.info(
     { auditRunId: runId, expected: expected.length, alreadyDone: existing.length, reEnqueued: missing.length },
     'run resumed',
@@ -498,14 +521,18 @@ export interface ReconcileSummary {
 }
 
 /**
- * Worker boot: adopt or bury whatever the last process left behind.
+ * Called once per cron tick (there is no "worker boot" anymore): adopt or
+ * bury whatever the last run left behind.
  *
- * BullMQ recovers waiting and delayed jobs on its own and the stalled checker
- * reclaims active ones, so this exists for the case it cannot see -- Redis lost
- * its data while Postgres kept the run rows.
+ * Durable workflow runs are far less likely to lose track of themselves than
+ * a BullMQ+Redis pair was (see docs/DECISIONS.md), but this stays as the
+ * safety net for the case where a run's workflow genuinely died -- e.g. it
+ * was force-cancelled outside the app, or Postgres and the workflow backend
+ * disagree about a run's state.
  */
 export async function reconcileStaleRuns(
   prisma: PrismaClient,
+  dispatch: AuditDispatcher,
   now: Date = new Date(),
 ): Promise<ReconcileSummary> {
   const staleHours = getEnv().STALE_RUN_HOURS;
@@ -524,7 +551,7 @@ export async function reconcileStaleRuns(
       continue;
     }
     try {
-      await resumeRun(prisma, run.id);
+      await resumeRun(prisma, run.id, dispatch);
       summary.resumed.push(run.id);
     } catch (e) {
       // One unresumable run must not stop the worker from booting.

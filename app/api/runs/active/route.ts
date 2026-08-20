@@ -3,7 +3,6 @@ import { requireApiSession } from '@/lib/http/auth-guard';
 import { prisma } from '@/lib/db';
 import { toRunProgress } from '@/lib/services/site.service';
 import { estimateRun } from '@/lib/services/estimate.service';
-import { getAuditQueue } from '@/lib/queue/queues';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,26 +35,13 @@ export async function GET() {
   // One measurement shared by every run in the response.
   const seed = runs.length > 0 ? (await estimateRun(1)).throughputPerSecond : undefined;
 
-  // Delayed jobs are ones waiting out a retry backoff. Without surfacing this,
-  // a run whose last job is on a 4-minute backoff looks frozen at 99/100 with a
-  // countdown that keeps promising seconds -- which reads as a hang, not as the
-  // retry policy working.
-  let retryingJobs = 0;
-  let nextRetryInSeconds: number | null = null;
-  if (runs.length > 0) {
-    try {
-      const queue = getAuditQueue();
-      const delayed = await queue.getJobs(['delayed'], 0, 50);
-      retryingJobs = delayed.length;
-      const soonest = delayed
-        .map((j) => (j.opts.delay ?? 0) + (j.timestamp ?? 0))
-        .filter((n) => n > Date.now())
-        .sort((a, b) => a - b)[0];
-      if (soonest) nextRetryInSeconds = Math.max(0, Math.round((soonest - Date.now()) / 1000));
-    } catch {
-      // Queue introspection is a nicety; never fail the progress poll over it.
-    }
-  }
+  // Retry backoff now happens inside one workflow step (lib/workflows/auditRun.ts)
+  // rather than as BullMQ delayed jobs, so there is no longer a queue to
+  // introspect for "how many are waiting out a backoff" -- a run mid-retry
+  // just looks like a normal in-flight page until it either succeeds or
+  // exhausts its attempts.
+  const retryingJobs = 0;
+  const nextRetryInSeconds: number | null = null;
 
   return NextResponse.json(
     { runs: runs.map((r) => ({ ...toRunProgress(r, undefined, seed), retryingJobs, nextRetryInSeconds })) },

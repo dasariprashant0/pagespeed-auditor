@@ -32,13 +32,19 @@ const schema = z.object({
 
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
   REDIS_URL: z.string().min(1, 'REDIS_URL is required'),
+  // Namespaces every Redis key this app still uses -- the PSI rate limiter's
+  // token bucket and the scheduler heartbeat. No longer a BullMQ queue prefix
+  // (the name predates that removal; not worth a Vercel env var rename).
   QUEUE_PREFIX: z.string().default('psa'),
 
+  /** How many pages a sweep processes per batch -- see lib/workflows/auditRun.ts. */
   WORKER_CONCURRENCY: int(20),
   PSI_RATE_MAX: int(3),
   PSI_RATE_WINDOW_MS: int(4000),
-  QUEUE_LOCK_DURATION_MS: int(120_000),
   STALE_RUN_HOURS: int(12),
+
+  /** Verifies /api/cron/schedule-tick requests actually came from Vercel Cron (or an equivalent external pinger). */
+  CRON_SECRET: z.string().default(''),
 
   PSI_API_KEY: z.string().default(''),
   PSI_TIMEOUT_MS: int(90_000),
@@ -80,10 +86,7 @@ const schema = z.object({
   RESULT_RETAIN_RUNS: int(10),
 });
 
-export type Env = z.infer<typeof schema> & {
-  /** Queue lock must exceed the HTTP timeout or in-flight jobs get re-delivered. */
-  readonly queueLockExceedsTimeout: boolean;
-};
+export type Env = z.infer<typeof schema>;
 
 function load(): Env {
   const parsed = schema.safeParse(process.env);
@@ -93,19 +96,7 @@ function load(): Env {
     throw new Error(`Invalid environment configuration:\n${lines.join('\n')}`);
   }
 
-  const e = parsed.data;
-
-  // Not a style preference -- a lock shorter than the request timeout causes
-  // BullMQ to mark still-running jobs as stalled and re-deliver them, which
-  // silently doubles PSI quota burn. Fail loudly instead.
-  if (e.QUEUE_LOCK_DURATION_MS <= e.PSI_TIMEOUT_MS) {
-    throw new Error(
-      `QUEUE_LOCK_DURATION_MS (${e.QUEUE_LOCK_DURATION_MS}) must exceed PSI_TIMEOUT_MS ` +
-        `(${e.PSI_TIMEOUT_MS}), or in-flight PSI jobs are marked stalled and run twice.`,
-    );
-  }
-
-  return Object.freeze({ ...e, queueLockExceedsTimeout: true });
+  return Object.freeze(parsed.data);
 }
 
 let cached: Env | undefined;

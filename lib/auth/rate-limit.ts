@@ -1,5 +1,5 @@
 import type Redis from 'ioredis';
-import { createRedis } from '../queue/connection.ts';
+import { createRedis } from '../redis.ts';
 import { getEnv } from '../env.ts';
 
 /**

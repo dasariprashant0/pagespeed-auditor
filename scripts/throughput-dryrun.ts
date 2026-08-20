@@ -14,7 +14,7 @@
  * estimates and the schedule-only design both need revisiting.
  */
 import 'dotenv/config';
-import { createRedis } from '../lib/queue/connection.ts';
+import { createRedis } from '../lib/redis.ts';
 import { PsiRateLimiter } from '../lib/psi/rateLimiter.ts';
 
 const JOBS = Number(process.env.JOBS ?? 60);

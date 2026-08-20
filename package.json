@@ -9,10 +9,9 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "node --test --experimental-strip-types 'test/**/*.test.ts'",
-    "worker": "tsx lib/queue/worker.ts",
     "db:up": "docker compose -f docker-compose.dev.yml up -d",
     "db:down": "docker compose -f docker-compose.dev.yml down",
-    "db:migrate": "prisma migrate dev && prisma generate && echo \"\n  Schema changed \u2014 RESTART the dev server and worker; both cache the generated client.\n\"",
+    "db:migrate": "prisma migrate dev && prisma generate && echo \"\n  Schema changed — RESTART the dev server; it caches the generated client.\n\"",
     "db:studio": "prisma studio",
     "db:generate": "prisma generate",
     "db:seed": "tsx prisma/seed.ts",
@@ -35,9 +34,10 @@
     "@modelcontextprotocol/server": "^2.0.0",
     "@prisma/adapter-pg": "^7.9.1",
     "@prisma/client": "^7.9.1",
+    "@workflow/core": "^5.0.0-beta.43",
+    "@workflow/next": "^5.0.0-beta.43",
     "agentation": "^3.0.1",
     "bcryptjs": "^3.0.3",
-    "bullmq": "^6.1.2",
     "cron-parser": "^5.10.0",
     "fast-xml-parser": "^5.11.0",
     "ioredis": "^6.0.0",
@@ -52,6 +52,7 @@
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "resend": "^6.20.0",
+    "workflow": "^5.0.0-beta.43",
     "zod": "^4.4.3"
   },
   "devDependencies": {
@@ -75,6 +76,8 @@
     "sharp@0.34.5": true,
     "unrs-resolver@1.11.1": true,
     "esbuild@0.28.2": true,
-    "fsevents@2.3.3": true
+    "fsevents@2.3.3": true,
+    "@swc/core@1.15.3": true,
+    "cbor-extract@2.2.2": true
   }
 }

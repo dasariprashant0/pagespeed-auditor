@@ -1,19 +1,23 @@
 /**
- * Queues an audit through the real worker, rather than running it inline.
+ * Runs a group's audit through the real audit path, rather than going
+ * through the dashboard.
  *
  *   npm run audit:queue -- platform          # whole group, both strategies
  *   npm run audit:queue -- platform mobile   # one strategy
  *
- * Preferred over audit:group for anything non-trivial: the worker retries
- * transient PSI failures on the configured backoff, and the run shows up in the
- * dashboard's progress bar.
+ * Preferred over audit:group for anything non-trivial: this retries transient
+ * PSI failures on the configured backoff and shows up in the dashboard's
+ * progress bar, same as auditPage() does for every other run.
+ *
+ * Runs sequentially in this process rather than starting a Workflow run --
+ * see the same note in scripts/canary.ts.
  */
 import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { BOTH_STRATEGIES, createRun, expandScope, findActiveRun } from '../lib/services/run.service.ts';
-import { enqueueAuditJobs } from '../lib/queue/producers.ts';
-import { closeQueues } from '../lib/queue/queues.ts';
+import { auditPage } from '../lib/services/audit.service.ts';
+import { getPsiRateLimiter, getRedis } from '../lib/redis.ts';
 import { estimateRun, formatDuration } from '../lib/services/estimate.service.ts';
 import type { PsiStrategy } from '../lib/psi/types.ts';
 
@@ -46,14 +50,18 @@ async function main() {
     const runId = await createRun(prisma, {
       siteId: site.id, type: 'group', triggeredBy: 'manual', scope, totalJobs: pairs.length,
     });
-    await enqueueAuditJobs(runId, pairs);
+    console.log(`\n  running ${pairs.length} calls for "${slug}" (${strategies.join(', ')})`);
+    console.log(`  run ${runId}, running sequentially...\n`);
+
+    const limiter = getPsiRateLimiter();
+    for (const p of pairs) {
+      await auditPage({ prisma, limiter }, { runId, pageId: p.pageId, url: p.url, strategy: p.strategy });
+    }
 
     const est = await estimateRun(pairs.length, site.id);
-    console.log(`\n  queued ${pairs.length} calls for "${slug}" (${strategies.join(', ')})`);
-    console.log(`  ${formatDuration(est.seconds)}${est.measured ? ` based on ${est.sampleSize} measured audits` : ' (estimated)'}`);
-    console.log(`  run ${runId}\n`);
+    console.log(`  done. ${formatDuration(est.seconds)}${est.measured ? ` based on ${est.sampleSize} measured audits` : ' (estimated)'}\n`);
   } finally {
-    await closeQueues();
+    await getRedis().quit();
     await prisma.$disconnect();
   }
 }

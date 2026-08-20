@@ -962,3 +962,56 @@ Lighthouse code in words, and states the real attempt count from
 `npx tsc --noEmit` clean. `npm run lint` 0 errors. `npm test` 141/141.
 21 route × breakpoint combinations (desktop 1440, tablet 834, mobile 390)
 checked for horizontal overflow, runtime errors and missing headings: all clean.
+
+## 20 Aug 2026 (later) — deployed to Vercel; BullMQ worker replaced with Vercel Workflow
+
+Deployed the app: GitHub → Vercel, Neon (Postgres) + Upstash (Redis) via the
+Marketplace, local dev data copied over with `pg_dump`/`psql`. Full reasoning
+and what changed: `docs/DECISIONS.md` §11.
+
+Short version: Vercel can't host `npm run worker` (a standalone process), and
+Fly.io — the fallback plan for hosting it — turned out to need a credit card,
+which the deploy was explicitly trying to avoid. Separately, `docs/DECISIONS.md`
+§2.4 had already flagged Upstash as not reliably BullMQ-compatible. Both
+problems go away by replacing `lib/queue/*` with Vercel Workflow
+(`lib/workflows/*`) — one durable workflow run per `AuditRun`, dispatched from
+Server Actions, the MCP server, and a new `CRON_SECRET`-authenticated
+`/api/cron/schedule-tick` route instead of an in-process ticker.
+
+What's unchanged: `audit.service.ts`, the DB-unique-constraint idempotency
+guarantee, `PsiRateLimiter` (plain `INCR`/`PEXPIRE`, no blocking commands —
+stays on Upstash fine), the concurrency/rate math, and `controlRun()`'s
+pause/resume/stop state machine and its existing test (same function, new
+backing implementation of the `queue` parameter).
+
+What's new: retries loop inside one Workflow step instead of BullMQ
+re-running the job; pause/stop are a Postgres status poll at each batch
+boundary plus `sleep()` instead of a BullMQ queue primitive; worker liveness
+became a scheduler heartbeat stamped by the cron route; scheduling moved to
+Vercel Cron, constrained to once/day on this account's Hobby plan (a
+sub-daily cron expression fails at deploy time) — a free external pinger
+(GitHub Actions' schedule trigger) can hit the same route more often if
+needed before upgrading to Pro.
+
+Also fixed along the way: `npm run build` didn't run `prisma generate`, so a
+fresh `npm install` (Vercel, CI) built with an untyped Prisma client and
+failed `next build`'s type-check on code that passed locally, where the
+client was already generated from an earlier `db:migrate`. Fixed by making
+`prisma generate` part of the `build` script itself.
+
+### Verified
+
+`npx tsc --noEmit` clean. `npm run lint` 0 errors (2 new warnings from
+generated `.well-known/workflow/*` files, gitignored). `npm test` 127/127
+(14 fewer than before — `test/queue.test.ts` tested BullMQ job-id functions
+that no longer exist, deleted). `npm run build` succeeds end-to-end
+(`prisma generate && next build`), including Workflow's own compile step
+("Compiled workflows... 1 workflow, 19 steps").
+
+**Not fully verified:** local `next dev` testing of an actual audit run hit
+an unresolved issue in Workflow's local execution transport — steps get
+queued but the dev log repeats `TypeError: fetch failed` and nothing
+progresses. The SDK's docs say it "currently work[s] best when deployed to
+Vercel," so this was treated as a local-only wrinkle. **Before trusting any
+change to `lib/workflows/*`, verify a real audit run completes against a
+Vercel preview deployment** — this was not yet done as of this entry.

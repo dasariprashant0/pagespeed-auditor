@@ -1,9 +1,16 @@
 /**
  * M9: the canary.
  *
- * A bounded slice of the real site through the real queue, BEFORE any full
+ * A bounded slice of the real site through the real audit path (the same
+ * auditPage()/PsiRateLimiter every production run uses), BEFORE any full
  * sweep is ever scheduled. The point is to catch a quota, rate or correctness
  * problem at 100 calls rather than at 1,494.
+ *
+ * Runs sequentially in this process rather than starting a Workflow run --
+ * Workflow's start() needs a live app instance with its routes registered,
+ * which a bare CLI script doesn't have. Fine here: this is a manual,
+ * synchronous check, not something that needs the batching/pause/resume
+ * machinery a real run gets.
  *
  *   npm run canary            # 50 pages, both strategies
  *   npm run canary -- 20
@@ -12,8 +19,8 @@ import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { BOTH_STRATEGIES, createRun, findActiveRun } from '../lib/services/run.service.ts';
-import { enqueueAuditJobs } from '../lib/queue/producers.ts';
-import { closeQueues } from '../lib/queue/queues.ts';
+import { auditPage } from '../lib/services/audit.service.ts';
+import { getPsiRateLimiter, getRedis } from '../lib/redis.ts';
 import { estimateRun, formatDuration } from '../lib/services/estimate.service.ts';
 
 async function main() {
@@ -54,15 +61,19 @@ async function main() {
       scope: { kind: 'page', ref: null, strategies: BOTH_STRATEGIES },
       totalJobs: pairs.length,
     });
-    await enqueueAuditJobs(runId, pairs);
-
-    const est = await estimateRun(pairs.length, site.id);
     console.log(`\n  canary: ${sample.length} pages x 2 strategies = ${pairs.length} PSI calls`);
     console.log(`  sampled every ${step} pages across the sitemap`);
-    console.log(`  ${formatDuration(est.seconds)}${est.measured ? ` (median ${Math.round(est.medianCallMs / 1000)}s/call, ${est.sampleSize} samples)` : ''}`);
-    console.log(`  run ${runId}\n`);
+    console.log(`  run ${runId}, running sequentially...\n`);
+
+    const limiter = getPsiRateLimiter();
+    for (const p of pairs) {
+      await auditPage({ prisma, limiter }, { runId, pageId: p.pageId, url: p.url, strategy: p.strategy });
+    }
+
+    const est = await estimateRun(pairs.length, site.id);
+    console.log(`  done. ${formatDuration(est.seconds)}${est.measured ? ` (median ${Math.round(est.medianCallMs / 1000)}s/call, ${est.sampleSize} samples)` : ''}\n`);
   } finally {
-    await closeQueues();
+    await getRedis().quit();
     await prisma.$disconnect();
   }
 }

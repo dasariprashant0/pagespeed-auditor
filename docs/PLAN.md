@@ -180,6 +180,14 @@ This is the most important addition. The "Top issues" widget groups the latest r
 
 ## Queue, rate limiting, resumability
 
+> **Superseded (20 Aug 2026):** the BullMQ/standalone-worker design below was
+> replaced with Vercel Workflow — see docs/DECISIONS.md §11. The concurrency
+> math, retry/backoff numbers, and idempotency guarantees it describes still
+> hold (they moved into `lib/workflows/auditRun.ts` largely unchanged); only
+> the *dispatch mechanism* changed, because Vercel can't host a standalone
+> process and Upstash was never reliably BullMQ-compatible to begin with.
+> Kept here for the historical reasoning.
+
 **The concurrency math is the thing to get right.** By Little's Law, in-flight requests = rate × latency = 0.75 × ~25 s ≈ **19**. So:
 
 ```

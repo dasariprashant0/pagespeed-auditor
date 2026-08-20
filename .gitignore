@@ -42,3 +42,5 @@ next-env.d.ts
 
 # ShipStudio metadata
 .shipstudio/
+/.swc
+app/.well-known/

@@ -1,26 +1,21 @@
-import type { Job } from 'bullmq';
-import { prisma } from '../../db.ts';
-import { logger } from '../../logger.ts';
+import { prisma } from '../db.ts';
+import { logger } from '../logger.ts';
 import {
   BOTH_STRATEGIES,
   createRun,
   createSkippedRun,
   expandScope,
   findActiveRun,
-} from '../../services/run.service.ts';
-import { enqueueAuditJobs } from '../producers.ts';
-import type { PlanSweepJobData } from '../jobs.ts';
+} from '../services/run.service.ts';
+import { startAuditRun } from './auditRun.ts';
 
 /**
- * Plans a full-site sweep.
- *
- * Only the scheduler calls this. There is deliberately no on-demand path to a
- * full sweep -- 1,494 calls at 0.75 req/s is a ~33 minute job, so a button that
- * appears to do something and then shows nothing for half an hour is a worse
- * interface than no button. See docs/DECISIONS.md 2.2.
+ * Plans and starts a full-site sweep. Moved verbatim from the old
+ * lib/queue/processors/planSweep.processor.ts (a BullMQ control-queue job) --
+ * called now by the cron route instead. Only the scheduler calls this; there
+ * is deliberately no on-demand path to a full sweep. See docs/DECISIONS.md 2.2.
  */
-export async function processPlanSweep(job: Job<PlanSweepJobData>): Promise<void> {
-  const { siteId, triggeredBy } = job.data;
+export async function planAndStartSweep(siteId: string, triggeredBy: 'schedule' | 'manual'): Promise<void> {
   const scope = { kind: 'site' as const, ref: null, strategies: BOTH_STRATEGIES };
 
   // Overlap guard. A delayed sweep is worse than a skipped one: queueing this
@@ -51,6 +46,6 @@ export async function processPlanSweep(job: Job<PlanSweepJobData>): Promise<void
     totalJobs: pairs.length,
   });
 
-  const queued = await enqueueAuditJobs(runId, pairs);
-  logger.info({ runId, queued }, 'sweep planned');
+  await startAuditRun(runId, pairs);
+  logger.info({ runId, queued: pairs.length }, 'sweep planned');
 }

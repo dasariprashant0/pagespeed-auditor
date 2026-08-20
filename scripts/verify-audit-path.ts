@@ -12,7 +12,7 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { auditPage } from '../lib/services/audit.service.ts';
 import { createRun, finalizeRun } from '../lib/services/run.service.ts';
 import { PsiRateLimiter } from '../lib/psi/rateLimiter.ts';
-import { createRedis } from '../lib/queue/connection.ts';
+import { createRedis } from '../lib/redis.ts';
 
 let fail = 0;
 const check = (label: string, ok: boolean, detail = '') => {

@@ -5,7 +5,7 @@ import { requireCapability } from '@/lib/http/auth-guard';
 import { requireRunAccess } from '@/lib/services/tenant.service';
 import { prisma } from '@/lib/db';
 import { controlRun, type RunControl, type RunControlResult } from '@/lib/services/run.service';
-import { getAuditQueue } from '@/lib/queue/queues';
+import { workflowRunQueue } from '@/lib/workflows/runControl';
 
 export type RunControlActionResult =
   | ({ ok: true } & RunControlResult)
@@ -22,7 +22,7 @@ export async function controlRunAction(input: {
   await requireRunAccess(ctx.organizationId, input.runId);
 
   try {
-    const r = await controlRun(prisma, input.runId, input.action, getAuditQueue());
+    const r = await controlRun(prisma, input.runId, input.action, workflowRunQueue(input.runId));
     revalidatePath('/runs');
     revalidatePath(`/runs/${input.runId}`);
     return { ok: true, ...r };

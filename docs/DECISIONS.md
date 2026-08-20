@@ -513,3 +513,92 @@ colours LCP and CLS against Google's published thresholds (2.5s/4s and
 The path cell no longer uses `direction: rtl` to clip long URLs — that reorders
 the separators in a Latin string. Paths split into a quiet parent and an
 emphasised final segment, which is the part that actually differs.
+
+## 11. BullMQ worker replaced with Vercel Workflow (20 Aug 2026)
+
+**Chosen:** delete `lib/queue/*` (the standalone `npm run worker` process,
+BullMQ, ioredis-as-a-queue) and replace it with `lib/workflows/*` on Vercel
+Workflow DevKit — one durable workflow run per `AuditRun`, dispatched from
+Server Actions, the MCP server, and a new `/api/cron/schedule-tick` route
+instead of an in-process 60s ticker.
+
+Two independent reasons pushed this, not one:
+
+1. **Vercel can't host a standalone process.** The whole point of deploying to
+   Vercel was to stop needing a separate always-on host (Fly.io was the plan
+   until it turned out to require a credit card, which the deploy was
+   explicitly trying to avoid).
+2. **Upstash was never reliably BullMQ-compatible** — §2.4 already flagged
+   this as a known dev-only limitation ("BullMQ needs Lua scripting plus
+   blocking commands (BZPOPMIN) on a dedicated connection, which the
+   serverless tier doesn't support") back when the plan was local Docker
+   Redis. Pointing the real worker at Upstash in production would have hit
+   this for real, not hypothetically.
+
+**What did NOT change:** `auditPage()`/`recordAuditResult()` in
+`audit.service.ts`, the DB unique constraint as the actual idempotency
+guarantee, the shared `PsiRateLimiter` token bucket (plain `INCR`/`PEXPIRE`
+via `EVAL` — no blocking commands, so it stays on Upstash unchanged), the
+concurrency-20 / rate-3-per-4s math, the record-an-error-row-on-retry-
+exhaustion behaviour, and `controlRun()`'s pause/resume/stop state machine in
+`run.service.ts` (same function, same test, new backing implementation of its
+`queue` parameter in `lib/workflows/runControl.ts`).
+
+**What did change:**
+
+- **Retries move inside one step.** BullMQ re-ran the whole job on its own
+  backoff schedule; now `auditOnePageStep` loops internally up to
+  `PSI_MAX_ATTEMPTS`, calling the same `backoffMs()`. Workflow's own
+  automatic step-retry is left as an unused extra safety net for genuinely
+  unexpected throws, not the primary mechanism.
+- **Pause is a status poll, not a queue primitive.** Vercel Workflow has no
+  "pause the whole queue" analog. `auditRunWorkflow` processes pages in
+  batches (replacing `WORKER_CONCURRENCY`) and reads `AuditRun.status` from
+  Postgres between batches; if paused, it `sleep()`s in a loop (free while
+  suspended) until resumed or stopped. `pause()`/`resume()`/`drain()` on the
+  new queue shim are no-ops — `controlRun()` already writes the status
+  itself, and that status is exactly what the workflow is polling. Trade-off:
+  resume latency is up to ~20s (the poll interval) instead of instant.
+- **No more BullMQ delayed-job introspection.** `/api/runs/active` used to
+  report how many jobs were waiting out a 429 backoff. That queue no longer
+  exists to inspect; a retrying page now just looks like a normal in-flight
+  one until it succeeds or exhausts its attempts.
+- **Worker liveness → scheduler heartbeat.** There's no process to ask "are
+  you alive" anymore. `/api/cron/schedule-tick` stamps the same kind of
+  Redis heartbeat key the old worker did, once per invocation instead of
+  every 20s from a `setInterval`. The Settings → Automation copy changed from
+  "background worker" to "scheduler" accordingly — there's nothing left to
+  start with `npm run worker`.
+- **Scheduling moved to Vercel Cron**, with a real constraint: this account
+  is on the Hobby plan, which only allows cron jobs **once per day** (±59 min
+  precision) — a sub-daily cron expression fails at deploy time, full stop.
+  `vercel.json` schedules the tick once daily as a baseline. Per-site
+  schedules configured more frequently than daily will only actually fire
+  once a day regardless, until either the account upgrades to Pro or
+  `/api/cron/schedule-tick` (it's just `CRON_SECRET`-authenticated HTTP, not
+  exclusively tied to Vercel's own Cron feature) is triggered by a free
+  external scheduler like GitHub Actions' own cron trigger instead.
+- **`lib/mcp/server.ts` and `lib/services/run.service.ts` now depend on**
+  `lib/workflows/*`, which itself depends on the Next.js-integrated Workflow
+  SDK (`"use workflow"`/`"use step"` require `withWorkflow()` in
+  `next.config.ts`). `run.service.ts` takes the dispatcher as an injected
+  parameter (`AuditDispatcher`) rather than importing `startAuditRun`
+  directly, specifically to avoid a circular import between
+  `run.service.ts` → `auditRun.ts` → `finalize.ts` → `run.service.ts`.
+- **`CLAUDE.md` Rule 1 (the framework-free zone) no longer covers `lib/queue`**
+  — that directory doesn't exist anymore. It still applies to `lib/services`,
+  `lib/psi`, `lib/report`, and `lib/sitemap`, none of which import
+  `lib/workflows/*` or anything Next-specific.
+- **`scripts/canary.ts` and `scripts/queue-audit.ts`** (manual CLI verification
+  tools) no longer start a Workflow run — `start()` needs a live app instance
+  with its routes registered, which a bare `tsx` script doesn't have. They
+  call `auditPage()` directly in a sequential loop instead, through the same
+  rate limiter every production run uses.
+
+**Not fully verified before deploy:** local `next dev` testing hit an
+unresolved issue in Workflow's local execution transport (steps queued but
+never executed, with a repeating `TypeError: fetch failed` in the dev log).
+The SDK's own docs say it "currently work[s] best when deployed to Vercel,"
+so this was treated as a local-dev-only wrinkle rather than chased further —
+verify a real run end-to-end against a Vercel **preview** deployment before
+promoting to production.

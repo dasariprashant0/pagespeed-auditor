@@ -5,7 +5,7 @@ import { requireCapability } from '@/lib/http/auth-guard';
 import { prisma } from '@/lib/db';
 import { defaultSite, requireRunAccess } from '@/lib/services/tenant.service';
 import { BOTH_STRATEGIES, createRun, expandScope, findActiveRun, failedResultsForRun, type FailedResult } from '@/lib/services/run.service';
-import { enqueueAuditJobs } from '@/lib/queue/producers';
+import { startAuditRun } from '@/lib/workflows/auditRun';
 import { estimateRun, formatDuration } from '@/lib/services/estimate.service';
 import type { PsiStrategy } from '@/lib/services/types';
 
@@ -59,7 +59,7 @@ export async function queueAuditAction(input: {
     totalJobs: pairs.length,
   });
 
-  await enqueueAuditJobs(runId, pairs);
+  await startAuditRun(runId, pairs);
 
   const estimate = await estimateRun(pairs.length, site.id);
   revalidatePath('/', 'layout');
@@ -108,7 +108,7 @@ export async function retryFailedAction(input: { runId: string }): Promise<Queue
     totalJobs: pairs.length,
   });
 
-  await enqueueAuditJobs(runId, pairs);
+  await startAuditRun(runId, pairs);
 
   const estimate = await estimateRun(pairs.length, site.id);
   revalidatePath('/', 'layout');

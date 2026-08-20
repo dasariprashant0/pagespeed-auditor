@@ -7,7 +7,7 @@ import { getTopIssues } from '../services/issues.service.ts';
 import { getRunProgress } from '../services/site.service.ts';
 import { getOrCreateRecommendation } from '../services/recommendation.service.ts';
 import { BOTH_STRATEGIES, createRun, expandScope, findActiveRun } from '../services/run.service.ts';
-import { enqueueAuditJobs } from '../queue/producers.ts';
+import { startAuditRun } from '../workflows/auditRun.ts';
 import { estimateRun, formatDuration } from '../services/estimate.service.ts';
 import { normalizeUrl } from '../sitemap/normalize.ts';
 import type { PsiStrategy } from '../psi/types.ts';
@@ -234,7 +234,7 @@ export const mcpHandler = createMcpHandler((server) => {
       const scope = { kind: 'page' as const, ref: page.id, strategies };
       const pairs = await expandScope(prisma, sid, scope);
       const runId = await createRun(prisma, { siteId: sid, type: 'page', triggeredBy: 'manual', scope, totalJobs: pairs.length });
-      await enqueueAuditJobs(runId, pairs);
+      await startAuditRun(runId, pairs);
 
       const est = await estimateRun(pairs.length, sid);
       return text(`Queued ${pairs.length} audit(s) for ${page.url}.\nrunId: ${runId}\nEstimated ${formatDuration(est.seconds)}.`);
@@ -261,7 +261,7 @@ export const mcpHandler = createMcpHandler((server) => {
       if (pairs.length === 0) throw new Error(`No active pages in group "${group}".`);
 
       const runId = await createRun(prisma, { siteId: sid, type: 'group', triggeredBy: 'manual', scope, totalJobs: pairs.length });
-      await enqueueAuditJobs(runId, pairs);
+      await startAuditRun(runId, pairs);
 
       const est = await estimateRun(pairs.length, sid);
       return text(`Queued ${pairs.length} audit(s) for "${group}".\nrunId: ${runId}\nEstimated ${formatDuration(est.seconds)}.`);
