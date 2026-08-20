@@ -704,3 +704,48 @@ real, specific findings — every one of those sections is derived from
 timestamp, changed scores), so there was no legacy inline `rawJson` for it
 to be silently falling back to. That is the full write-then-read-back
 round trip, observed working, not inferred from types.
+
+## 14. Per-organisation SMTP override, but not for password resets (20 Aug 2026)
+
+**Chosen:** `Organization` gets five nullable columns (`smtpHost`,
+`smtpPort`, `smtpUser`, `smtpPass`, `smtpFrom`) — an admin-editable
+override for where invitation and sweep-notification emails send from,
+same shape as `Site.psiApiKey`: null means "use the shared `SMTP_*` env
+vars," a real connection check (`verifySmtpConnection`, nodemailer's
+`transporter.verify()`) runs before saving, and the password is never
+sent to the browser.
+
+**Why:** asked directly, by analogy to the PSI key ("make it configurable
+per tenant like we did for the PSI key"). Requested while fixing a real
+production bug: `/forgot` was exposing the raw password-reset link
+directly in the page response because the shared `EMAIL_TRANSPORT`
+wasn't actually set to `smtp`, and separately `SMTP_PASS` had never been
+added to production at all — a mailbox with no password configured.
+
+**Not applied to password resets, on purpose.** `requestPasswordReset`
+resolves a user by email address alone (`prisma.user.findUnique({where:
+{email}})`), before any organisation is in scope — and a `User` can hold
+`Membership` in more than one `Organization`. There is no single tenant
+to attribute that email to, so there is no sound choice of *which* org's
+mailbox should send it. Password resets keep using the shared `SMTP_*`
+env vars unconditionally; only `inviteMemberAction` (which already has
+`ctx.organizationId`) and `dispatchSweepNotification` (which resolves
+`Site.organizationId`) look up and pass an override.
+
+**Verify-before-save, not verify-before-send.** `sendEmail()` skips the
+shared-default's `emailConfigProblem()` check whenever an override is
+passed — that check describes the *shared* config, not the override,
+and the override was already connection-tested at save time. This
+mirrors `updatePsiKeyAction`'s probe call to Google before storing a key,
+for the same reason: a wrong credential should fail at the moment it can
+still be corrected, not silently on the next real invite or notification.
+
+**Verified:** `npx tsc --noEmit`, `npm run lint`, `npm test` (138/138),
+`npm run build` all clean. The override code path itself (`sendEmail`
+with an explicit override, `verifySmtpConnection`) was exercised for
+real with a one-off script against the mailbox already named in local
+`.env` — which surfaced a real, previously-unknown fact: `SMTP_PASS` is
+empty in **both** local `.env` and production, not just production. Only
+`SMTP_HOST`/`SMTP_USER`/`SMTP_PORT`/`SMTP_FROM` were ever actually filled
+in, in either place. The script was deleted after use; it never became
+part of the repo, and no password was fabricated to make the check pass.

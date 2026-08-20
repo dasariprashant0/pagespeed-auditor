@@ -5,6 +5,7 @@ import { requireCapability, ForbiddenError } from '@/lib/http/auth-guard';
 import { prisma } from '@/lib/db';
 import { requireSiteAccess } from '@/lib/services/tenant.service';
 import { runPagespeed } from '@/lib/psi/client';
+import { verifySmtpConnection } from '@/lib/notify/email';
 
 export type SiteResult = { ok: true; message: string } | { ok: false; error: string };
 
@@ -93,6 +94,68 @@ export async function updatePsiKeyAction(_prev: unknown, form: FormData): Promis
     await prisma.site.update({ where: { id: siteId }, data: { psiApiKey: raw || null } });
     revalidatePath('/settings/site');
     return { ok: true, message: raw ? 'API key saved and verified against Google.' : 'API key cleared.' };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/**
+ * An organisation's own SMTP override for invites and sweep notifications --
+ * see Organization.smtp* in prisma/schema.prisma for why password-reset
+ * emails deliberately do not use this.
+ *
+ * Same write-only shape as updatePsiKeyAction above: the password is never
+ * sent to the browser, so the form shows a masked placeholder and an
+ * unchanged password field must not overwrite the stored one with dots.
+ * Leaving every field blank clears the override back to the shared default.
+ */
+export async function updateOrgEmailAction(_prev: unknown, form: FormData): Promise<SiteResult> {
+  try {
+    const ctx = await requireCapability('automation:manage');
+
+    const host = String(form.get('smtpHost') ?? '').trim();
+    const user = String(form.get('smtpUser') ?? '').trim();
+    const from = String(form.get('smtpFrom') ?? '').trim();
+    const portRaw = String(form.get('smtpPort') ?? '').trim();
+    const passRaw = String(form.get('smtpPass') ?? '').trim();
+
+    if (!host && !user && !from && !portRaw && !passRaw) {
+      await prisma.organization.update({
+        where: { id: ctx.organizationId },
+        data: { smtpHost: null, smtpPort: null, smtpUser: null, smtpPass: null, smtpFrom: null },
+      });
+      revalidatePath('/settings/automation');
+      return { ok: true, message: 'Cleared — invites and notifications will use the shared default again.' };
+    }
+
+    if (!host || !user) return { ok: false, error: 'Host and username are both required.' };
+
+    let pass = passRaw;
+    if (passRaw.includes('•')) {
+      const existing = await prisma.organization.findUnique({
+        where: { id: ctx.organizationId },
+        select: { smtpPass: true },
+      });
+      if (!existing?.smtpPass) return { ok: false, error: 'Enter the password — there is nothing saved yet.' };
+      pass = existing.smtpPass;
+    }
+    if (!pass) return { ok: false, error: 'Password is required.' };
+
+    const port = portRaw ? Number(portRaw) : 587;
+    if (!Number.isInteger(port) || port <= 0) return { ok: false, error: 'Port must be a positive number.' };
+
+    // Verify before storing, the same reason updatePsiKeyAction probes Google:
+    // a wrong password otherwise fails silently on the next invite or
+    // notification, not here where it can actually be fixed.
+    const check = await verifySmtpConnection({ host, port, user, pass, from: from || 'PageSpeed Auditor <noreply@localhost>' });
+    if (!check.ok) return { ok: false, error: `Could not connect: ${check.message}` };
+
+    await prisma.organization.update({
+      where: { id: ctx.organizationId },
+      data: { smtpHost: host, smtpPort: port, smtpUser: user, smtpPass: pass, smtpFrom: from || null },
+    });
+    revalidatePath('/settings/automation');
+    return { ok: true, message: 'Saved and verified — invites and notifications now send from this mailbox.' };
   } catch (e) {
     return fail(e);
   }

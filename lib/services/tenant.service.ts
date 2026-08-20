@@ -1,5 +1,6 @@
 import { prisma } from '../db.ts';
 import { NotFoundError } from '../errors.ts';
+import type { SmtpOverride } from '../notify/email.ts';
 
 /**
  * Tenant scoping.
@@ -77,6 +78,50 @@ export async function requireSiteAccess(organizationId: string, siteId: string):
 export async function psiKeyForSite(siteId: string): Promise<string | null> {
   const site = await prisma.site.findUnique({ where: { id: siteId }, select: { psiApiKey: true } });
   return site?.psiApiKey?.trim() || null;
+}
+
+/**
+ * An organisation's SMTP override, if it has one -- null means "send
+ * through the shared SMTP_* env vars instead," the same fallback shape as
+ * psiKeyForSite above. Server-side only.
+ */
+export async function emailConfigForOrg(organizationId: string): Promise<SmtpOverride | null> {
+  const org = await prisma.organization.findUnique({
+    where: { id: organizationId },
+    select: { smtpHost: true, smtpPort: true, smtpUser: true, smtpPass: true, smtpFrom: true },
+  });
+  if (!org?.smtpHost || !org.smtpUser || !org.smtpPass) return null;
+  return {
+    host: org.smtpHost,
+    port: org.smtpPort ?? 587,
+    user: org.smtpUser,
+    pass: org.smtpPass,
+    from: org.smtpFrom ?? 'PageSpeed Auditor <noreply@localhost>',
+  };
+}
+
+export interface OrgEmailRef {
+  hasOverride: boolean;
+  // Not secret -- safe to show and edit in the browser. Only smtpPass is withheld.
+  host: string | null;
+  port: number | null;
+  user: string | null;
+  from: string | null;
+}
+
+/** For the settings form: what's configured, without ever exposing the password. */
+export async function orgEmailRef(organizationId: string): Promise<OrgEmailRef> {
+  const org = await prisma.organization.findUnique({
+    where: { id: organizationId },
+    select: { smtpHost: true, smtpPort: true, smtpUser: true, smtpFrom: true },
+  });
+  return {
+    hasOverride: Boolean(org?.smtpHost),
+    host: org?.smtpHost ?? null,
+    port: org?.smtpPort ?? null,
+    user: org?.smtpUser ?? null,
+    from: org?.smtpFrom ?? null,
+  };
 }
 
 /**

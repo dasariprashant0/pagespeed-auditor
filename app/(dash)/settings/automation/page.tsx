@@ -2,7 +2,7 @@ import { can } from '@/lib/auth/roles';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { prisma } from '@/lib/db';
 import { requireCapability } from '@/lib/http/auth-guard';
-import { defaultSite } from '@/lib/services/tenant.service';
+import { defaultSite, orgEmailRef } from '@/lib/services/tenant.service';
 import { redirect } from 'next/navigation';
 import { SettingsNav } from '@/components/settings/SettingsNav';
 import { getEnv } from '@/lib/env';
@@ -10,6 +10,7 @@ import { listGroupsWithAggregates } from '@/lib/services/results.service';
 import { estimateRun, formatDuration } from '@/lib/services/estimate.service';
 import { ScheduleForm } from '@/components/settings/ScheduleForm';
 import { NotificationForm } from '@/components/settings/NotificationForm';
+import { OrgEmailForm } from '@/components/settings/OrgEmailForm';
 import { AutomationStatus, type AutomationHealth } from '@/components/settings/AutomationStatus';
 import { schedulerHealth } from '@/lib/redis';
 import { emailConfigProblem } from '@/lib/notify/email';
@@ -40,7 +41,7 @@ export default async function SettingsPage() {
   const site = await defaultSite(ctx.organizationId);
   if (!site) redirect('/');
 
-  const [groups, schedule, notif, scheduler, recentRuns] = await Promise.all([
+  const [groups, schedule, notif, scheduler, recentRuns, orgEmail] = await Promise.all([
     listGroupsWithAggregates(site.id, { strategy: 'mobile' }),
     prisma.schedule.findUnique({ where: { siteId: site.id } }),
     prisma.notificationSetting.findUnique({ where: { siteId: site.id } }),
@@ -59,6 +60,7 @@ export default async function SettingsPage() {
         completedJobs: true, totalJobs: true, failedJobs: true,
       },
     }),
+    orgEmailRef(ctx.organizationId),
   ]);
 
   const health: AutomationHealth = {
@@ -76,7 +78,14 @@ export default async function SettingsPage() {
     })),
   };
 
-  const emailProblem = emailConfigProblem();
+  // An organisation's own SMTP override (orgEmail.hasOverride) bypasses the
+  // shared default entirely -- emailConfigProblem() only describes that
+  // shared default, so it would wrongly report "not configured" for an
+  // organisation that has already set its own mailbox.
+  const emailProblem = orgEmail.hasOverride ? null : emailConfigProblem();
+  const sentFromAddress = orgEmail.hasOverride
+    ? orgEmail.user
+    : process.env.EMAIL_TRANSPORT === 'resend' ? (process.env.EMAIL_FROM ?? null) : (process.env.SMTP_USER ?? null);
   const activePages = groups.reduce((n, g) => n + g.pageCount, 0);
   const sweepEstimate = await estimateRun(activePages * 2, site.id);
 
@@ -111,16 +120,23 @@ export default async function SettingsPage() {
         </Section>
 
         <Section
+          title="Email sending"
+          hint="Your own mailbox for invitations and sweep notifications, instead of sharing the one everyone else on this deployment uses. Leave blank to keep using the shared default."
+        >
+          <OrgEmailForm email={orgEmail} />
+        </Section>
+
+        <Section
           title="Notifications"
           hint={
             emailProblem
               ? `Both channels are off until you turn them on. Email cannot send yet: ${emailProblem} Slack needs none of that — a webhook URL alone works.`
-              : `Both channels are off until you turn them on. Email is ready and will send via ${process.env.SMTP_HOST}.`
+              : `Both channels are off until you turn them on. Email is ready and will send via ${sentFromAddress ?? 'the shared default'}.`
           }
         >
           <NotificationForm
-            sentFrom={process.env.EMAIL_TRANSPORT === 'resend' ? (process.env.EMAIL_FROM ?? null) : (process.env.SMTP_USER ?? null)}
-            appSender={process.env.EMAIL_TRANSPORT === 'resend'}
+            sentFrom={sentFromAddress}
+            appSender={!orgEmail.hasOverride && process.env.EMAIL_TRANSPORT === 'resend'}
             initial={{
               emailEnabled: notif?.emailEnabled ?? false,
               emailTo: notif?.emailTo ?? null,
@@ -144,11 +160,13 @@ export default async function SettingsPage() {
               ['Typical time per page', sweepEstimate.measured ? `${Math.round(sweepEstimate.medianCallMs / 1000)} seconds (measured)` : 'not measured yet'],
               [
                 'Email',
-                emailProblem
-                  ? 'not sending — see the Notifications section'
-                  : process.env.EMAIL_TRANSPORT === 'resend'
-                    ? `sending as ${process.env.EMAIL_FROM} via Resend`
-                    : `sending via ${process.env.SMTP_HOST}`,
+                orgEmail.hasOverride
+                  ? `sending via your own mailbox (${orgEmail.host})`
+                  : emailProblem
+                    ? 'not sending — see the Notifications section'
+                    : process.env.EMAIL_TRANSPORT === 'resend'
+                      ? `sending as ${process.env.EMAIL_FROM} via Resend`
+                      : `sending via ${process.env.SMTP_HOST}`,
               ],
             ] as Array<[string, string]>).map(([k, v]) => (
               <div key={k} className="flex flex-wrap gap-x-4 py-1.5">

@@ -43,6 +43,14 @@ erDiagram
   A single shared token stops working the moment there's more than one
   tenant, since whoever holds it reaches whichever org happens to be
   queried.
+- **`Organization.smtp*`** (added 20 Aug 2026) — an optional per-org SMTP
+  override for invitation and sweep-notification emails, same nullable-
+  presence-means-override shape as `Site.psiApiKey`; verified by a real
+  connection check before saving. **Not** used for password resets: a reset
+  is looked up by email address alone, before any organisation is known,
+  and one `User` can hold `Membership` in more than one org, so there is
+  no single tenant to pick a mailbox from. Resets always use the shared
+  `SMTP_*` env vars. See `docs/DECISIONS.md`.
 
 ## 3. Site structure
 

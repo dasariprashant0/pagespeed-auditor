@@ -1427,3 +1427,47 @@ tiers" goal stated earlier the same day) and just changing the code's own
 thresholds to match once-daily reality (would stop the health check from
 lying, but schedules would still fire up to a day late — a symptom fix,
 not the root cause).
+
+## 21 Aug 2026 — forgot-password was leaking the reset link, and a per-org SMTP override
+
+Asked to make forgot-password "send a real reset email, not devUrl."
+Checked production live via Playwright before touching anything: submitting
+a real account's email on `/forgot` returned the message "Email is not set
+up on this install, so the link is here instead:" followed by a **live,
+valid password-reset token, directly in the page response** — production's
+shared `EMAIL_TRANSPORT` was never actually set to `smtp`, and separately
+`SMTP_PASS` had never been added to production at all (`vercel env ls
+production` showed `SMTP_HOST`/`SMTP_USER`/`SMTP_PORT`/`SMTP_FROM`/
+`EMAIL_TRANSPORT` present, `SMTP_PASS` and `RESEND_API_KEY` both absent).
+This is a real account-takeover exposure, not just a UX rough edge: anyone
+who knows or guesses a registered email can currently get handed that
+account's password-reset link with no mailbox access at all.
+
+Then asked to make the email transport "configurable per tenant, like the
+PSI key" — full reasoning and what was deliberately excluded (password
+resets) in `docs/DECISIONS.md` §14. Summary: `Organization` gained
+`smtpHost`/`smtpPort`/`smtpUser`/`smtpPass`/`smtpFrom` (migration
+`20260820184009_org_smtp_override`), `lib/services/tenant.service.ts`
+gained `emailConfigForOrg`/`orgEmailRef`, `lib/notify/email.ts`'s
+`sendEmail` takes an optional `SmtpOverride` and gained
+`verifySmtpConnection` (nodemailer's `transporter.verify()`, the SMTP
+equivalent of `updatePsiKeyAction`'s probe to Google), and a new "Email
+sending" section on Settings → Automation
+(`components/settings/OrgEmailForm.tsx`, `updateOrgEmailAction`) lets an
+admin save their own mailbox with the same verify-before-save and
+masked-password-on-redisplay pattern the PSI key form already uses.
+`inviteMemberAction` and `dispatchSweepNotification` now resolve and pass
+the org's override; `requestResetAction` (password reset) intentionally
+does not.
+
+While verifying the new override path for real (a one-off script against
+the mailbox already named in local `.env`, deleted after use), found that
+`SMTP_PASS` is empty in **local** `.env` too, not just production — only
+`SMTP_HOST`/`SMTP_USER`/`SMTP_PORT`/`SMTP_FROM` were ever actually filled
+in anywhere. The actual missing-password fix in production is still
+pending on the user adding a real value via `vercel env add SMTP_PASS
+production` themselves, deliberately kept out of this session's hands so
+the password is never typed into this chat.
+
+Verified: `npx tsc --noEmit`, `npm run lint`, `npm test` (138/138), `npm
+run build` all clean.

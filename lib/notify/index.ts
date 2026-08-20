@@ -2,6 +2,7 @@ import { prisma } from '../db.ts';
 import { logger } from '../logger.ts';
 import { sendEmail } from './email.ts';
 import { sendSlack } from './slack.ts';
+import { emailConfigForOrg } from '../services/tenant.service.ts';
 import type { NotificationEvent, SweepSummary } from './types.ts';
 
 export type { NotificationEvent, SweepSummary };
@@ -26,7 +27,11 @@ export async function dispatchSweepNotification(
   siteId: string,
   summary: SweepSummary,
 ): Promise<DispatchOutcome> {
-  const settings = await prisma.notificationSetting.findUnique({ where: { siteId } });
+  const site = await prisma.site.findUnique({
+    where: { id: siteId },
+    select: { organizationId: true, notif: true },
+  });
+  const settings = site?.notif;
   if (!settings) return { attempted: [], problems: ['No notification settings saved.'] };
 
   const subject =
@@ -37,7 +42,8 @@ export async function dispatchSweepNotification(
   const channels: Array<[string, Promise<unknown>]> = [];
   if (settings.emailEnabled && settings.emailTo) {
     const to = settings.emailTo.split(',').map((s) => s.trim()).filter(Boolean);
-    channels.push(['email', sendEmail(to, subject, renderHtml(summary), renderText(summary))]);
+    const override = await emailConfigForOrg(site.organizationId);
+    channels.push(['email', sendEmail(to, subject, renderHtml(summary), renderText(summary), override ?? undefined)]);
   }
   if (settings.slackEnabled && settings.slackWebhookUrl) {
     channels.push(['slack', sendSlack(settings.slackWebhookUrl, summary)]);

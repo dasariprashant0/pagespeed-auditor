@@ -49,42 +49,82 @@ export function emailIsConfigured(): boolean {
   return emailConfigProblem() === null;
 }
 
+/**
+ * Per-organisation SMTP override (Organization.smtp* in the schema) --
+ * see docs/DECISIONS.md for why this exists and why password-reset emails
+ * deliberately do NOT take one.
+ */
+export interface SmtpOverride {
+  host: string;
+  port: number;
+  user: string;
+  pass: string;
+  from: string;
+}
+
+function transporterFor(override?: SmtpOverride) {
+  const host = override?.host ?? process.env.SMTP_HOST!;
+  const port = override?.port ?? Number(process.env.SMTP_PORT ?? 587);
+  const user = override?.user ?? process.env.SMTP_USER;
+  const pass = override?.pass ?? process.env.SMTP_PASS;
+  return nodemailer.createTransport({
+    host,
+    port,
+    secure: port === 465,
+    auth: user ? { user, pass } : undefined,
+  });
+}
+
+function gmailHint(msg: string): string {
+  // Gmail's auth rejection is cryptic; name the usual cause.
+  return /invalid login|username and password|BadCredentials|534|535/i.test(msg)
+    ? ' — Gmail rejected the credentials. The password must be a 16-character App Password (no spaces), not the account password, and 2-Step Verification must be on for that account.'
+    : '';
+}
+
+/**
+ * Connects and authenticates without sending anything -- the SMTP
+ * equivalent of updatePsiKeyAction's probe call to Google, so a wrong
+ * password fails here, at save time, rather than silently on the next
+ * invite or notification.
+ */
+export async function verifySmtpConnection(override: SmtpOverride): Promise<{ ok: true } | { ok: false; message: string }> {
+  try {
+    await transporterFor(override).verify();
+    return { ok: true };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, message: `${msg}${gmailHint(msg)}` };
+  }
+}
+
 export async function sendEmail(
   to: string[],
   subject: string,
   html: string,
   text: string,
+  override?: SmtpOverride,
 ): Promise<EmailOutcome> {
   if (to.length === 0) return { sent: false, reason: 'No recipient address.' };
 
-  const problem = emailConfigProblem();
-  if (problem) return { sent: false, reason: problem };
-  const host = process.env.SMTP_HOST!;
+  // The shared default's own configuration is checked only when there is no
+  // per-organisation override -- an override was already verified at save
+  // time (see verifySmtpConnection), and the shared SMTP_* vars may be
+  // deliberately unset for an organisation that always overrides.
+  if (!override) {
+    const problem = emailConfigProblem();
+    if (problem) return { sent: false, reason: problem };
+  }
 
-  const port = Number(process.env.SMTP_PORT ?? 587);
-  const transporter = nodemailer.createTransport({
-    host,
-    port,
-    secure: port === 465,
-    auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } : undefined,
-  });
+  const transporter = transporterFor(override);
+  const from = override?.from ?? process.env.SMTP_FROM ?? 'PageSpeed Auditor <noreply@localhost>';
 
   try {
-    await transporter.sendMail({
-      from: process.env.SMTP_FROM ?? 'PageSpeed Auditor <noreply@localhost>',
-      to: to.join(', '),
-      subject,
-      text,
-      html,
-    });
+    await transporter.sendMail({ from, to: to.join(', '), subject, text, html });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     logger.error({ to, err: msg }, 'smtp send failed');
-    // Gmail's auth rejection is cryptic; name the usual cause.
-    const hint = /invalid login|username and password|BadCredentials|534|535/i.test(msg)
-      ? ' — Gmail rejected the credentials. SMTP_PASS must be a 16-character App Password (no spaces), not your account password, and 2-Step Verification must be on.'
-      : '';
-    return { sent: false, reason: `SMTP error: ${msg}${hint}` };
+    return { sent: false, reason: `SMTP error: ${msg}${gmailHint(msg)}` };
   }
 
   logger.info({ to, subject }, 'email sent');

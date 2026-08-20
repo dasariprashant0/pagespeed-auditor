@@ -53,6 +53,22 @@ model Organization {
   slug      String   @unique
   createdAt DateTime @default(now())
 
+  /// Per-organisation SMTP override, same shape as Site.psiApiKey below --
+  /// null means "use the shared SMTP_* env vars." Admin-editable, verified by
+  /// a real connection check before saving, never sent to the browser unmasked.
+  ///
+  /// Deliberately NOT used for password-reset emails: those are looked up by
+  /// email address alone, before any organisation is known, and one User can
+  /// belong to more than one Organisation (see Membership) -- there is no
+  /// single tenant to attribute that email to. Only sends that already have
+  /// an organisation in hand at send time (invitations, sweep notifications)
+  /// use this. See docs/DECISIONS.md.
+  smtpHost String?
+  smtpPort Int?
+  smtpUser String?
+  smtpPass String?
+  smtpFrom String?
+
   members     Membership[]
   sites       Site[]
   invitations Invitation[]

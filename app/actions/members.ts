@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { requireCapability, ForbiddenError } from '@/lib/http/auth-guard';
 import { prisma } from '@/lib/db';
 import { inviteMember, wouldOrphanOrganization, normalizeEmail } from '@/lib/services/account.service';
+import { emailConfigForOrg } from '@/lib/services/tenant.service';
 import { isRole, type Role } from '@/lib/auth/roles';
 import { getEnv } from '@/lib/env';
 import { sendEmail } from '@/lib/notify/email';
@@ -35,6 +36,7 @@ export async function inviteMemberAction(_prev: unknown, form: FormData): Promis
     // Best-effort: email is often not configured yet, and an invitation that
     // cannot be sent is still usable as a link. Failing the whole action would
     // waste the token.
+    const override = await emailConfigForOrg(ctx.organizationId);
     const sent = await sendEmail(
       [result.invite.email],
       `You have been invited to ${ctx.organizationName} on PageSpeed Auditor`,
@@ -42,6 +44,7 @@ export async function inviteMemberAction(_prev: unknown, form: FormData): Promis
        <p><a href="${url}">Accept the invitation</a></p>
        <p style="color:#78716c">The link expires in 7 days.</p>`,
       `${ctx.name ?? ctx.email} invited you to ${ctx.organizationName}.\n\n${url}\n\nThe link expires in 7 days.`,
+      override ?? undefined,
     );
 
     revalidatePath('/settings/team');
