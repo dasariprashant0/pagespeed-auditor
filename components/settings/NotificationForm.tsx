@@ -8,6 +8,7 @@ export function NotificationForm({
   initial,
   sentFrom,
   appSender = false,
+  sharedDefault = true,
   canEdit,
 }: {
   initial: {
@@ -21,6 +22,10 @@ export function NotificationForm({
   sentFrom: string | null;
   /** True when sending as the app (verified domain) rather than a person's mailbox. */
   appSender?: boolean;
+  /** False once this organisation has set its own mailbox above — the
+   * "that's a personal mailbox" caveat only makes sense for the deployment's
+   * shared default, not for a mailbox someone just chose on purpose. */
+  sharedDefault?: boolean;
   /** automation:manage. Visible to everyone regardless; this only decides
    * whether the controls below actually accept input. */
   canEdit: boolean;
@@ -53,11 +58,11 @@ export function NotificationForm({
           {sentFrom && (
             <p className="text-[11px] text-[var(--muted)]">
               Sent from <strong>{sentFrom}</strong>. Recipients above can be anyone, on any domain.
-              {!appSender && (
+              {!appSender && sharedDefault && (
                 <>
-                  {' '}That is a personal mailbox — to send as the app instead, from an address
-                  like <code>pagespeed@yourdomain.com</code> that belongs to nobody in particular,
-                  switch <code>EMAIL_TRANSPORT</code> to <code>resend</code>.
+                  {' '}That is this deployment&rsquo;s shared personal mailbox. To send from a
+                  dedicated address like <code>pagespeed@yourdomain.com</code> instead, ask
+                  whoever manages hosting to switch it over — or set your own mailbox above.
                 </>
               )}
             </p>

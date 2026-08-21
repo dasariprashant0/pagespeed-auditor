@@ -94,8 +94,8 @@ export function AutomationStatus({
 
       {!health.schedulerAlive && (
         <p className="border-t border-[var(--border)] px-4 py-2.5 text-[11px]" style={{ color: 'var(--score-average-text)' }}>
-          It should check in daily on its own via the deployed cron job. If it never has, the cron
-          job likely needs setting up — see Settings → Automation in the docs.
+          It should check in daily on its own via the deployment&rsquo;s cron job. If it never has,
+          ask whoever manages hosting to verify the cron job is set up.
         </p>
       )}
 

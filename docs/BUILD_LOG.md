@@ -1702,3 +1702,61 @@ undocumented until now. Full reasoning for the feature as a whole in
 
 Verified: `npx tsc --noEmit`, `npm run lint`, `npm test` (141/141), `npm
 run build` all clean.
+
+## 21 Aug 2026 (later still) — Copy pass: no more dev instructions leaking into the product
+
+Ran a full read-only audit of every user-facing string in `app/` and
+`components/` (page titles, empty states, error messages, tooltips,
+form hints) against the standard of "reads like a real SaaS product,"
+per the user's request. Overall verdict: the existing copy was already
+unusually deliberate -- consistent voice, careful terminology, thoughtful
+empty states across the ~45 files reviewed. The findings clustered on
+one specific pattern rather than being spread everywhere.
+
+**The pattern:** several settings screens told a real admin to edit
+`.env`, run `npm run env -- KEY value`, or "restart" -- instructions
+that only make sense to someone with codebase and deployment access,
+not a customer's admin. Fixed by reframing all of them around what an
+admin actually *can* do:
+- `lib/notify/email.ts`'s `emailConfigProblem()` (surfaced in Settings →
+  Automation) no longer names env vars or tells anyone to edit `.env`;
+  it says the shared sender isn't finished setting up and points at
+  "ask whoever manages hosting" or the org's own mailbox override,
+  which is the one thing the viewer can actually do from here.
+- `components/settings/NotificationForm.tsx`'s "personal mailbox"
+  caveat had the same problem, plus a second bug: it fired even when
+  an organisation had deliberately set its *own* mailbox above, where
+  the caveat is simply wrong. Added a `sharedDefault` prop so it only
+  shows for the deployment's shared default, not an intentional
+  override.
+- `components/settings/AutomationStatus.tsx`'s cron-health warning
+  pointed at "Settings → Automation in the docs" -- i.e. this repo's
+  markdown files, unreachable by a real customer, and also circular
+  (that warning already lives on that exact page). Reworded to "ask
+  whoever manages hosting."
+- The automation page's "Configuration" section hint (`.env` /
+  `npm run env` / restart) reworded to state the actual, honest fact:
+  these are deployment-wide values an org admin cannot change from
+  here at all, not a walkthrough of how to change them.
+
+**Second, smaller finding:** `FailedPages.tsx` already had a proper
+`EXPLAIN` map translating Lighthouse's `runtimeError` codes (`NO_FCP`,
+`RETRIES_EXHAUSTED`, ...) into full sentences a non-engineer can read.
+Two other places showing the same codes bypassed it and printed the
+raw code verbatim: the per-page report's error empty-state, and the
+run-history table's Perf column. Moved the map to
+`lib/report/runtimeError.ts` (framework-free, per the repo's
+`lib/report` rule) as `explainRuntimeError()`, and pointed all three
+call sites at it. The run-history table cell is too narrow for a full
+sentence, so it now shows a plain "Failed" with the explanation as a
+hover `title` instead of the bare code.
+
+Left two lower-severity items from the audit alone: `CWVGrid`'s bare
+"No data" fallback (real inconsistency, but the tile is a few pixels
+wide and a full sentence doesn't fit -- not worth the layout risk for
+a nice-to-have), and the "stored in Vercel Blob" line on Settings →
+Site (accurate, useful billing context for an admin, not an
+instruction -- naming the vendor here is informational, not a leak).
+
+Verified: `npx tsc --noEmit`, `npm run lint`, `npm test` (141/141),
+`npm run build` all clean.

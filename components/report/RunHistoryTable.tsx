@@ -1,5 +1,6 @@
 import type { PageRunHistoryEntry } from '@/lib/services/results.service';
 import { ScorePill } from '@/components/score/ScorePill';
+import { explainRuntimeError } from '@/lib/report/runtimeError';
 
 /**
  * Every retained run for this page.
@@ -42,8 +43,12 @@ export function RunHistoryTable({ entries, keepRuns }: { entries: PageRunHistory
                 </td>
                 <td className="px-2 py-1.5 text-right">
                   {e.status === 'error' ? (
-                    <span className="text-[11px]" style={{ color: 'var(--score-fail-text)' }}>
-                      {e.runtimeError ?? 'failed'}
+                    <span
+                      className="text-[11px]"
+                      style={{ color: 'var(--score-fail-text)' }}
+                      title={explainRuntimeError(e.runtimeError)}
+                    >
+                      Failed
                     </span>
                   ) : (
                     <ScorePill score={e.scores.performance} title="Performance" />

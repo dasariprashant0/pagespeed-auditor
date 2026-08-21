@@ -25,22 +25,17 @@ export type EmailOutcome =
 export function emailConfigProblem(): string | null {
   const transport = process.env.EMAIL_TRANSPORT ?? 'none';
   if (transport === 'resend') {
-    if (!process.env.RESEND_API_KEY) {
-      return 'RESEND_API_KEY is not set. Create a key at resend.com, verify your domain, then run: npm run env -- RESEND_API_KEY re_xxx';
-    }
-    if (!process.env.EMAIL_FROM) {
-      return 'EMAIL_FROM is not set. Use an address on your verified domain, e.g. "PageSpeed Auditor <pagespeed@zuddl.com>".';
+    if (!process.env.RESEND_API_KEY || !process.env.EMAIL_FROM) {
+      return 'This deployment\'s shared sender isn\'t finished setting up — ask whoever manages hosting, or set your own mailbox above instead.';
     }
     return null;
   }
 
   if (transport !== 'smtp') {
-    return 'Email is not configured, so messages are written to the log instead of sent. Set EMAIL_TRANSPORT to "resend" (sends as the app from your own domain) or "smtp" (sends from one person\'s mailbox).';
+    return 'This deployment has no shared sender configured, so messages are written to the log instead of sent. Set your own mailbox above, or ask whoever manages hosting to configure one.';
   }
-  if (!process.env.SMTP_HOST) return 'SMTP_HOST is not set.';
-  if (!process.env.SMTP_USER) return 'SMTP_USER is not set.';
-  if (!process.env.SMTP_PASS) {
-    return 'SMTP_PASS is empty — paste a Google App Password from myaccount.google.com/apppasswords into .env and restart. Your normal password will not work over SMTP.';
+  if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
+    return 'This deployment\'s shared mailbox isn\'t finished setting up — ask whoever manages hosting, or set your own mailbox above instead.';
   }
   return null;
 }

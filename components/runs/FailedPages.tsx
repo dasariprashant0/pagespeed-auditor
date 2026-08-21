@@ -5,23 +5,7 @@ import { useRouter } from 'next/navigation';
 import { failedResultsAction, retryFailedAction } from '@/app/actions/audits';
 import type { FailedResult } from '@/lib/services/run.service';
 import { Button } from '@/components/ui/Button';
-
-/**
- * Which pages a run could not measure, and a way to try them again.
- *
- * "8 failed" on its own is an accusation without evidence. These are real rows
- * — a job that runs out of attempts writes an AuditResult with status 'error'
- * and null scores, so the run can still finalize — and each one names the page
- * and what Lighthouse said.
- */
-const EXPLAIN: Record<string, string> = {
-  RETRIES_EXHAUSTED:
-    'Google never returned a result, across every attempt. Usually a page heavy enough to exceed the 90-second limit.',
-  ERRORED_DOCUMENT_REQUEST: 'The page itself did not load for Google — a redirect, a block, or a server error.',
-  NO_FCP: 'The page never painted anything, so there was nothing to measure.',
-  FAILED_DOCUMENT_REQUEST: 'Google could not fetch the URL at all.',
-  NOT_HTML: 'The URL did not return an HTML page.',
-};
+import { explainRuntimeError } from '@/lib/report/runtimeError';
 
 export function FailedPages({
   runId,
@@ -102,7 +86,7 @@ export function FailedPages({
                     <span className="text-[var(--faint)]">{f.strategy}</span>
                   </div>
                   <div className="text-[var(--muted)]">
-                    {EXPLAIN[f.error] ?? f.error}
+                    {explainRuntimeError(f.error)}
                   </div>
                 </li>
               ))}

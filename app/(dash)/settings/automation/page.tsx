@@ -143,6 +143,7 @@ export default async function SettingsPage() {
           <NotificationForm
             sentFrom={sentFromAddress}
             appSender={!orgEmail.hasOverride && process.env.EMAIL_TRANSPORT === 'resend'}
+            sharedDefault={!orgEmail.hasOverride}
             initial={{
               emailEnabled: notif?.emailEnabled ?? false,
               emailTo: notif?.emailTo ?? null,
@@ -154,7 +155,7 @@ export default async function SettingsPage() {
         </Section>
 
 
-        <Section title="Configuration" hint="Set in .env, which is hidden and gitignored so secrets stay out of the repository. Change a value with `npm run env -- KEY value`, then restart.">
+        <Section title="Configuration" hint="Set for the whole deployment, not per organisation — ask whoever manages hosting to change one of these.">
           <dl className="divide-y divide-[var(--border)] text-[12px]">
             {([
               ['Site', site.name],
