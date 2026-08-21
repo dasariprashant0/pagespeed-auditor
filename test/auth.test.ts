@@ -2,6 +2,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { hashPassword, verifyPassword, isUsableHash, BCRYPT_COST } from '../lib/auth/password.ts';
 import { signSession, verifySession, daysToSeconds } from '../lib/auth/session.ts';
+import { signPendingAuth, verifyPendingAuth } from '../lib/auth/pendingAuth.ts';
 
 const SECRET = 'a'.repeat(64);
 
@@ -86,5 +87,36 @@ describe('session tokens', () => {
   test('day conversion', () => {
     assert.equal(daysToSeconds(1), 86_400);
     assert.equal(daysToSeconds(30), 2_592_000);
+  });
+});
+
+describe('pending-auth tokens', () => {
+  test('carry the user id, verifiable with the same secret', async () => {
+    const token = await signPendingAuth('user_1', SECRET);
+    const claims = await verifyPendingAuth(token, SECRET);
+    assert.equal(claims?.userId, 'user_1');
+  });
+
+  test('a token signed with another secret is rejected', async () => {
+    const token = await signPendingAuth('user_1', SECRET);
+    assert.equal(await verifyPendingAuth(token, 'b'.repeat(64)), null);
+  });
+
+  test('a tampered token is rejected', async () => {
+    const token = await signPendingAuth('user_1', SECRET);
+    const [h, p, s] = token.split('.');
+    const forged = JSON.parse(Buffer.from(p, 'base64url').toString());
+    forged.sub = 'someone-else';
+    const swapped = `${h}.${Buffer.from(JSON.stringify(forged)).toString('base64url')}.${s}`;
+    assert.equal(await verifyPendingAuth(swapped, SECRET), null);
+  });
+
+  test('an expired token is rejected', async () => {
+    const token = await signPendingAuth('user_1', SECRET, new Date(Date.now() - 10 * 60_000));
+    assert.equal(await verifyPendingAuth(token, SECRET), null);
+  });
+
+  test('garbage input is rejected, not thrown', async () => {
+    assert.equal(await verifyPendingAuth('not-a-token', SECRET), null);
   });
 });

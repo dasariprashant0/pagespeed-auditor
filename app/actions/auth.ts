@@ -8,11 +8,13 @@ import {
   acceptInvitation,
   requestPasswordReset,
   completePasswordReset,
+  contextFor,
 } from '@/lib/services/account.service';
 import { getEnv } from '@/lib/env';
 import { sendEmail } from '@/lib/notify/email';
 import { consumeLoginAttempt, resetLoginAttempts, retryAfterMinutes } from '@/lib/auth/rate-limit';
 import { startSession, endSession } from '@/lib/http/session';
+import { setPendingAuth, getPendingAuth, clearPendingAuth } from '@/lib/http/pendingAuth';
 import { safeNextPath } from '@/lib/http/auth-guard';
 
 /**
@@ -56,7 +58,37 @@ export async function loginAction(_prev: AuthResult | null, form: FormData): Pro
   }
 
   await resetLoginAttempts(key);
+
+  // The password is already verified at this point regardless of which
+  // organisation gets picked next -- see membershipSummaries()'s comment in
+  // account.service.ts for why this can no longer silently pick one itself.
+  if (result.kind === 'choose') {
+    await setPendingAuth(result.userId);
+    redirect(`/login/organization?next=${encodeURIComponent(next)}`);
+  }
+
   await startSession(result.context.userId, result.context.organizationId);
+  redirect(next);
+}
+
+/**
+ * The step between "password/Google verified who you are" and "which
+ * organisation" -- only reachable via the pending-auth cookie set above,
+ * never by posting an organisationId directly: the membership is re-verified
+ * against the DB here regardless of what the form claims.
+ */
+export async function selectOrganizationAction(_prev: AuthResult | null, form: FormData): Promise<AuthResult> {
+  const organizationId = String(form.get('organizationId') ?? '');
+  const next = safeNextPath(String(form.get('next') ?? '/'));
+
+  const pending = await getPendingAuth();
+  if (!pending) return { ok: false, error: 'That sign-in attempt expired. Sign in again.' };
+
+  const context = await contextFor(pending.userId, organizationId);
+  if (!context) return { ok: false, error: 'You are not a member of that organisation.' };
+
+  await clearPendingAuth();
+  await startSession(context.userId, context.organizationId);
   redirect(next);
 }
 
@@ -139,8 +171,15 @@ export async function completeResetAction(_prev: AuthResult | null, form: FormDa
   const result = await completePasswordReset(token, password);
   if (!result.ok) return { ok: false, error: result.error };
 
-  // Signed straight in: they have just proved control of the mailbox and chosen
-  // a password, so asking them to type it again immediately is friction only.
-  if (result.organizationId) await startSession(result.userId, result.organizationId);
-  redirect(result.organizationId ? '/' : '/login');
+  // Signed straight in where possible: they have just proved control of the
+  // mailbox and chosen a password, so asking them to type it again
+  // immediately is friction only.
+  if (result.kind === 'choose') {
+    await setPendingAuth(result.userId);
+    redirect('/login/organization');
+  }
+  if (result.kind === 'none') redirect('/login');
+
+  await startSession(result.userId, result.organizationId);
+  redirect('/');
 }

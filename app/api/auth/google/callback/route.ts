@@ -3,6 +3,7 @@ import { getEnv } from '@/lib/env';
 import { exchangeGoogleCode, verifyGoogleIdToken, verifyGoogleState } from '@/lib/auth/google';
 import { loginWithGoogle, signupWithGoogle, acceptInvitationWithGoogle } from '@/lib/services/account.service';
 import { startSession } from '@/lib/http/session';
+import { setPendingAuth } from '@/lib/http/pendingAuth';
 
 export const dynamic = 'force-dynamic';
 
@@ -55,6 +56,12 @@ export async function GET(req: Request) {
   if (intent.kind === 'login') {
     const result = await loginWithGoogle(identity.email);
     if (!result.ok) return fail('/login', result.error);
+    if (result.kind === 'choose') {
+      await setPendingAuth(result.userId);
+      return NextResponse.redirect(
+        new URL(`/login/organization?next=${encodeURIComponent(intent.next)}`, env.APP_URL),
+      );
+    }
     await startSession(result.context.userId, result.context.organizationId);
     return NextResponse.redirect(new URL(intent.next, env.APP_URL));
   }

@@ -1885,3 +1885,56 @@ Nothing in the app reads or writes these yet -- purely additive.
 
 Verified: `npx tsc --noEmit`, `npm run lint`, `npm test` (157/157,
 including 8 new `secretBox.test.ts` cases) all clean.
+
+## 21 Aug 2026 (later still) -- Per-tenant Neon + D1: Phase 2 (login org-picker)
+
+Fixed a real, pre-existing gap identified while planning the per-tenant
+split: `Membership` genuinely supports one user belonging to more than
+one organisation (`@@unique([userId, organizationId])`, both sides
+arrays -- a real scenario, e.g. a consultant auditing several clients'
+sites), but `login()`/`loginWithGoogle()`/`completePasswordReset()` all
+silently picked the OLDEST membership via `findFirst`. Harmless while
+every org shared one database; becomes a real correctness bug once orgs
+get their own separate databases, since picking wrong then means opening
+the wrong database, not just showing wrong data. Deliberately sequenced
+*before* the schema split (see `docs/DECISIONS.md` §19) since it only
+touches central-DB models and is worth having regardless.
+
+Built: `lib/auth/pendingAuth.ts` (a short-lived signed JWT, same pattern
+as `lib/auth/google.ts`'s OAuth state, reusing `SESSION_SECRET` rather
+than adding a new one for something this short-lived) plus its
+cookie-aware wrapper `lib/http/pendingAuth.ts`. `account.service.ts`'s
+three login-adjacent functions now return a `'single' | 'choose'`
+outcome instead of a bare context; `'choose'` sets the pending cookie
+and redirects to a new `/login/organization` page
+(`components/auth/OrganizationPicker.tsx` -- one button per org, in one
+form, name/value pair on whichever gets clicked) instead of starting a
+session. A new `selectOrganizationAction` re-verifies the chosen
+membership against the DB before starting the real session -- it never
+trusts a posted `organizationId` alone, reusing the existing
+`contextFor()` that already does exactly this check. Signup and
+accept-invite are untouched: both already resolve to exactly one
+unambiguous org.
+
+Verified directly against the real local Postgres (not just types): a
+freshly seeded two-membership user gets `kind: 'choose'` with both
+organisations correctly listed and roles intact;
+`membershipsForUser()` (what the picker page renders) returns the same
+list; `contextFor()` resolves each membership correctly and returns
+`null` for an organisation the user does not belong to (the exact check
+`selectOrganizationAction` depends on); a wrong password still fails
+identically to before; a freshly seeded single-membership user still
+signs straight in with zero extra clicks, unchanged from today's
+behaviour. Browser-driven click-through was attempted but blocked by
+unrelated tooling friction in this environment (screenshots rendered
+the login page correctly; interactive actions timed out) -- the
+service-layer verification above covers the actual logic that changed.
+
+Also cleaned up while here: an orphaned `redis` container left over
+from the Redis-removal work earlier this session
+(`docker compose down --remove-orphans` && `up -d`; local Postgres data
+and schema confirmed intact afterward via `prisma migrate status`).
+
+Verified: `npx tsc --noEmit`, `npm run lint`, `npm test` (162/162,
+including 5 new pending-auth-token cases in `test/auth.test.ts`), `npm
+run build` all clean.

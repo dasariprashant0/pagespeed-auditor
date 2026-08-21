@@ -86,8 +86,46 @@ export async function signup(input: {
   return { ok: true, ...result };
 }
 
+/** One row of "which organisations can this user sign into" -- the org-picker's list. */
+export interface MembershipSummary {
+  organizationId: string;
+  organizationName: string;
+  role: Role;
+}
+
+/**
+ * A user can genuinely belong to more than one organisation (e.g. a
+ * consultant auditing several clients' sites) -- Membership is a real
+ * many-to-many, `@@unique([userId, organizationId])`, both sides arrays.
+ * This used to be resolved silently by always picking the OLDEST
+ * membership (`findFirst({ orderBy: 'asc' })`), which was harmless while
+ * every organisation shared one database. It stops being harmless once
+ * organisations have their own separate databases -- picking wrong then
+ * means opening the wrong database, not just showing wrong data -- so
+ * every caller now gets the full list and asks explicitly when there's
+ * more than one.
+ */
+async function membershipSummaries(userId: string): Promise<MembershipSummary[]> {
+  const memberships = await prisma.membership.findMany({
+    where: { userId },
+    orderBy: { createdAt: 'asc' },
+    select: { organizationId: true, role: true, organization: { select: { name: true } } },
+  });
+  return memberships.map((m) => ({
+    organizationId: m.organizationId,
+    organizationName: m.organization.name,
+    role: isRole(m.role) ? m.role : 'viewer',
+  }));
+}
+
+/** For the org-picker page: what this pending sign-in can choose between. */
+export async function membershipsForUser(userId: string): Promise<MembershipSummary[]> {
+  return membershipSummaries(userId);
+}
+
 export type LoginOutcome =
-  | { ok: true; context: SessionContext }
+  | { ok: true; kind: 'single'; context: SessionContext }
+  | { ok: true; kind: 'choose'; userId: string; memberships: MembershipSummary[] }
   | { ok: false; error: string };
 
 /** Constant-ish cost regardless of outcome; see verifyPassword. */
@@ -103,26 +141,30 @@ export async function login(email: string, password: string): Promise<LoginOutco
   const ok = await verifyPassword(password, user?.passwordHash ?? '');
   if (!user || !ok) return { ok: false, error: 'Email or password is incorrect.' };
 
-  const membership = await prisma.membership.findFirst({
-    where: { userId: user.id },
-    orderBy: { createdAt: 'asc' },
-    select: { organizationId: true, role: true, organization: { select: { name: true } } },
-  });
-  if (!membership) {
+  const memberships = await membershipSummaries(user.id);
+  if (memberships.length === 0) {
     return { ok: false, error: 'This account is not a member of any organisation. Ask an admin to invite you again.' };
   }
 
+  // The password has already been verified at this point, regardless of
+  // which organisation gets chosen next.
   await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
 
+  if (memberships.length > 1) {
+    return { ok: true, kind: 'choose', userId: user.id, memberships };
+  }
+
+  const m = memberships[0];
   return {
     ok: true,
+    kind: 'single',
     context: {
       userId: user.id,
       email: user.email,
       name: user.name,
-      organizationId: membership.organizationId,
-      organizationName: membership.organization.name,
-      role: isRole(membership.role) ? membership.role : 'viewer',
+      organizationId: m.organizationId,
+      organizationName: m.organizationName,
+      role: m.role,
       hasSeenRoleTour: user.roleTourSeenAt !== null,
     },
   };
@@ -148,26 +190,28 @@ export async function loginWithGoogle(email: string): Promise<LoginOutcome> {
     return { ok: false, error: 'No account uses that Google address yet. Ask an admin to invite you, or sign up.' };
   }
 
-  const membership = await prisma.membership.findFirst({
-    where: { userId: user.id },
-    orderBy: { createdAt: 'asc' },
-    select: { organizationId: true, role: true, organization: { select: { name: true } } },
-  });
-  if (!membership) {
+  const memberships = await membershipSummaries(user.id);
+  if (memberships.length === 0) {
     return { ok: false, error: 'This account is not a member of any organisation. Ask an admin to invite you again.' };
   }
 
   await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
 
+  if (memberships.length > 1) {
+    return { ok: true, kind: 'choose', userId: user.id, memberships };
+  }
+
+  const m = memberships[0];
   return {
     ok: true,
+    kind: 'single',
     context: {
       userId: user.id,
       email: user.email,
       name: user.name,
-      organizationId: membership.organizationId,
-      organizationName: membership.organization.name,
-      role: isRole(membership.role) ? membership.role : 'viewer',
+      organizationId: m.organizationId,
+      organizationName: m.organizationName,
+      role: m.role,
       hasSeenRoleTour: user.roleTourSeenAt !== null,
     },
   };
@@ -461,10 +505,13 @@ export async function inspectResetToken(token: string): Promise<ResetTokenInfo> 
   return { valid: true, email: row.user.email };
 }
 
-export async function completePasswordReset(
-  token: string,
-  password: string,
-): Promise<{ ok: true; userId: string; organizationId: string | null } | { ok: false; error: string }> {
+export type ResetOutcome =
+  | { ok: true; kind: 'single'; userId: string; organizationId: string }
+  | { ok: true; kind: 'choose'; userId: string; memberships: MembershipSummary[] }
+  | { ok: true; kind: 'none'; userId: string }
+  | { ok: false; error: string };
+
+export async function completePasswordReset(token: string, password: string): Promise<ResetOutcome> {
   if (password.length < 12) return { ok: false, error: 'Use a password of at least 12 characters.' };
 
   const row = await prisma.passwordReset.findUnique({
@@ -483,12 +530,10 @@ export async function completePasswordReset(
     prisma.passwordReset.update({ where: { id: row.id }, data: { usedAt: new Date() } }),
   ]);
 
-  const membership = await prisma.membership.findFirst({
-    where: { userId: row.userId },
-    orderBy: { createdAt: 'asc' },
-    select: { organizationId: true },
-  });
-
   logger.info({ userId: row.userId }, 'password reset completed');
-  return { ok: true, userId: row.userId, organizationId: membership?.organizationId ?? null };
+
+  const memberships = await membershipSummaries(row.userId);
+  if (memberships.length === 0) return { ok: true, kind: 'none', userId: row.userId };
+  if (memberships.length > 1) return { ok: true, kind: 'choose', userId: row.userId, memberships };
+  return { ok: true, kind: 'single', userId: row.userId, organizationId: memberships[0].organizationId };
 }
