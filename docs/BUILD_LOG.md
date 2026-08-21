@@ -1760,3 +1760,27 @@ instruction -- naming the vendor here is informational, not a leak).
 
 Verified: `npx tsc --noEmit`, `npm run lint`, `npm test` (141/141),
 `npm run build` all clean.
+
+## 21 Aug 2026 (later still) — Confirmed the GitHub Actions sweep pinger, fixed two stale comments
+
+This was actually already built earlier in this session (commit
+`86f87fd`, before the Redis-removal work took over) -- checked
+`gh run list --workflow=schedule-tick.yml` and it has been firing
+successfully every 15-50 minutes (GitHub's schedule trigger is
+best-effort) since it landed, hitting the real
+`/api/cron/schedule-tick` with the `CRON_SECRET` repo secret. Nothing
+new needed building.
+
+Fixed two comments the Redis removal (see the earlier entry above)
+left stale: `.github/workflows/schedule-tick.yml` referenced
+`lib/redis.ts's CRON_INTERVAL_MS`, which no longer exists -- now
+points at `lib/opsState.ts`, where that constant actually lives.
+`app/api/cron/schedule-tick/route.ts`'s doc comment claimed "Triggered
+by Vercel Cron every 15 minutes," which was never true even before
+today -- `vercel.json` has always fired this once a day
+(`0 2 * * *`, the Hobby-plan ceiling); the real 15-minute cadence has
+always come from this GitHub Actions pinger, not Vercel Cron. Comment
+now says so.
+
+Verified: `npx tsc --noEmit`, `npm run lint`, `npm test` (141/141) all
+clean.

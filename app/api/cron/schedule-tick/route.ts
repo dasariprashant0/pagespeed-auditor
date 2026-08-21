@@ -13,9 +13,11 @@ export const maxDuration = 60;
 /**
  * Replaces the 60s setInterval that used to live inside the standalone
  * worker process (lib/queue/worker.ts) plus its reconcileStaleRuns-at-boot
- * call. Triggered by Vercel Cron every 15 minutes (see vercel.json) --
- * sweeps take ~35 minutes and must be ≥1h apart (schedule.service.ts's
- * MIN_INTERVAL_MS), so 15-minute granularity loses nothing.
+ * call. Vercel Cron on the Hobby plan can only fire this once a day
+ * (vercel.json) -- the actual 15-minute cadence comes from a free GitHub
+ * Actions pinger instead (.github/workflows/schedule-tick.yml). Sweeps take
+ * ~35 minutes and must be ≥1h apart (schedule.service.ts's MIN_INTERVAL_MS),
+ * so 15-minute granularity loses nothing.
  *
  * Full-sweep-is-schedule-only (docs/DECISIONS.md 2.2) holds here by
  * construction: this route is the only caller of planAndStartSweep.

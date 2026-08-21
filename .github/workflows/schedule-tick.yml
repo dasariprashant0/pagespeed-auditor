@@ -2,10 +2,11 @@ name: Schedule tick
 
 # Vercel Cron on the Hobby plan can only fire once a day (see vercel.json and
 # CLAUDE.md's "Environment gotchas"), but /api/cron/schedule-tick's own code
-# assumes a 15-minute cadence (lib/redis.ts's CRON_INTERVAL_MS, the scheduler
-# "alive" heartbeat threshold, and how promptly a configured schedule actually
-# fires). This workflow is the free external pinger that gap needed and never
-# had -- GitHub Actions' own schedule trigger, no paid plan required.
+# assumes a 15-minute cadence (lib/opsState.ts's CRON_INTERVAL_MS, the
+# scheduler "alive" heartbeat threshold, and how promptly a configured
+# schedule actually fires). This workflow is the free external pinger that
+# gap needed and never had -- GitHub Actions' own schedule trigger, no paid
+# plan required.
 #
 # GitHub's schedule trigger is best-effort and can slip by several minutes
 # under load; that's fine here since the route itself is idempotent per tick
