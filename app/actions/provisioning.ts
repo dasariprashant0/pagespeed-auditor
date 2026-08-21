@@ -5,7 +5,7 @@ import { requireCapability, ForbiddenError } from '@/lib/http/auth-guard';
 import { prisma } from '@/lib/db';
 import { encryptSecret } from '@/lib/crypto/secretBox';
 import { provisionRefFor } from '@/lib/services/org.service';
-import { validateNeonUrl, validateD1Credentials, runTenantMigrations } from '@/lib/tenantDb/provision';
+import { validateNeonUrl, validateD1Credentials, ensureD1Schema, runTenantMigrations } from '@/lib/tenantDb/provision';
 
 /**
  * Connects an organisation's own Neon Postgres and Cloudflare D1 databases
@@ -65,6 +65,10 @@ export async function provisionTenantAction(_prev: ProvisionResult | null, form:
       }
       const d1Error = await validateD1Credentials(d1AccountRaw, d1DatabaseRaw, d1TokenRaw);
       if (d1Error) return { ok: false, error: d1Error, field: 'd1' };
+      // Credentials alone don't get raw JSON storage working -- a fresh D1
+      // database has no raw_json_blobs table until this creates it.
+      const schemaError = await ensureD1Schema(d1AccountRaw, d1DatabaseRaw, d1TokenRaw);
+      if (schemaError) return { ok: false, error: schemaError, field: 'd1' };
     }
 
     // Both validations (whichever ran) passed -- persist. Neon first, since

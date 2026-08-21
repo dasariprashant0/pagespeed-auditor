@@ -158,17 +158,26 @@ signature to carry `organizationId` — durable, in-flight audit runs need
 to fully drain before that specific deploy, or a run already in progress
 breaks on resume.
 
-## A real gap, found while writing this doc
+## A real gap, found while writing this doc — fixed
 
-The Neon side of provisioning creates the org's tables. **The D1 side
-does not** — validation only runs a `SELECT 1`, which succeeds even
-against a genuinely empty, brand-new D1 database with no tables at all.
-Nothing currently creates that database's `raw_json_blobs` table the way
-the shared one already has it. This needs a small fix (the exact
-`CREATE TABLE` used for the shared D1 database, run once during
-provisioning) before per-tenant D1 actually works end to end — flagged
-here rather than fixed immediately, since Phase 5 was deliberately moved
-to a fresh session.
+The Neon side of provisioning creates the org's tables. **The D1 side did
+not** — validation only ran a `SELECT 1`, which succeeds even against a
+genuinely empty, brand-new D1 database with no tables at all. Nothing
+created that database's `raw_json_blobs` table the way the shared one
+already had it.
+
+**Fixed** (start of the Phase 5 session): `lib/tenantDb/provision.ts`
+gained `ensureD1Schema(accountId, databaseId, apiToken)`, the same
+`raw_json_blobs(pathname TEXT PRIMARY KEY, body TEXT, created_at INTEGER)`
+`CREATE TABLE IF NOT EXISTS` the shared D1 database was set up with once,
+by hand (§18). `app/actions/provisioning.ts` calls it right after
+`validateD1Credentials` passes and before persisting the D1 fields, so a
+saved org always has both a reachable D1 database *and* the table
+`lib/blob.ts` actually reads and writes. `IF NOT EXISTS` makes re-running
+this safe on a token rotation against an already-provisioned tenant.
+Unit-tested in `test/provision.test.ts` against a fake D1 endpoint
+(success, a Cloudflare-side rejection, and a network failure — the same
+three cases `validateD1Credentials` already covered).
 
 ## Everything currently verified vs. not yet
 
@@ -179,6 +188,6 @@ to a fresh session.
 | Tenant schema + migration (`prisma/tenant/`) | ✅ Built, verified against real throwaway databases |
 | Tenant-client resolver (`lib/db/tenant.ts`) | ✅ Built. Not called from anywhere yet |
 | Settings → Database UI + provisioning action | ✅ Built, validation logic verified against real throwaway databases |
-| D1 table creation during provisioning | ❌ Missing — see the gap above |
+| D1 table creation during provisioning | ✅ Fixed — see above |
 | Every other page/action/workflow using the org's own database | ❌ Not started — Phase 5 |
 | Dropping the old shared tables, removing `CLOUDFLARE_*` fallback | ❌ Not started — Phase 6, after Phase 5 is verified |

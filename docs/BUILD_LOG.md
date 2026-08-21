@@ -2198,3 +2198,33 @@ user to try Settings → Database directly.
 Verified: `npx tsc --noEmit`, `npm run lint`, `npm test` (176/176,
 including 3 new `validateD1Credentials` cases), `npm run build` all
 clean -- `/settings/database` present as a real route.
+
+## 21 Aug 2026 (later still) -- Per-tenant Neon + D1: the D1 table-creation gap, fixed
+
+New session, per `docs/PER_TENANT_ARCHITECTURE.md`'s "real gap" note left
+at the end of Phase 4: `validateD1Credentials` only ran `SELECT 1`, which
+a genuinely empty brand-new D1 database passes with no tables at all. No
+per-tenant D1 database would ever have gotten the `raw_json_blobs` table
+`lib/blob.ts` actually reads and writes -- the exact table the shared D1
+database (§18) got once, by hand.
+
+Fixed with `ensureD1Schema(accountId, databaseId, apiToken)` in
+`lib/tenantDb/provision.ts` -- the same
+`raw_json_blobs(pathname TEXT PRIMARY KEY, body TEXT, created_at INTEGER)`
+`CREATE TABLE IF NOT EXISTS`, called from `app/actions/provisioning.ts`
+right after `validateD1Credentials` passes and before the D1 credential
+fields are persisted. `IF NOT EXISTS` means a credential rotation against
+an already-provisioned org re-runs this harmlessly rather than erroring.
+
+Three new tests in `test/provision.test.ts`, mirroring the existing
+`validateD1Credentials` cases (success, a Cloudflare-side rejection, a
+network failure) plus asserting the actual SQL sent. Verified:
+`npx tsc --noEmit` clean, `npm run lint` 0 errors, `npm test` 179/179.
+
+Next: Phase 5 -- the actual cutover. `lib/db.ts`'s `prisma` export is
+still named `prisma`, not yet renamed to `centralPrisma` (docs/DECISIONS.md
+§19's "deliberately breaking rename" forcing function), and nothing
+outside the provisioning UI itself calls `getTenantPrisma`/
+`withTenantPrisma` yet -- every real audit, page, Server Action, and
+Workflow step still reads and writes the one shared database and shared
+D1. Not started this entry; see the plan for how it's being sequenced.

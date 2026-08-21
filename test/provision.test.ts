@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { validateD1Credentials } from '../lib/tenantDb/provision.ts';
+import { validateD1Credentials, ensureD1Schema } from '../lib/tenantDb/provision.ts';
 
 /**
  * Only validateD1Credentials is unit-tested here -- validateNeonUrl and
@@ -12,9 +12,10 @@ import { validateD1Credentials } from '../lib/tenantDb/provision.ts';
  */
 
 function fakeD1(shape: { ok: boolean; success: boolean; status?: number }) {
-  const calls: Array<{ url: string; auth: string | null }> = [];
+  const calls: Array<{ url: string; auth: string | null; sql: string }> = [];
   const fetchImpl = (async (url: string, init?: RequestInit) => {
-    calls.push({ url, auth: (init?.headers as Record<string, string>)?.Authorization ?? null });
+    const { sql } = JSON.parse(String(init?.body)) as { sql: string };
+    calls.push({ url, auth: (init?.headers as Record<string, string>)?.Authorization ?? null, sql });
     return new Response(JSON.stringify({ success: shape.success, errors: shape.success ? [] : ['nope'] }), {
       status: shape.status ?? (shape.ok ? 200 : 403),
     });
@@ -43,6 +44,34 @@ describe('validateD1Credentials', () => {
       throw new Error('network down');
     }) as unknown as typeof fetch;
     const result = await validateD1Credentials('acct', 'db', 'token', failing);
+    assert.ok(result);
+    assert.match(result!, /network down/);
+  });
+});
+
+describe('ensureD1Schema', () => {
+  test('issues a CREATE TABLE IF NOT EXISTS for raw_json_blobs, and returns null on success', async () => {
+    const { fetchImpl, calls } = fakeD1({ ok: true, success: true });
+    const result = await ensureD1Schema('acct', 'db', 'token', fetchImpl);
+    assert.equal(result, null);
+    assert.match(calls[0].url, /\/accounts\/acct\/d1\/database\/db\/query$/);
+    assert.equal(calls[0].auth, 'Bearer token');
+    assert.match(calls[0].sql, /^CREATE TABLE IF NOT EXISTS raw_json_blobs/);
+    assert.match(calls[0].sql, /pathname TEXT PRIMARY KEY/);
+  });
+
+  test('a message, not null, when Cloudflare rejects it', async () => {
+    const { fetchImpl } = fakeD1({ ok: false, success: false, status: 403 });
+    const result = await ensureD1Schema('acct', 'db', 'wrong-token', fetchImpl);
+    assert.ok(result);
+    assert.match(result!, /403/);
+  });
+
+  test('a message, not a throw, when the request itself fails', async () => {
+    const failing = (async () => {
+      throw new Error('network down');
+    }) as unknown as typeof fetch;
+    const result = await ensureD1Schema('acct', 'db', 'token', failing);
     assert.ok(result);
     assert.match(result!, /network down/);
   });

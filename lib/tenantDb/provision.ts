@@ -58,6 +58,41 @@ export async function validateD1Credentials(
 }
 
 /**
+ * Creates the `raw_json_blobs` table this org's D1 database needs -- see
+ * docs/PER_TENANT_ARCHITECTURE.md's "real gap" note. `validateD1Credentials`
+ * only proves the credentials can reach D1; a bare `SELECT 1` succeeds
+ * against a genuinely empty, brand-new database with no tables at all, so
+ * without this, lib/blob.ts's INSERT/SELECT/DELETE against that table would
+ * fail the moment Phase 5 starts routing raw JSON through an org's own D1
+ * instead of the shared one. `IF NOT EXISTS` makes this safe to re-run on
+ * every credential save, including a token rotation against an
+ * already-provisioned database.
+ */
+export async function ensureD1Schema(
+  accountId: string,
+  databaseId: string,
+  apiToken: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<string | null> {
+  try {
+    const res = await fetchImpl(`https://api.cloudflare.com/client/v4/accounts/${accountId}/d1/database/${databaseId}/query`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sql: 'CREATE TABLE IF NOT EXISTS raw_json_blobs (pathname TEXT PRIMARY KEY, body TEXT, created_at INTEGER)',
+      }),
+    });
+    const body = (await res.json()) as { success: boolean; errors?: unknown[] };
+    if (!res.ok || !body.success) {
+      return `Connected, but could not create the raw_json_blobs table (HTTP ${res.status}): ${JSON.stringify(body.errors ?? {})}`;
+    }
+    return null;
+  } catch (e) {
+    return `Could not reach Cloudflare: ${e instanceof Error ? e.message : String(e)}`;
+  }
+}
+
+/**
  * Every tenant migration, in order, inside one transaction -- a partial
  * failure leaves zero tables, so a retry starts clean rather than needing
  * per-statement idempotency.
