@@ -28,6 +28,35 @@ export function pathnameFor(runId: string, pageId: string, strategy: string): st
   return `audit-raw-json/${runId}/${pageId}-${strategy}.json`;
 }
 
+/**
+ * One organisation's own D1 database -- see docs/DECISIONS.md §19. Optional
+ * everywhere below, and falls back to the shared, env-configured D1 (§18)
+ * when omitted, so every existing call site keeps working unchanged while
+ * the per-tenant cutover happens gradually. That fallback is a transitional
+ * bridge, not the intended end state -- decision §19.4 is every org brings
+ * its own, no shared tier, and the CLOUDFLARE_* env vars this falls back to
+ * are meant to come out entirely once the real cutover lands.
+ */
+export interface D1Credentials {
+  accountId: string;
+  databaseId: string;
+  apiToken: string;
+}
+
+function credentialsFromEnv(): D1Credentials {
+  const env = getEnv();
+  if (!env.CLOUDFLARE_ACCOUNT_ID || !env.CLOUDFLARE_D1_DATABASE_ID || !env.CLOUDFLARE_API_TOKEN) {
+    throw new PermanentError(
+      'Cloudflare D1 is not configured (CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_D1_DATABASE_ID / CLOUDFLARE_API_TOKEN).',
+    );
+  }
+  return {
+    accountId: env.CLOUDFLARE_ACCOUNT_ID,
+    databaseId: env.CLOUDFLARE_D1_DATABASE_ID,
+    apiToken: env.CLOUDFLARE_API_TOKEN,
+  };
+}
+
 interface D1QueryResult {
   results: Array<Record<string, unknown>>;
   success: boolean;
@@ -44,22 +73,16 @@ interface D1QueryResult {
  * looks identical to a transient PSI one from the caller's side.
  */
 async function d1Query(
+  creds: D1Credentials,
   sql: string,
   params: unknown[],
   fetchImpl: typeof fetch = fetch,
 ): Promise<D1QueryResult> {
-  const env = getEnv();
-  if (!env.CLOUDFLARE_ACCOUNT_ID || !env.CLOUDFLARE_D1_DATABASE_ID || !env.CLOUDFLARE_API_TOKEN) {
-    throw new PermanentError(
-      'Cloudflare D1 is not configured (CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_D1_DATABASE_ID / CLOUDFLARE_API_TOKEN).',
-    );
-  }
-
-  const url = `https://api.cloudflare.com/client/v4/accounts/${env.CLOUDFLARE_ACCOUNT_ID}/d1/database/${env.CLOUDFLARE_D1_DATABASE_ID}/query`;
+  const url = `https://api.cloudflare.com/client/v4/accounts/${creds.accountId}/d1/database/${creds.databaseId}/query`;
   const res = await fetchImpl(url, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${env.CLOUDFLARE_API_TOKEN}`,
+      Authorization: `Bearer ${creds.apiToken}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ sql, params }),
@@ -81,6 +104,7 @@ export async function storeRawJson(
   pageId: string,
   strategy: string,
   json: unknown,
+  creds?: D1Credentials,
   fetchImpl: typeof fetch = fetch,
 ): Promise<string> {
   const pathname = pathnameFor(runId, pageId, strategy);
@@ -89,6 +113,7 @@ export async function storeRawJson(
   // retry re-writes the same key rather than failing on "already exists" --
   // see the comment on that in lib/services/audit.service.ts's history.
   await d1Query(
+    creds ?? credentialsFromEnv(),
     `INSERT INTO raw_json_blobs (pathname, body, created_at) VALUES (?, ?, ?)
      ON CONFLICT(pathname) DO UPDATE SET body = excluded.body, created_at = excluded.created_at`,
     [pathname, JSON.stringify(json), Date.now()],
@@ -98,9 +123,13 @@ export async function storeRawJson(
 }
 
 /** Returns null on anything short of a real row -- a missing/unreadable blob is not worth throwing over. */
-export async function fetchRawJson(pathname: string, fetchImpl: typeof fetch = fetch): Promise<unknown | null> {
+export async function fetchRawJson(
+  pathname: string,
+  creds?: D1Credentials,
+  fetchImpl: typeof fetch = fetch,
+): Promise<unknown | null> {
   try {
-    const result = await d1Query('SELECT body FROM raw_json_blobs WHERE pathname = ?', [pathname], fetchImpl);
+    const result = await d1Query(creds ?? credentialsFromEnv(), 'SELECT body FROM raw_json_blobs WHERE pathname = ?', [pathname], fetchImpl);
     const row = result.results[0] as { body?: string } | undefined;
     if (!row?.body) return null;
     return JSON.parse(row.body) as unknown;
@@ -110,13 +139,18 @@ export async function fetchRawJson(pathname: string, fetchImpl: typeof fetch = f
 }
 
 /** Best-effort: a leaked row costs a fraction of a cent, not worth failing a prune or a delete over. */
-export async function deleteRawJsonBlobs(pathnames: string[], fetchImpl: typeof fetch = fetch): Promise<void> {
+export async function deleteRawJsonBlobs(
+  pathnames: string[],
+  creds?: D1Credentials,
+  fetchImpl: typeof fetch = fetch,
+): Promise<void> {
   if (pathnames.length === 0) return;
   try {
+    const resolved = creds ?? credentialsFromEnv();
     for (let i = 0; i < pathnames.length; i += DELETE_CHUNK_SIZE) {
       const chunk = pathnames.slice(i, i + DELETE_CHUNK_SIZE);
       const placeholders = chunk.map(() => '?').join(', ');
-      await d1Query(`DELETE FROM raw_json_blobs WHERE pathname IN (${placeholders})`, chunk, fetchImpl);
+      await d1Query(resolved, `DELETE FROM raw_json_blobs WHERE pathname IN (${placeholders})`, chunk, fetchImpl);
     }
   } catch {
     /* see above */

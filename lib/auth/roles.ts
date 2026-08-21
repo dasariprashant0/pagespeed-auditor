@@ -29,7 +29,12 @@ export type Capability =
   /** Invite, remove, and change the role of teammates. */
   | 'members:manage'
   /** Schedule and notification settings. */
-  | 'automation:manage';
+  | 'automation:manage'
+  /** Connect (and re-provision) this organisation's own Neon + Cloudflare
+   *  D1 databases -- see docs/DECISIONS.md §19. Bigger deal than
+   *  site:manage/automation:manage: this determines where the org's own
+   *  data physically lives, not just how it's audited. */
+  | 'org:provision';
 
 const CAPABILITIES: Record<Role, Capability[]> = {
   viewer: ['reports:read'],
@@ -56,6 +61,7 @@ const CAPABILITIES: Record<Role, Capability[]> = {
     'site:manage',
     'members:manage',
     'automation:manage',
+    'org:provision',
   ],
 };
 

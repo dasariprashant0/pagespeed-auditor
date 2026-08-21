@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server';
 import { getSession } from './session.ts';
 import { contextFor, type SessionContext } from '../services/account.service.ts';
 import { can, type Capability } from '../auth/roles.ts';
+import { getTenantPrisma, type TenantPrismaClient } from '../db/tenant.ts';
+import { NotProvisionedError } from '../errors.ts';
 
 /**
  * The authorization boundary.
@@ -70,6 +72,27 @@ export async function requireApiCapability(
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
   return context;
+}
+
+/**
+ * Not yet called anywhere -- lands with the resolver (Phase 4 of
+ * docs/DECISIONS.md §19) ahead of the cutover (Phase 5) that actually
+ * threads it through every page/action that touches tenant data.
+ *
+ * Wraps getTenantPrisma() with the one thing every future caller will
+ * want: an org that hasn't connected a database yet gets sent to the one
+ * page that fixes it, instead of a raw NotProvisionedError. That page
+ * itself must call getTenantPrisma() directly (or just never need to),
+ * never this -- redirecting FROM /settings/database TO /settings/database
+ * is a loop.
+ */
+export async function requireTenantPrisma(ctx: SessionContext): Promise<TenantPrismaClient> {
+  try {
+    return await getTenantPrisma(ctx.organizationId);
+  } catch (e) {
+    if (e instanceof NotProvisionedError) redirect('/settings/database');
+    throw e;
+  }
 }
 
 /**

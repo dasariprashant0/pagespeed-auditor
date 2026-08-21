@@ -47,9 +47,9 @@ function fakeD1(rowsForSelect: Array<Record<string, unknown>> = []): {
 }
 
 describe('storeRawJson', () => {
-  test('upserts by pathname, with the JSON body stringified and an auth header', async () => {
+  test('upserts by pathname, with the JSON body stringified and an auth header, falling back to env credentials', async () => {
     const { fetchImpl, calls } = fakeD1();
-    const pathname = await storeRawJson('run1', 'page1', 'mobile', { score: 1 }, fetchImpl);
+    const pathname = await storeRawJson('run1', 'page1', 'mobile', { score: 1 }, undefined, fetchImpl);
 
     assert.equal(pathname, 'audit-raw-json/run1/page1-mobile.json');
     assert.equal(calls.length, 1);
@@ -59,18 +59,28 @@ describe('storeRawJson', () => {
     assert.equal(calls[0].params[1], JSON.stringify({ score: 1 }));
     assert.equal(calls[0].auth, 'Bearer test-token');
   });
+
+  test('explicit credentials are used instead of the env fallback', async () => {
+    const { fetchImpl, calls } = fakeD1();
+    await storeRawJson('run1', 'page1', 'mobile', { score: 1 }, {
+      accountId: 'org-account', databaseId: 'org-db', apiToken: 'org-token',
+    }, fetchImpl);
+
+    assert.match(calls[0].url, /\/accounts\/org-account\/d1\/database\/org-db\/query$/);
+    assert.equal(calls[0].auth, 'Bearer org-token');
+  });
 });
 
 describe('fetchRawJson', () => {
   test('parses the stored body back into an object', async () => {
     const { fetchImpl } = fakeD1([{ body: JSON.stringify({ score: 1 }) }]);
-    const json = await fetchRawJson('audit-raw-json/run1/page1-mobile.json', fetchImpl);
+    const json = await fetchRawJson('audit-raw-json/run1/page1-mobile.json', undefined, fetchImpl);
     assert.deepEqual(json, { score: 1 });
   });
 
   test('returns null, not a throw, when nothing matches', async () => {
     const { fetchImpl } = fakeD1([]);
-    const json = await fetchRawJson('audit-raw-json/missing.json', fetchImpl);
+    const json = await fetchRawJson('audit-raw-json/missing.json', undefined, fetchImpl);
     assert.equal(json, null);
   });
 
@@ -78,7 +88,7 @@ describe('fetchRawJson', () => {
     const failing = (async () => {
       throw new Error('network down');
     }) as unknown as typeof fetch;
-    const json = await fetchRawJson('audit-raw-json/run1/page1-mobile.json', failing);
+    const json = await fetchRawJson('audit-raw-json/run1/page1-mobile.json', undefined, failing);
     assert.equal(json, null);
   });
 });
@@ -86,13 +96,13 @@ describe('fetchRawJson', () => {
 describe('deleteRawJsonBlobs', () => {
   test('does nothing, and makes no request, for an empty list', async () => {
     const { fetchImpl, calls } = fakeD1();
-    await deleteRawJsonBlobs([], fetchImpl);
+    await deleteRawJsonBlobs([], undefined, fetchImpl);
     assert.equal(calls.length, 0);
   });
 
   test('one DELETE per pathname, all in one query', async () => {
     const { fetchImpl, calls } = fakeD1();
-    await deleteRawJsonBlobs(['a.json', 'b.json', 'c.json'], fetchImpl);
+    await deleteRawJsonBlobs(['a.json', 'b.json', 'c.json'], undefined, fetchImpl);
     assert.equal(calls.length, 1);
     assert.equal(calls[0].params.length, 3);
     assert.match(calls[0].sql, /IN \(\?, \?, \?\)/);
@@ -101,7 +111,7 @@ describe('deleteRawJsonBlobs', () => {
   test('batches beyond the chunk size into multiple queries, not one giant one', async () => {
     const { fetchImpl, calls } = fakeD1();
     const pathnames = Array.from({ length: 150 }, (_, i) => `p${i}.json`);
-    await deleteRawJsonBlobs(pathnames, fetchImpl);
+    await deleteRawJsonBlobs(pathnames, undefined, fetchImpl);
     assert.equal(calls.length, 2);
     assert.equal(calls[0].params.length, 100);
     assert.equal(calls[1].params.length, 50);
@@ -111,6 +121,6 @@ describe('deleteRawJsonBlobs', () => {
     const failing = (async () => {
       throw new Error('network down');
     }) as unknown as typeof fetch;
-    await assert.doesNotReject(() => deleteRawJsonBlobs(['a.json'], failing));
+    await assert.doesNotReject(() => deleteRawJsonBlobs(['a.json'], undefined, failing));
   });
 });

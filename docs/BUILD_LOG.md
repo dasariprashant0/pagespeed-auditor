@@ -2126,3 +2126,75 @@ session/cookie friction as earlier this session (a login succeeded per
 the network log, but a subsequent navigate landed back on `/login`);
 asked the user to confirm visually themselves rather than keep fighting
 the tool.
+
+## 21 Aug 2026 (later still) -- Per-tenant Neon + D1: Phase 4 (resolver + provisioning UI)
+
+The actual thing an admin now clicks through: a new **Database** settings
+tab where an organisation pastes its own Neon connection string and its
+own Cloudflare D1 credentials, and the app provisions and remembers them.
+
+Built:
+- `lib/db/tenant.ts` -- `getTenantPrisma(organizationId)` (cached per org,
+  re-validated against the decrypted connection string on every call, so
+  a rotated credential just swaps the pool; bounded to 20 entries) and
+  `withTenantPrisma(organizationId, fn)` (the escape hatch for code that
+  fans out across many orgs in one invocation, e.g. the cron tick --
+  opens, uses, and closes without touching the shared cache). Not called
+  from anywhere yet -- lands ahead of the Phase 5 cutover that actually
+  threads it through every call site.
+- `requireTenantPrisma(ctx)` in `lib/http/auth-guard.ts` -- same idea,
+  redirecting an unprovisioned org to `/settings/database` instead of
+  throwing `NotProvisionedError` raw. Also unused until Phase 5.
+- `lib/blob.ts`'s three exports gained an **optional** `D1Credentials`
+  parameter, falling back to the existing env-configured shared D1 when
+  omitted -- deliberately backward-compatible rather than a breaking
+  change, given the run-status bug fixed earlier this session lives in
+  this exact file. Every existing call site keeps working completely
+  unchanged; only new code needs to pass real per-org credentials. The
+  env fallback is a transitional bridge, not the end state -- decision
+  §19.4 is still every org brings its own, no shared tier, and removing
+  `CLOUDFLARE_*` is Phase 6's job once nothing needs the fallback anymore.
+- `lib/services/org.service.ts` (new, separate from `tenant.service.ts`
+  on purpose -- this is central-database data, an org's own connection
+  details, not the tenant data `tenant.service.ts` resolves access to):
+  `provisionRefFor` (presence-only DTO for the settings UI) and
+  `d1CredentialsForOrg` (decrypts, server-only).
+- `'org:provision'` capability (`lib/auth/roles.ts`, admin-only) and the
+  new Settings → Database tab: `app/(dash)/settings/database/page.tsx`,
+  `components/settings/DatabaseConnectionForm.tsx` (four `PasswordInput`
+  fields, the same dot-placeholder/untouched-field convention every other
+  secret form in this app already uses), and `app/actions/provisioning.ts`
+  (`provisionTenantAction`) -- a thin Server Action wrapper, the same
+  shape `app/actions/site.ts` already is, around the actual logic in
+  `lib/tenantDb/provision.ts` (`validateNeonUrl`, `validateD1Credentials`,
+  `runTenantMigrations`) -- factored out specifically so that logic is
+  testable without a Next.js request context, matching this app's
+  existing service-layer convention.
+- The two halves (Neon, D1) validate and persist independently: rotating
+  the D1 token doesn't force re-pasting the Neon URL. Neon persists first
+  (migrating is the slower, more failure-prone half); `provisionStatus`
+  goes to `'provisioning'` before migrations run, so a mid-migration
+  crash reads as visibly stuck rather than silently fine.
+
+**Verified for real, not just "it should work":** `validateD1Credentials`
+got real unit tests (fake fetch). `validateNeonUrl`/`runTenantMigrations`
+-- which need a live Postgres and so aren't part of the standard suite,
+same convention `test/blob.test.ts` already established for D1 -- were
+run directly against real throwaway local databases: a fresh empty
+database passes; a database with a pre-existing `Site` table is rejected
+with the exact message the UI shows, *unless* the org is already
+`'ready'` (the re-save case), where the check is correctly bypassed; an
+unreachable connection string returns a clean message, never a throw;
+migrations really do create all 13 tables against a fresh database, a
+real row inserts and reads back, and re-running them against an
+already-migrated database fails cleanly with `relation "Site" already
+exists` -- the exact failure path `provisionTenantAction` catches to set
+`provisionStatus: 'failed'`.
+
+Browser click-through of the actual form was not attempted this phase,
+given the tooling friction hit twice already this session -- ask the
+user to try Settings → Database directly.
+
+Verified: `npx tsc --noEmit`, `npm run lint`, `npm test` (176/176,
+including 3 new `validateD1Credentials` cases), `npm run build` all
+clean -- `/settings/database` present as a real route.

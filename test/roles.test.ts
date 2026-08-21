@@ -24,8 +24,8 @@ describe('role capabilities', () => {
     assert.equal(can('developer', 'site:manage'), false, 'the PSI key stays admin-only');
   });
 
-  test('only an admin manages the key, the team and the schedule', () => {
-    for (const c of ['site:manage', 'members:manage', 'automation:manage'] as Capability[]) {
+  test('only an admin manages the key, the team, the schedule and the org\'s own databases', () => {
+    for (const c of ['site:manage', 'members:manage', 'automation:manage', 'org:provision'] as Capability[]) {
       assert.ok(can('admin', c));
       for (const r of ROLES.filter((x) => x !== 'admin')) {
         assert.equal(can(r, c), false, `${r} must not have ${c}`);
@@ -36,7 +36,7 @@ describe('role capabilities', () => {
   test('privilege only accumulates going up the order', () => {
     // Every capability a lower role has, the next one up must also have --
     // otherwise "promoting" someone could quietly take something away.
-    const all = new Set<Capability>(ROLES.flatMap((r) => (['reports:read','audits:run','recommendations:generate','groups:manage','developer:access','site:manage','members:manage','automation:manage'] as Capability[]).filter((c) => can(r, c))));
+    const all = new Set<Capability>(ROLES.flatMap((r) => (['reports:read','audits:run','recommendations:generate','groups:manage','developer:access','site:manage','members:manage','automation:manage','org:provision'] as Capability[]).filter((c) => can(r, c))));
     for (let i = 1; i < ROLE_ORDER.length; i++) {
       for (const c of all) {
         if (can(ROLE_ORDER[i - 1], c)) {
