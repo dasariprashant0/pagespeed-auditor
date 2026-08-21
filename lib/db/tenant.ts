@@ -1,21 +1,20 @@
 import { PrismaClient } from '../generated/tenant/index.js';
 import { PrismaPg } from '@prisma/adapter-pg';
-import { prisma as centralPrisma } from '../db.ts';
+import { centralPrisma } from './central.ts';
 import { decryptSecret } from '../crypto/secretBox.ts';
 import { NotProvisionedError } from '../errors.ts';
 
 /**
  * Resolves an organisation's OWN Neon database instead of the one shared
- * `prisma` singleton in lib/db.ts -- see docs/DECISIONS.md §19. Reads
- * `Organization.tenantDbUrlEnc`/`provisionStatus` from the still-shared
- * central database (that lookup is unavoidable: you have to know which
- * tenant database to open before you can open it), decrypts the
+ * `centralPrisma` singleton in lib/db/central.ts -- see docs/DECISIONS.md
+ * §19. Reads `Organization.tenantDbUrlEnc`/`provisionStatus` from the
+ * still-shared central database (that lookup is unavoidable: you have to
+ * know which tenant database to open before you can open it), decrypts the
  * connection string, and returns a real client for it.
  *
- * `lib/db.ts` stays as the central client for now (not yet renamed to
- * `lib/db/central.ts` -- see the Phase 3 build-log entry for why that
- * rename is deferred to the actual cutover), so this file imports it
- * directly rather than duplicating the lookup logic.
+ * `lib/db/central.ts` (renamed from `lib/db.ts` as part of the phase 5
+ * cutover -- see docs/DECISIONS.md) stays as the central client, so this
+ * file imports it directly rather than duplicating the lookup logic.
  */
 
 export type { PrismaClient as TenantPrismaClient };
