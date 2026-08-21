@@ -4,15 +4,16 @@ import { AcceptInviteForm } from '@/components/auth/AcceptInviteForm';
 import { AuthCard, AuthLink } from '@/components/auth/AuthCard';
 import { ButtonLink } from '@/components/ui/Button';
 import { isRole } from '@/lib/auth/roles';
+import { getEnv } from '@/lib/env';
 
 export const dynamic = 'force-dynamic';
 
 export default async function InvitePage({
   searchParams,
 }: {
-  searchParams: Promise<{ token?: string }>;
+  searchParams: Promise<{ token?: string; error?: string }>;
 }) {
-  const { token } = await searchParams;
+  const { token, error } = await searchParams;
   if (!token) {
     return (
       <AuthCard
@@ -69,6 +70,8 @@ export default async function InvitePage({
       organizationName={invite.organization.name}
       role={isRole(invite.role) ? invite.role : 'viewer'}
       hasAccount={hasAccount}
+      googleEnabled={Boolean(getEnv().GOOGLE_CLIENT_ID)}
+      googleError={error}
     />
   );
 }

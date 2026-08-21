@@ -854,3 +854,48 @@ outright in `finalizeAndNotify`, the moment the run goes terminal --
 tighter than a TTL, and correct for what this log is for (a live
 terminal view of something IN PROGRESS; once a run ends there's nothing
 live left to show).
+
+## 17. "Continue with Google" alongside passwords, not instead of them (21 Aug 2026)
+
+**Chosen:** an optional Google OAuth2 sign-in path on login, signup, and
+accept-invite, additive to the existing email+password system rather than
+replacing it. `User.passwordHash` became nullable (a Google-only account
+never sets one); everything else about the `Organization`/`Membership`
+multi-tenant model is untouched.
+
+**Why additive, not a migration:** asked directly which of the two.
+Replacing passwords outright would mean every existing account needs a
+path to gain a Google identity (or be locked out), and forces every
+future sign-in through Google even for someone who'd rather not link a
+personal account to a work tool. Coexistence costs nothing extra to
+maintain once both paths share the same `User`/`Membership` tables, which
+they do.
+
+**No domain restriction:** asked directly, chose open to any Google
+account. The existing invitation-token system is what actually grants
+access to an organisation; a Google *account* proves an email address,
+the same thing a password proves, no more and no less.
+
+**Hand-rolled OAuth2, not a library.** `lib/auth/google.ts` implements the
+authorization-code flow directly: a signed, short-lived `state` JWT
+(`jose`, the same library and pattern `lib/auth/session.ts` already uses
+for the session cookie) carries which of the three intents (login/
+signup/accept) initiated the redirect, and the id_token Google returns is
+verified against Google's own published JWKS (`jose`'s
+`createRemoteJWKSet`) -- signature, issuer, and audience all checked, not
+just base64-decoded and trusted. No new dependency: `jose` was already
+here.
+
+**The invited address is still authoritative for accept-invite.**
+`acceptInvitationWithGoogle` requires the Google-verified email to exactly
+match the invitation's email, the same invariant `acceptInvitation`
+(password path) already enforces -- an intercepted invite link must not
+become a way to join as somebody else, regardless of which credential
+system does the accepting.
+
+**Login does not create an account for an unrecognized Google email.**
+Signup and accept-invite both have an organisation to attach a new user
+to; a bare "sign in" attempt for an email with no existing `User` row
+does not, and creating one anyway would be a dead-end account nobody
+could act on. It fails with a message pointing at signing up or asking
+for an invite instead.

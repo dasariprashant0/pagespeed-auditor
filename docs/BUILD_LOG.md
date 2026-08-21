@@ -1687,3 +1687,18 @@ rather than a generic wrong-password one.
 Verified: `npx tsc --noEmit`, `npm run lint`, `npm test` (141/141 --
 three new tests for the Postgres-backed rate limiter), `npm run build`,
 and the real throughput dry-run above, all clean.
+
+## 21 Aug 2026 (later still) — Google sign-in finished: accept-invite wired, env documented
+
+Closed out the one piece left half-done from earlier: login and signup
+already had "Continue with Google," accept-invite didn't.
+`AcceptInviteForm` now offers it too, only when `!hasAccount` (an
+existing account just joins on "Join" with no extra credential either
+way, the same as the password path already does -- the invite token
+itself is what's authorising that, not a password or a Google session).
+Also added `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` to `.env.example`,
+undocumented until now. Full reasoning for the feature as a whole in
+`docs/DECISIONS.md` §17.
+
+Verified: `npx tsc --noEmit`, `npm run lint`, `npm test` (141/141), `npm
+run build` all clean.
