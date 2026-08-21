@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { requireCapability } from '@/lib/http/auth-guard';
-import { prisma } from '@/lib/db';
+import { getTenantPrisma } from '@/lib/db/tenant';
 import { defaultSite, requireRunAccess } from '@/lib/services/tenant.service';
 import { BOTH_STRATEGIES, createRun, expandScope, findActiveRun, failedResultsForRun, type FailedResult } from '@/lib/services/run.service';
 import { startAuditRun } from '@/lib/workflows/auditRun';
@@ -39,6 +39,7 @@ export async function queueAuditAction(input: {
     // still see progress -- only running one is restricted, and that must
     // fail as a clean message, not an uncaught rejection.
     const ctx = await requireCapability('audits:run');
+    const prisma = await getTenantPrisma(ctx.organizationId);
 
     const site = await defaultSite(ctx.organizationId);
     if (!site) return { ok: false, error: 'No site configured.' };
@@ -64,9 +65,9 @@ export async function queueAuditAction(input: {
       totalJobs: pairs.length,
     });
 
-    await startAuditRun(runId, pairs);
+    await startAuditRun(runId, pairs, ctx.organizationId);
 
-    const estimate = await estimateRun(pairs.length, site.id);
+    const estimate = await estimateRun(ctx.organizationId, pairs.length, site.id);
     revalidatePath('/', 'layout');
 
     return {
@@ -94,6 +95,7 @@ export async function retryFailedAction(input: { runId: string }): Promise<Queue
   try {
     const ctx = await requireCapability('audits:run');
     await requireRunAccess(ctx.organizationId, input.runId);
+    const prisma = await getTenantPrisma(ctx.organizationId);
 
     const site = await defaultSite(ctx.organizationId);
     if (!site) return { ok: false, error: 'No site configured.' };
@@ -117,9 +119,9 @@ export async function retryFailedAction(input: { runId: string }): Promise<Queue
       totalJobs: pairs.length,
     });
 
-    await startAuditRun(runId, pairs);
+    await startAuditRun(runId, pairs, ctx.organizationId);
 
-    const estimate = await estimateRun(pairs.length, site.id);
+    const estimate = await estimateRun(ctx.organizationId, pairs.length, site.id);
     revalidatePath('/', 'layout');
 
     return {
@@ -140,6 +142,7 @@ export async function failedResultsAction(input: {
 }): Promise<{ ok: true; failures: FailedResult[] } | { ok: false; error: string }> {
   const ctx = await requireCapability('reports:read');
   await requireRunAccess(ctx.organizationId, input.runId);
+  const prisma = await getTenantPrisma(ctx.organizationId);
   try {
     return { ok: true, failures: await failedResultsForRun(prisma, input.runId) };
   } catch (e) {

@@ -25,7 +25,7 @@ export async function generateRecommendationAction(input: {
     // may generate, and this says the page belongs to their organisation.
     await requirePageAccess(ctx.organizationId, input.pageId);
 
-    const r = await getOrCreateRecommendation(input.pageId, input.strategy, { force: input.force });
+    const r = await getOrCreateRecommendation(ctx.organizationId, input.pageId, input.strategy, { force: input.force });
     revalidatePath(`/p/${input.pageId}`);
     return {
       ok: true,
@@ -48,7 +48,7 @@ export async function recommendationHistoryAction(input: {
   try {
     const ctx = await requireCapability('reports:read');
     await requirePageAccess(ctx.organizationId, input.pageId);
-    return { ok: true, versions: await listRecommendations(input.pageId, input.strategy) };
+    return { ok: true, versions: await listRecommendations(ctx.organizationId, input.pageId, input.strategy) };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'Could not load earlier answers.' };
   }

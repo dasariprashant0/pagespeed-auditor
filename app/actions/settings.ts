@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { requireCapability } from '@/lib/http/auth-guard';
-import { prisma } from '@/lib/db';
+import { getTenantPrisma } from '@/lib/db/tenant';
 import { defaultSite } from '@/lib/services/tenant.service';
 import { saveSchedule, validateCron } from '@/lib/services/schedule.service';
 import { dispatchSweepNotification } from '@/lib/notify';
@@ -20,7 +20,7 @@ export async function saveScheduleAction(_prev: unknown, form: FormData): Promis
     const cronExpr = String(form.get('cronExpr') ?? '').trim() || null;
     const timezone = String(form.get('timezone') ?? 'UTC').trim() || 'UTC';
 
-    const result = await saveSchedule(site.id, { cronExpr, timezone, enabled });
+    const result = await saveSchedule(ctx.organizationId, site.id, { cronExpr, timezone, enabled });
     if (!result.valid) return { ok: false, error: result.error ?? 'Invalid schedule.' };
 
     revalidatePath('/settings');
@@ -37,6 +37,7 @@ export async function saveScheduleAction(_prev: unknown, form: FormData): Promis
 export async function saveNotificationsAction(_prev: unknown, form: FormData): Promise<SettingsResult> {
   try {
     const ctx = await requireCapability('automation:manage');
+    const prisma = await getTenantPrisma(ctx.organizationId);
     const site = await defaultSite(ctx.organizationId);
     if (!site) return { ok: false, error: 'No site configured.' };
 
@@ -70,6 +71,7 @@ export async function saveNotificationsAction(_prev: unknown, form: FormData): P
 export async function sendTestNotificationAction(): Promise<SettingsResult> {
   try {
     const ctx = await requireCapability('automation:manage');
+    const prisma = await getTenantPrisma(ctx.organizationId);
     const site = await defaultSite(ctx.organizationId);
     if (!site) return { ok: false, error: 'No site configured.' };
 
@@ -85,7 +87,7 @@ export async function sendTestNotificationAction(): Promise<SettingsResult> {
       select: { performanceScore: true, page: { select: { url: true } } },
     });
 
-    const outcome = await dispatchSweepNotification(site.id, {
+    const outcome = await dispatchSweepNotification(ctx.organizationId, site.id, {
       runId: 'test',
       siteName: site.name,
       event: 'sweep.completed',
