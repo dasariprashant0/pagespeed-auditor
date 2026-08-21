@@ -38,14 +38,16 @@ const CRON_INTERVAL_MS = 15 * 60_000;
 const STALE_AFTER_MS = CRON_INTERVAL_MS * 2 + 60_000;
 
 export async function stampSchedulerHeartbeat(organizationId: string): Promise<void> {
-  const prisma = await getTenantPrisma(organizationId);
-  await prisma.keyValue
-    .upsert({
+  try {
+    const prisma = await getTenantPrisma(organizationId);
+    await prisma.keyValue.upsert({
       where: { key: HEARTBEAT_KEY },
       update: { value: String(Date.now()) },
       create: { key: HEARTBEAT_KEY, value: String(Date.now()) },
-    })
-    .catch(() => {});
+    });
+  } catch {
+    /* a heartbeat failure must not break the real cron run */
+  }
 }
 
 export interface SchedulerHealth {
@@ -156,6 +158,10 @@ export async function readRunLog(
 
 /** Called once a run is terminal -- the live log has nothing left to show. */
 export async function clearRunLog(organizationId: string, runId: string): Promise<void> {
-  const prisma = await getTenantPrisma(organizationId);
-  await prisma.runLogEvent.deleteMany({ where: { runId } }).catch(() => {});
+  try {
+    const prisma = await getTenantPrisma(organizationId);
+    await prisma.runLogEvent.deleteMany({ where: { runId } });
+  } catch {
+    /* a log-clear failure must not break the real audit run */
+  }
 }
