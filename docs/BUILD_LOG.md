@@ -1831,3 +1831,57 @@ including the new `blob.test.ts` cases), `npm run build` all clean, plus
 the real D1 round trip described above. Production env vars
 (`CLOUDFLARE_ACCOUNT_ID`/`CLOUDFLARE_D1_DATABASE_ID`/`CLOUDFLARE_API_TOKEN`)
 not yet set on Vercel as of this entry -- next step.
+
+(Follow-up, same day: all three env vars were set on Vercel production
+and preview, the D1 database and its scoped API token were created and
+verified against the real deployment, and a real deploy went out
+successfully. That shared, app-owned D1 setup is itself now scheduled
+for replacement -- see the per-tenant entry below.)
+
+## 21 Aug 2026 (later still) -- Per-tenant Neon + D1: Phase 1 (prep)
+
+The user, after seeing the shared D1 setup above actually working,
+asked a bigger question: why should the app own the database (and the
+cost/quota risk) for every tenant combined, when it already lets each
+tenant bring its own PSI key and its own SMTP mailbox? Decided: this app
+moves to a genuinely per-tenant model -- every organization brings and
+provisions its **own** Neon Postgres database and its **own** Cloudflare
+D1 database. The app becomes a pure interface: paste your credentials in
+Settings, we provision your schema, and your usage is never on our
+quota.
+
+This is a large, multi-phase change (full plan at
+`docs/DECISIONS.md` -- entry to follow once implementation completes;
+in the meantime see the approved plan captured in this session). Three
+decisions were confirmed with the user before any code was written: no
+migration of existing audit history (start fresh once this ships), the
+new credentials get real application-layer encryption (not plain
+columns like the existing PSI key/SMTP password -- a leaked Neon
+connection string is full read/write to a whole database, not "send
+email as this mailbox"), and login needs a real "choose your
+organization" step (`Membership` already supports one user belonging to
+several orgs, but login today silently picks the oldest one -- with
+per-tenant databases, picking wrong means opening the wrong database).
+
+**Phase 1 (this entry), zero behavior change:**
+- `lib/crypto/secretBox.ts` -- AES-256-GCM via Node's own `crypto` (no
+  new dependency), keyed by a new `SECRET_BOX_KEY` env var (64 hex
+  chars, same `openssl rand -hex 32` convention as `SESSION_SECRET`,
+  but a distinct value -- never reuse one secret for two purposes).
+  Envelope is one opaque string (`v1.<iv>.<tag>.<ciphertext>`), and
+  every call binds a `context` string as GCM associated data, so a
+  ciphertext copied into the wrong row/column fails to decrypt instead
+  of silently "working" with someone else's secret.
+- `SECRET_BOX_KEY` added to `lib/env.ts` and `.env.example`; a real key
+  generated and set in local `.env` and (a different key) on Vercel
+  production + preview.
+- `NotProvisionedError` added to `lib/errors.ts`, for the tenant-client
+  resolver landing in a later phase.
+- `test/secretBox.test.ts`: round-trip, envelope-never-contains-plaintext,
+  non-deterministic ciphertexts (fresh IV every call), wrong-context
+  rejection, tampered-envelope rejection, garbage-input rejection.
+
+Nothing in the app reads or writes these yet -- purely additive.
+
+Verified: `npx tsc --noEmit`, `npm run lint`, `npm test` (157/157,
+including 8 new `secretBox.test.ts` cases) all clean.

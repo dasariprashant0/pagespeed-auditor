@@ -986,3 +986,103 @@ instead). D1's free allowance is generous enough that it isn't urgent
 the way Vercel Blob's was, but it would still cut write volume by two to
 three orders of magnitude if done. Left as a follow-up, not bundled into
 this migration.
+
+## 19. Per-tenant Neon + Cloudflare D1 (approved 21 Aug 2026, in progress)
+
+**Chosen:** every organization brings and provisions its own Neon
+Postgres database and its own Cloudflare D1 database, instead of the app
+owning one shared instance of each for every tenant combined. `User`,
+`PasswordReset`, `Organization`, `Membership`, `Invitation`, `McpToken`
+stay in one shared "central" database (identity/routing data -- you have
+to know who's logging in and which org they belong to before you know
+which tenant database to even open). Everything else -- `Site` and
+everything that hangs off it (`Schedule`, `NotificationSetting`, `Group`,
+`GroupAlias`, `Page`, `AuditRun`, `AuditResult`, `AuditIssue`,
+`Recommendation`, plus the operational tables `RateLimitBucket`,
+`KeyValue`, `RunLogEvent`) -- moves into each org's own Neon database,
+provisioned on demand.
+
+**Why:** directly requested, after watching the shared-D1 migration
+(§18) actually work: "why should I own the cost/quota risk for every
+customer's usage combined, when the app already lets each tenant bring
+its own PSI key and its own SMTP mailbox?" This app already had that
+exact BYO-credential pattern twice (`Site.psiApiKey`, `Organization.smtp*`)
+— this extends it to the two remaining pieces of infrastructure the app
+owner was still carrying for everyone.
+
+**Three decisions confirmed with the user before any code was written**
+(the full reasoning for each is in the plan this shipped from):
+- **No migration of existing audit history.** Provisioning always starts
+  from an empty tenant database; the current org's accumulated
+  `www.zuddl.com` history is abandoned once this ships. Simpler, and
+  accepted explicitly rather than assumed.
+- **Real application-layer encryption for the new credentials**
+  (`lib/crypto/secretBox.ts`, AES-256-GCM, keyed by `SECRET_BOX_KEY`) --
+  NOT the plain-column convention the PSI key and SMTP password already
+  use. A leaked Neon connection string or D1 token is full read/write
+  access to a whole external database, a categorically bigger blast
+  radius than a leaked mailbox password, and this codebase had never
+  needed reversible encryption before (only one-way bcrypt/SHA-256
+  hashing existed).
+- **An explicit login "choose your organization" step.** `Membership` is
+  genuinely many-to-many (`@@unique([userId, organizationId])`, both
+  sides are arrays), but `login()`/`loginWithGoogle()`/
+  `completePasswordReset()` all silently picked the user's oldest
+  membership via `findFirst`. Harmless when everything is one shared
+  database; with per-tenant databases, picking wrong means opening the
+  wrong database, not just showing wrong data. Built as a real
+  requirement (a person can genuinely belong to more than one
+  organization -- e.g. a consultant auditing several clients), not
+  deferred as a hypothetical.
+- **No shared/fallback tier for either database.** Every org must bring
+  both, with no exceptions -- a fallback would just reintroduce the exact
+  problem this exists to solve. The `CLOUDFLARE_ACCOUNT_ID`/
+  `CLOUDFLARE_D1_DATABASE_ID`/`CLOUDFLARE_API_TOKEN` env vars from §18
+  become dead once the cutover (phase 6, below) lands, and get removed.
+
+**Rejected: making only D1 per-tenant, leaving Neon shared.** Considered
+first, since it's the smaller change -- Neon bills by storage/compute
+that scales gradually, not by a hard monthly operation count the way
+Vercel Blob's free tier did, so the exact incident that made D1 urgent
+(§18) doesn't repeat itself on Neon the same way. Rejected anyway once
+the user clarified the actual goal: not "avoid a repeat incident" but
+"never own any tenant's usage or cost, for either piece of
+infrastructure" -- a fundamentally different bar that only a full split
+satisfies.
+
+**Sequencing, and why the org-picker goes first.** The login org-picker
+touches only central-database models and fixes a real bug today
+regardless of anything else in this change, so it ships before the
+schema split rather than being bundled into the bigger, riskier work.
+The schema split itself lands in stages -- scaffolding with zero
+behavior change, then a fully-working-but-unwired resolver and
+provisioning UI (verified by actually provisioning one real tenant
+database end to end), then the mechanical cutover of every call site in
+independently revertible batches, then, separately and last, the one
+genuinely destructive step (dropping the tenant tables from the shared
+instance). Each stage is deployable and testable on its own; nothing
+about this ships as one large, unverifiable cutover.
+
+**Migration SQL is precompiled into a committed module, not read off
+disk at runtime.** Verified directly: Next's build-time file tracer
+prunes files reached only via a dynamic runtime `fs.readFileSync`, so a
+naive "read `prisma/tenant/migrations/*.sql` inside the deployed Vercel
+function" would work in `next dev` and silently 404 in production. A
+build-time script reads the SQL once, at `next build` time (safe -- the
+whole repo is on disk then), and writes it into a normally-`import`ed TS
+module instead.
+
+**Two Prisma schemas, two generated clients, one deliberately breaking
+rename.** `prisma/central/` and `prisma/tenant/` each get their own
+`generator client` output, so they type as genuinely different clients
+rather than one schema pretending to cover two databases. `lib/db.ts`'s
+export is renamed `prisma` → `centralPrisma` specifically so every one
+of the ~32 existing import sites fails to compile until each is
+explicitly triaged into "stays central" or "needs the tenant resolver" --
+a rename used as a forcing function, not cosmetics.
+
+Full implementation plan (schema shapes, the provisioning Server Action,
+the tenant-client resolver's caching strategy, the exact call-site
+inventory, and the phase-by-phase sequencing) captured going into
+implementation; BUILD_LOG entries for each phase as they land are the
+current-state record from here.

@@ -53,6 +53,17 @@ const schema = z.object({
 
   SESSION_SECRET: z.string().default(''),
 
+  /**
+   * Encrypts secrets too sensitive for a plain column -- see
+   * lib/crypto/secretBox.ts. 64 hex chars (`openssl rand -hex 32`), the
+   * same generation convention as SESSION_SECRET. Defaults to '' the same
+   * way SESSION_SECRET does: lib/env.ts can't enforce length here since
+   * the field must stay optional for anything that doesn't touch
+   * encrypted secrets (tests, `next build` before this is set), so
+   * secretBox.ts itself checks the length on first real use.
+   */
+  SECRET_BOX_KEY: z.string().default(''),
+
   /// Optional: "Continue with Google" alongside password sign-in, never
   /// instead of it. Empty means the button simply doesn't render -- see
   /// lib/auth/google.ts. From a Google Cloud OAuth 2.0 Client ID

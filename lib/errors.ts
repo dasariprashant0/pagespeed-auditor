@@ -28,6 +28,16 @@ export class NotFoundError extends AppError {
   }
 }
 
+/** An organisation hasn't finished connecting its own database yet -- see lib/db/tenant.ts. */
+export class NotProvisionedError extends AppError {
+  readonly organizationId: string;
+
+  constructor(organizationId: string) {
+    super(`Organization ${organizationId} has not connected a database yet`, 'not_provisioned');
+    this.organizationId = organizationId;
+  }
+}
+
 export class ValidationError extends AppError {
   constructor(message: string) {
     super(message, 'validation');
