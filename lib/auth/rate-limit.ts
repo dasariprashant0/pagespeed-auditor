@@ -1,24 +1,23 @@
-import type Redis from 'ioredis';
-import { createRedis } from '../redis.ts';
-import { getEnv } from '../env.ts';
-
 /**
  * Fixed-window rate limit for the login form.
  *
- * Redis-backed so the count survives a Next dev reload and is shared across
- * however many app processes run, with an in-memory fallback for the case that
- * actually matters here: Redis being down must not lock everyone out of the
- * dashboard they're using to find out why.
+ * Per-process, in memory -- not shared across however many app processes
+ * run, and reset by a Next dev reload. This used to be Redis-backed for
+ * exactly that reason, with an in-memory fallback for whenever Redis was
+ * unreachable ("Redis is a nice-to-have here. Never let a hung client hold
+ * up a login"). Redis was removed from the app entirely afterward (see
+ * docs/DECISIONS.md #16) for the OTHER thing it did -- the PSI rate limiter
+ * -- and once that was gone, keeping a whole separate service alive for
+ * this one "nice to have" stopped making sense: the fallback this file
+ * already had for Redis being down IS the correct behaviour here, not a
+ * degraded one, so it's simply the only behaviour now.
  *
  * Fixed window rather than sliding: at 10 attempts per 15 minutes the boundary
  * burst (up to 20 across two adjacent windows) is irrelevant against a bcrypt
- * cost-12 compare, and a fixed window is one INCR instead of a sorted set.
+ * cost-12 compare, and a fixed window is one counter instead of a sorted set.
  */
 
 export const LOGIN_RATE_LIMIT = { max: 10, windowMs: 15 * 60 * 1000 } as const;
-
-/** Redis is a nice-to-have here. Never let a hung client hold up a login. */
-const REDIS_OP_TIMEOUT_MS = 300;
 
 const KEY_PREFIX = 'psa:login-attempts:';
 
@@ -100,55 +99,9 @@ export class MemoryRateLimitStore {
 
 const memoryStore = new MemoryRateLimitStore();
 
-let redis: Redis | undefined;
-
-function client(): Redis {
-  redis ??= createRedis(getEnv().REDIS_URL);
-  return redis;
-}
-
-function withTimeout<T>(p: Promise<T>): Promise<T> {
-  return Promise.race([
-    p,
-    new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error('redis timeout')), REDIS_OP_TIMEOUT_MS).unref?.(),
-    ),
-  ]);
-}
-
-/**
- * INCR then read the TTL, setting one only if the key had none. Two commands
- * in a MULTI rather than `PEXPIRE ... NX`, which needs Redis >= 7.0 -- not
- * worth pinning a server version over.
- */
-async function redisHit(key: string, windowMs: number): Promise<RateLimitHit> {
-  const r = client();
-  const res = await withTimeout(r.multi().incr(key).pttl(key).exec());
-
-  const count = Number(res?.[0]?.[1] ?? 1);
-  let ttlMs = Number(res?.[1]?.[1] ?? -1);
-
-  // -1 = key exists with no expiry (we just created it), -2 = gone already.
-  if (ttlMs < 0) {
-    await withTimeout(r.pexpire(key, windowMs));
-    ttlMs = windowMs;
-  }
-
-  return { count, ttlMs };
-}
-
-/**
- * Record one login attempt for `ip` and say whether it may proceed.
- * Always resolves -- a Redis failure degrades to per-process counting.
- */
+/** Record one login attempt for `ip` and say whether it may proceed. */
 export async function consumeLoginAttempt(ip: string): Promise<RateLimitDecision> {
-  const key = KEY_PREFIX + ip;
-
-  try {
-    return decide(await redisHit(key, LOGIN_RATE_LIMIT.windowMs));
-  } catch {
-    return decide(memoryStore.hit(key, LOGIN_RATE_LIMIT.windowMs));
-  }
+  return decide(memoryStore.hit(KEY_PREFIX + ip, LOGIN_RATE_LIMIT.windowMs));
 }
 
 /**
@@ -156,11 +109,5 @@ export async function consumeLoginAttempt(ip: string): Promise<RateLimitDecision
  * their password nine times doesn't leave the office IP nearly locked out.
  */
 export async function resetLoginAttempts(ip: string): Promise<void> {
-  const key = KEY_PREFIX + ip;
-  memoryStore.reset(key);
-  try {
-    await withTimeout(client().del(key));
-  } catch {
-    // Best effort; the window expires on its own.
-  }
+  memoryStore.reset(KEY_PREFIX + ip);
 }

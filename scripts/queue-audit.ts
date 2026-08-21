@@ -17,7 +17,7 @@ import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { BOTH_STRATEGIES, createRun, expandScope, findActiveRun } from '../lib/services/run.service.ts';
 import { auditPage } from '../lib/services/audit.service.ts';
-import { getPsiRateLimiter, getRedis } from '../lib/redis.ts';
+import { getPsiRateLimiter } from '../lib/opsState.ts';
 import { estimateRun, formatDuration } from '../lib/services/estimate.service.ts';
 import type { PsiStrategy } from '../lib/psi/types.ts';
 
@@ -61,7 +61,6 @@ async function main() {
     const est = await estimateRun(pairs.length, site.id);
     console.log(`  done. ${formatDuration(est.seconds)}${est.measured ? ` based on ${est.sampleSize} measured audits` : ' (estimated)'}\n`);
   } finally {
-    await getRedis().quit();
     await prisma.$disconnect();
   }
 }

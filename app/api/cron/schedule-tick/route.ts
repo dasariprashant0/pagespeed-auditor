@@ -5,7 +5,7 @@ import { reconcileStaleRuns } from '@/lib/services/run.service';
 import { dueSchedules, advanceSchedule } from '@/lib/services/schedule.service';
 import { startAuditRun } from '@/lib/workflows/auditRun';
 import { planAndStartSweep } from '@/lib/workflows/planSweep';
-import { stampSchedulerHeartbeat } from '@/lib/redis';
+import { stampSchedulerHeartbeat } from '@/lib/opsState';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;

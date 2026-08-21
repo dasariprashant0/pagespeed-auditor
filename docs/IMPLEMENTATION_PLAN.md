@@ -49,7 +49,8 @@ Listed here as a flat checklist for planning purposes only:
 9. Diagnosed that `vercel env pull` cannot retrieve a working
    `DATABASE_URL` for this project, and moved `prisma migrate deploy` into
    the build itself as the structural fix.
-10. Built the live "what's running" terminal (`RunTerminal`), Redis-backed.
+10. Built the live "what's running" terminal (`RunTerminal`) -- originally
+    Redis-backed, moved to Postgres 21 Aug 2026 (`docs/DECISIONS.md` §16).
 11. Moved `AuditResult.rawJson` to Vercel Blob (~15× cheaper per GB than
     Neon for the same bytes), with cleanup wired into both prune paths.
 12. This document suite.

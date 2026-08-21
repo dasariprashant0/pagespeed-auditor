@@ -80,7 +80,8 @@ see `docs/DECISIONS.md` §2.2. The MCP server's tool list has no
   refunded"), then the same optimistic flip hides the controls immediately.
 - **Show live activity** (`RunTerminal`, collapsed by default) → per-page
   `start`/`ok`/`retry`/`error` lines, monospace, colour-coded, sourced from
-  a capped/TTL'd Redis list — not a second copy of `AuditResult`.
+  a small Postgres table (`RunLogEvent`, deleted once the run finalizes) —
+  not a second copy of `AuditResult`.
 
 ## 5. Reading a report
 

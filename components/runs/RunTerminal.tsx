@@ -41,11 +41,12 @@ function clock(ts: number): string {
 /**
  * Read-only, live "what's running" view for one audit run.
  *
- * Redis is the source (see lib/redis.ts's runLogKey) rather than Postgres,
- * on purpose -- this is a transient console, not a second copy of the
- * durable AuditResult record. Polling rather than a stream, same reasoning
- * as ActiveRunBar: the run executes elsewhere and writes to shared state,
- * so a stream would still just be polling that state and re-emitting it.
+ * A small, short-lived Postgres table (RunLogEvent, see lib/opsState.ts) is
+ * the source, deleted once the run finalizes -- this is a transient console,
+ * not a second copy of the durable AuditResult record. Polling rather than a
+ * stream, same reasoning as ActiveRunBar: the run executes elsewhere and
+ * writes to shared state, so a stream would still just be polling that
+ * state and re-emitting it.
  *
  * Collapsed by default and only polls while expanded, so a run nobody is
  * watching doesn't cost extra requests on every screen it happens to render on.

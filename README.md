@@ -27,14 +27,16 @@ notifications, regression detection, on-demand AI recommendations, and a
 ## Setup
 
 Requires **OrbStack** (or any `docker compose` runtime) and Node 26+ for local
-dev. Production runs on Vercel with Neon (Postgres), Upstash (Redis), and
-Vercel Blob — see `docs/TRD.md` §1–2 for the full deployment topology.
+dev. Production runs on Vercel with Neon (Postgres) and Vercel Blob — see
+`docs/TRD.md` §1–2 for the full deployment topology. No Redis: the rate
+limiter, scheduler heartbeat, and live run log all live in Postgres — see
+`docs/DECISIONS.md` §16.
 
 ```bash
 brew install orbstack        # then launch it once
 npm install                  # see the install-scripts note below
 cp .env.example .env         # then: npm run env -- PSI_API_KEY <your-key>
-npm run db:up                # Postgres 17 + Redis 7
+npm run db:up                # Postgres 17
 npm run db:migrate
 npm run dev                  # web app (Ship Studio may already be running this)
 ```
@@ -64,7 +66,7 @@ Without this Prisma silently has no engine and fails at first use.
 |---|---|
 | `npm run dev` | Next dev server |
 | `npm run build` | `prisma generate && prisma migrate deploy && next build` — migrations apply as part of the build itself, see `docs/DECISIONS.md` §12 |
-| `npm run db:up` / `db:down` | Postgres + Redis via Docker Compose |
+| `npm run db:up` / `db:down` | Postgres via Docker Compose |
 | `npm run db:migrate` / `db:studio` | Prisma migrate / data browser |
 | `npm test` | `node --test` with native TS stripping — no jest/vitest |
 | `npm run lint` / `typecheck` | ESLint (incl. the architecture boundary) / tsc |
@@ -94,9 +96,8 @@ must filter `status: 'ok'` or the numbers will be wrong.
 ```
 Next.js app ──┐
               ├──> lib/services/* ──> Postgres (Prisma 7 + pg adapter)
-MCP server ───┤         │
-Vercel Cron ──┘         ├──> Redis (rate limiter, live run log, heartbeat)
-                        ├──> Vercel Blob (pruned Lighthouse JSON)
+MCP server ───┤         │              (also: rate limiter, live run log, heartbeat)
+Vercel Cron ──┘         ├──> Vercel Blob (pruned Lighthouse JSON)
                         └──> Vercel Workflow (lib/workflows/auditRun.ts) ──> PSI API
 ```
 

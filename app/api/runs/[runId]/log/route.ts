@@ -1,15 +1,16 @@
 import { NextResponse } from 'next/server';
 import { requireApiSession } from '@/lib/http/auth-guard';
 import { requireRunAccess } from '@/lib/services/tenant.service';
-import { readRunLog } from '@/lib/redis';
+import { readRunLog } from '@/lib/opsState';
 
 export const dynamic = 'force-dynamic';
 
 /**
- * Polled by RunTerminal for the live "what's running" view. Redis-backed and
- * short-lived (see lib/redis.ts) -- this is not the durable record of what
- * happened, AuditResult already is that. A run with nothing logged yet (or
- * one that finished and aged out of the list) just returns an empty array.
+ * Polled by RunTerminal for the live "what's running" view. Postgres-backed
+ * and short-lived (see lib/opsState.ts) -- this is not the durable record of
+ * what happened, AuditResult already is that. A run with nothing logged yet
+ * (or one that finished, whose log was cleared by finalizeAndNotify) just
+ * returns an empty array.
  */
 export async function GET(_req: Request, { params }: { params: Promise<{ runId: string }> }) {
   const session = await requireApiSession();

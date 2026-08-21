@@ -12,7 +12,7 @@
 | Framework | Next.js 16 (App Router, Turbopack) | `proxy.ts`, not `middleware.ts` — Next 16 renamed it |
 | Language | TypeScript, React 19 | `useOptimistic`, `useSyncExternalStore` used deliberately, not `useEffect` + `setState` |
 | Database | Postgres via Neon (Vercel Marketplace) | Prisma 7, `PrismaPg` driver adapter — no `url` in the datasource block, see `prisma.config.ts` |
-| Cache / rate limiter | Redis via Upstash | Token bucket for PSI pacing, live run-log events, scheduler heartbeat — never a queue (see §11 below) |
+| Rate limiter / ops state | Postgres (`lib/opsState.ts`) | Token bucket for PSI pacing, live run-log events, scheduler heartbeat. Was Redis via Upstash until 21 Aug 2026 — removed after a real incident, see `docs/DECISIONS.md` §16 |
 | Object storage | Vercel Blob | Pruned Lighthouse JSON (`AuditResult.rawJson` replacement) — see `docs/DECISIONS.md` §13 |
 | Durable execution | Vercel Workflow DevKit (`workflow`, `@workflow/core`) | Replaced BullMQ, 20 Aug 2026 — see `docs/DECISIONS.md` §11 |
 | Auth | Session cookie (JWT via `jose`), bcrypt password hashes | `proxy.ts` is a UX layer only; `requireSession()`/`requireCapability()` in every Server Action is the real boundary |
@@ -31,20 +31,21 @@ flowchart LR
     mcp[/api/mcp]
   end
   neon[(Neon Postgres)]
-  upstash[(Upstash Redis)]
   blob[(Vercel Blob)]
   psi[Google PageSpeed<br/>Insights API]
 
   web --> neon
-  web --> upstash
   web --> blob
   wf --> neon
-  wf --> upstash
   wf --> blob
   wf --> psi
   cron --> web
   mcp --> web
 ```
+
+No Redis: removed entirely 21 Aug 2026 (`docs/DECISIONS.md` §16). The rate
+limiter, scheduler heartbeat, and live run log all live in Neon Postgres
+now, alongside everything else.
 
 There is **no standalone worker process**. `npm run worker` does not exist.
 Audit dispatch is `lib/workflows/auditRun.ts`, triggered from Server Actions,
@@ -58,10 +59,9 @@ is why the migration off BullMQ happened (Vercel can't host one; see
 `next/*`, `react`, or `server-only`. Enforced by ESLint — verify the rule
 still fails on a deliberate bad import before trusting it; an unenforced
 boundary is decorative. `lib/workflows/*` is deliberately **outside** this
-boundary (it needs the Next-integrated Workflow SDK). `lib/redis.ts` and
+boundary (it needs the Next-integrated Workflow SDK). `lib/opsState.ts` and
 `lib/blob.ts` are also outside it structurally, but neither actually imports
-anything framework-specific — `ioredis` and `@vercel/blob` are both
-plain-Node SDKs.
+anything framework-specific — both just use Prisma and plain-Node SDKs.
 
 ## 4. The one constraint that shapes the audit path
 
@@ -70,10 +70,10 @@ Google's PSI API sustains roughly **0.75 requests/second** before returning
 throughput decision traces back to this:
 
 - `PSI_RATE_MAX` / `PSI_RATE_WINDOW_MS` (default 3 per 4s) — the actual
-  token-bucket pace, enforced in Redis (`PsiRateLimiter`, plain
-  `INCR`/`PEXPIRE` via `EVAL`, no blocking commands — this is specifically
-  why the rate limiter still works on Upstash's serverless tier when BullMQ
-  did not).
+  token-bucket pace, enforced in Postgres (`PsiRateLimiter`, an atomic
+  `INSERT ... ON CONFLICT DO UPDATE ... RETURNING`, the same
+  check-and-increment guarantee a Redis Lua script gave until 21 Aug 2026 —
+  see `docs/DECISIONS.md` §16 for why it moved).
 - `WORKER_CONCURRENCY` (48 in production, tunable) — the *batch* size
   `auditRunWorkflow` dispatches at once. Must sit **above** what the rate
   limiter needs (Little's Law), or a sweep that should take 34 minutes
@@ -95,8 +95,8 @@ throughput decision traces back to this:
   fixed 20 Aug 2026 (see `docs/BUILD_LOG.md`, same date): a generic
   exception used to vanish silently via `Promise.allSettled` instead of
   showing up as a tracked failure.
-- Every step's start/ok/retry/error also pushes a Redis event
-  (`lib/redis.ts`'s `pushRunLogEvent`) for the live terminal view —
+- Every step's start/ok/retry/error also writes a `RunLogEvent` row
+  (`lib/opsState.ts`'s `pushRunLogEvent`) for the live terminal view —
   **awaited**, not fire-and-forget, because a serverless container frozen
   right after a step returns can silently drop an un-awaited call.
 

@@ -102,7 +102,8 @@ from Server Actions, the MCP server, and `/api/cron/schedule-tick`. See
 - **A PSI API key is mandatory** — the keyless endpoint's shared quota is
   exhausted and returns 429.
 - **Ship Studio runs `next dev` on the host.** Don't containerize the web app
-  locally; it breaks the preview. `docker-compose.dev.yml` is Postgres + Redis only.
+  locally; it breaks the preview. `docker-compose.dev.yml` is Postgres only —
+  there is no Redis anywhere in this app; see `docs/DECISIONS.md` §16.
 - **Lighthouse 13 dropped the `load-opportunities` group** — it's now `insights` /
   `diagnostics` / `metrics` / `hidden`, `weight` is 0 everywhere, and
   `metricSavings` replaced `details.overallSavingsMs`. See `docs/PLAN.md`.

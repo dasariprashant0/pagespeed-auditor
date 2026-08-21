@@ -1,8 +1,14 @@
 # Local development stack.
 #
 # Deliberately does NOT include the Next app: Ship Studio runs `next dev` on the
-# host and containerizing it would break the live preview. Only the pieces the
-# host process needs are here, plus the worker.
+# host and containerizing it would break the live preview. Only the piece the
+# host process needs is here.
+#
+# No Redis: it used to run here too, for the PSI rate limiter and the
+# scheduler heartbeat. Both moved to Postgres (docs/DECISIONS.md #16) once
+# BullMQ -- the one thing that actually needed Redis's blocking commands --
+# was already gone. If a local redis container from before this change is
+# still running, it's safe to stop; nothing in the app talks to it anymore.
 #
 #   docker compose -f docker-compose.dev.yml up -d
 #
@@ -27,23 +33,5 @@ services:
       timeout: 5s
       retries: 10
 
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    # appendonly is not optional: without it a container restart silently drops
-    # the entire queue, and an in-flight sweep can only be recovered by the
-    # slower DB-reconciliation path.
-    command: ["redis-server", "--appendonly", "yes"]
-    ports:
-      - "6379:6379"
-    volumes:
-      - psa_redisdata:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-
 volumes:
   psa_pgdata:
-  psa_redisdata:

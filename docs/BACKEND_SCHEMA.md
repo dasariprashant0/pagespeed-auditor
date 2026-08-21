@@ -94,8 +94,9 @@ erDiagram
   - `rawJson` (legacy inline) / `rawJsonBlobKey` (current, Vercel Blob) —
     exactly one of the two is ever set for a given row; see §5.
   - `@@unique([auditRunId, pageId, strategy])` is the durable idempotency
-    guarantee — it's what survives a Redis-evicted, replayed Workflow step,
-    the way a BullMQ jobId dedupe could not.
+    guarantee — it's what survives a replayed Workflow step, the way a
+    BullMQ jobId dedupe (evicted along with everything else Redis once
+    held, see §8) could not.
 - **`AuditIssue`** — one row per failing audit per result, a deliberate
   denormalization out of `rawJson`. Grouping "top issues across the site"
   over JSON means detoasting the whole blob and running `jsonb_each` over
@@ -137,6 +138,23 @@ team-local — "3am" should mean 3am where the people are) and
 `NotificationSetting` (email/Slack, only sweeps notify — a channel that
 pings on every on-demand page audit gets muted, which loses the alerts
 that mattered).
+
+## 8. Operational state (added 21 Aug 2026, replacing Redis)
+
+Three small, app-wide tables — not tenant-scoped, since each holds one
+global row or a handful of short-lived rows, never customer data:
+
+- **`RateLimitBucket`** — the PSI rate limiter's fixed-window token
+  bucket. One row per limiter (`key`, today only `"psi"`), atomically
+  incremented via `INSERT ... ON CONFLICT DO UPDATE ... RETURNING`.
+- **`KeyValue`** — a tiny generic key/value store; today, only the
+  scheduler heartbeat.
+- **`RunLogEvent`** — the live "what's running" terminal's source rows.
+  Deleted outright once a run finalizes, not TTL'd — there is nothing
+  live left to show once a run is terminal.
+
+See `docs/DECISIONS.md` §16 for why these replaced Redis rather than
+another request-metered service.
 
 ## Related documents
 

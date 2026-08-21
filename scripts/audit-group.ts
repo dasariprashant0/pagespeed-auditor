@@ -10,7 +10,6 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { auditPage } from '../lib/services/audit.service.ts';
 import { createRun, finalizeRun } from '../lib/services/run.service.ts';
 import { PsiRateLimiter } from '../lib/psi/rateLimiter.ts';
-import { createRedis } from '../lib/redis.ts';
 import type { PsiStrategy } from '../lib/psi/types.ts';
 
 async function main() {
@@ -19,12 +18,10 @@ async function main() {
   const strategy = (process.argv[4] ?? 'mobile') as PsiStrategy;
 
   const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
-  const redis = createRedis(process.env.REDIS_URL!);
   const limiter = new PsiRateLimiter({
-    redis,
+    db: prisma,
     max: Number(process.env.PSI_RATE_MAX ?? 3),
     windowMs: Number(process.env.PSI_RATE_WINDOW_MS ?? 4000),
-    keyPrefix: 'psa:psi:rate',
   });
 
   try {
@@ -68,7 +65,6 @@ async function main() {
     const status = await finalizeRun(prisma, runId);
     console.log(`\n  run ${status} in ${((Date.now() - t0) / 1000 / 60).toFixed(1)} min\n`);
   } finally {
-    await redis.quit();
     await prisma.$disconnect();
   }
 }

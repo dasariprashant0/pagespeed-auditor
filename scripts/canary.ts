@@ -20,7 +20,7 @@ import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { BOTH_STRATEGIES, createRun, findActiveRun } from '../lib/services/run.service.ts';
 import { auditPage } from '../lib/services/audit.service.ts';
-import { getPsiRateLimiter, getRedis } from '../lib/redis.ts';
+import { getPsiRateLimiter } from '../lib/opsState.ts';
 import { estimateRun, formatDuration } from '../lib/services/estimate.service.ts';
 
 async function main() {
@@ -73,7 +73,6 @@ async function main() {
     const est = await estimateRun(pairs.length, site.id);
     console.log(`  done. ${formatDuration(est.seconds)}${est.measured ? ` (median ${Math.round(est.medianCallMs / 1000)}s/call, ${est.sampleSize} samples)` : ''}\n`);
   } finally {
-    await getRedis().quit();
     await prisma.$disconnect();
   }
 }

@@ -31,11 +31,6 @@ const schema = z.object({
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).default('info'),
 
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
-  REDIS_URL: z.string().min(1, 'REDIS_URL is required'),
-  // Namespaces every Redis key this app still uses -- the PSI rate limiter's
-  // token bucket and the scheduler heartbeat. No longer a BullMQ queue prefix
-  // (the name predates that removal; not worth a Vercel env var rename).
-  QUEUE_PREFIX: z.string().default('psa'),
 
   /** How many pages a sweep processes per batch -- see lib/workflows/auditRun.ts. */
   WORKER_CONCURRENCY: int(20),
@@ -57,6 +52,14 @@ const schema = z.object({
   SYNC_GROUP_PAGE_LIMIT: int(15),
 
   SESSION_SECRET: z.string().default(''),
+
+  /// Optional: "Continue with Google" alongside password sign-in, never
+  /// instead of it. Empty means the button simply doesn't render -- see
+  /// lib/auth/google.ts. From a Google Cloud OAuth 2.0 Client ID
+  /// ("Web application" type); GOOGLE_CLIENT_SECRET must never reach the
+  /// browser, unlike the client id, which is fine to be public.
+  GOOGLE_CLIENT_ID: z.string().default(''),
+  GOOGLE_CLIENT_SECRET: z.string().default(''),
   SESSION_TTL_DAYS: int(30),
 
   /**

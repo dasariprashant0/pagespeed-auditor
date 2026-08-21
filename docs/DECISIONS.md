@@ -785,3 +785,72 @@ visible always, gated per-action against their own specific capability
 (`site:manage`, `audits:run`) rather than `automation:manage`. That
 pattern predates this decision and is what this one generalizes to the
 rest of the settings pages, not a new invention.
+
+## 16. Redis removed entirely; the PSI rate limiter, scheduler heartbeat, and live run log all moved to Postgres (21 Aug 2026)
+
+**Chosen:** `lib/redis.ts` is deleted. `Organization`-unrelated but
+app-wide: `RateLimitBucket`, `KeyValue`, and `RunLogEvent` (three new,
+small Postgres tables) replace everything Redis was doing. `ioredis` is
+no longer a dependency; `REDIS_URL`/`QUEUE_PREFIX` no longer exist as env
+vars; the local `docker-compose.dev.yml` no longer runs a redis container.
+
+**Why, immediately:** a live incident. Upstash's Redis free tier
+(500,000 requests/month) was exhausted by exactly two full sweeps. Root
+cause (found before being asked to fix it, then fixed the same day,
+earlier in `lib/psi/rateLimiter.ts`'s own history): `acquire()` retried
+against the denied response's Redis-key PTTL rather than the real,
+deterministic window boundary, and with `WORKER_CONCURRENCY=48` workers
+contending for `PSI_RATE_MAX` permits per window, nearly all of them are
+denied at any moment — hundreds of thousands of Redis round trips over
+one 30-40 minute sweep. That specific bug was fixed first (a smaller,
+same-day patch). This decision is the second, larger conclusion drawn
+from the same incident: fixing the polling interval prevents *repeating*
+the incident, but doesn't remove the underlying fragility of depending on
+a request-metered service for something that never needed to be metered
+in the first place.
+
+**Why this was even possible now, and wasn't a rash removal:** Redis's
+entire justification in this codebase was BullMQ, specifically its
+blocking commands (`BZPOPMIN` on a dedicated connection) that Postgres
+cannot do. BullMQ was removed months earlier for Vercel Workflow (§11).
+Nothing that remained afterward -- the PSI token bucket, a heartbeat
+timestamp, a few hundred lines of live-run log -- ever needed Redis's
+actual differentiating capability; they used it because it was already
+there, not because Postgres couldn't do the job. Once BullMQ left, Redis
+became a service kept alive by inertia, with its own separate
+request-metered free tier and its own way to fail that had nothing to do
+with anything the app's data actually needed.
+
+**Same atomicity, different engine.** The Lua script's whole point was
+an atomic check-and-increment so concurrent callers can't both read "2
+used" and both write "3". Postgres's `INSERT ... ON CONFLICT DO UPDATE
+... RETURNING` gives the identical guarantee for a single row, with no
+explicit transaction needed -- verified directly, not assumed: 30 fully
+concurrent `tryAcquire()` calls against a fresh bucket granted exactly 3,
+every time.
+
+**Verified for real, not just unit-tested.** `npm run throughput-dryrun`
+(real Postgres, real token bucket, fake PSI latency matching the live
+API's observed 11-24s, zero quota spent) is the same gate this project
+has used since before Redis was ever removed to validate the ~0.75
+req/s sustained-rate assumption every duration estimate rests on. At
+`JOBS=60` it read 0.911 req/s and failed its own tolerance check --
+investigated rather than dismissed, and traced to the script's own
+"steady state" sample being only 12 data points at that size, not a
+limiter bug (confirmed separately: 30 concurrent `tryAcquire()` calls
+granted exactly 3). At `JOBS=200`, a statistically meaningful sample,
+steady-state measured 0.755 req/s against a 0.750 target -- PASS.
+
+**What did NOT move to Postgres:** the login rate limiter
+(`lib/auth/rate-limit.ts`) already had a memory-only fallback for
+whenever Redis was slow or down, specifically because a hung Redis
+client must never be able to lock everyone out of signing in. Once
+Redis stopped existing at all, that fallback simply became the only
+behaviour -- correct as-is, nothing to port.
+
+**Live run log's lifetime changed slightly.** Redis expired old log
+lines with a 1-hour TTL. The Postgres version deletes a run's log rows
+outright in `finalizeAndNotify`, the moment the run goes terminal --
+tighter than a TTL, and correct for what this log is for (a live
+terminal view of something IN PROGRESS; once a run ends there's nothing
+live left to show).

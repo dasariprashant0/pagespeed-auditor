@@ -128,6 +128,134 @@ export async function login(email: string, password: string): Promise<LoginOutco
   };
 }
 
+/**
+ * Signs in an already-verified Google account. The caller (the OAuth
+ * callback route) is responsible for verifying the id_token's signature
+ * before this is ever reached -- this function trusts the email it's given.
+ *
+ * Deliberately does NOT create an account for an unknown email: unlike
+ * signupWithGoogle/acceptInvitationWithGoogle, there is no organisation to
+ * attach a brand-new user to here, and a User row with no Membership is a
+ * dead end nobody can act on.
+ */
+export async function loginWithGoogle(email: string): Promise<LoginOutcome> {
+  const normalized = normalizeEmail(email);
+  const user = await prisma.user.findUnique({
+    where: { email: normalized },
+    select: { id: true, email: true, name: true, roleTourSeenAt: true },
+  });
+  if (!user) {
+    return { ok: false, error: 'No account uses that Google address yet. Ask an admin to invite you, or sign up.' };
+  }
+
+  const membership = await prisma.membership.findFirst({
+    where: { userId: user.id },
+    orderBy: { createdAt: 'asc' },
+    select: { organizationId: true, role: true, organization: { select: { name: true } } },
+  });
+  if (!membership) {
+    return { ok: false, error: 'This account is not a member of any organisation. Ask an admin to invite you again.' };
+  }
+
+  await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+
+  return {
+    ok: true,
+    context: {
+      userId: user.id,
+      email: user.email,
+      name: user.name,
+      organizationId: membership.organizationId,
+      organizationName: membership.organization.name,
+      role: isRole(membership.role) ? membership.role : 'viewer',
+      hasSeenRoleTour: user.roleTourSeenAt !== null,
+    },
+  };
+}
+
+/** Google's equivalent of signup(): a verified email in place of a chosen password. */
+export async function signupWithGoogle(input: {
+  email: string;
+  name?: string | null;
+  organizationName: string;
+}): Promise<SignupResult> {
+  const email = normalizeEmail(input.email);
+  if (!input.organizationName.trim()) return { ok: false, error: 'Give your organisation a name.' };
+
+  const existing = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+  if (existing) return { ok: false, error: 'An account already exists for that email. Sign in instead.' };
+
+  const slug = await uniqueSlug(input.organizationName);
+
+  const result = await prisma.$transaction(async (tx) => {
+    const org = await tx.organization.create({
+      data: { name: input.organizationName.trim(), slug },
+      select: { id: true },
+    });
+    const user = await tx.user.create({
+      data: { email, name: input.name?.trim() || null, passwordHash: null },
+      select: { id: true },
+    });
+    await tx.membership.create({ data: { userId: user.id, organizationId: org.id, role: 'admin' } });
+    return { userId: user.id, organizationId: org.id };
+  });
+
+  logger.info({ email, organizationId: result.organizationId }, 'organisation created via Google');
+  return { ok: true, ...result };
+}
+
+/**
+ * Google's equivalent of acceptInvitation(). The invited address is still
+ * authoritative -- the same reason acceptInvitation() itself gives: the
+ * Google account doing the accepting must be the exact address the
+ * invitation named, or an intercepted link would let someone join as
+ * somebody else, just via a different credential than a guessed password.
+ */
+export async function acceptInvitationWithGoogle(
+  token: string,
+  googleEmail: string,
+  name?: string | null,
+): Promise<AcceptOutcome> {
+  const invite = await prisma.invitation.findUnique({
+    where: { tokenHash: hashToken(token) },
+    select: { id: true, organizationId: true, email: true, role: true, expiresAt: true, acceptedAt: true },
+  });
+
+  if (!invite) return { ok: false, error: 'That invitation link is not valid.' };
+  if (invite.acceptedAt) return { ok: false, error: 'That invitation has already been used.' };
+  if (invite.expiresAt < new Date()) return { ok: false, error: 'That invitation has expired. Ask for a new one.' };
+
+  if (normalizeEmail(googleEmail) !== invite.email) {
+    return {
+      ok: false,
+      error: `That invitation is for ${invite.email}. Sign in to Google with that address, not ${googleEmail}.`,
+    };
+  }
+
+  const existing = await prisma.user.findUnique({ where: { email: invite.email }, select: { id: true } });
+  const role: Role = isRole(invite.role) ? invite.role : 'viewer';
+
+  const userId = await prisma.$transaction(async (tx) => {
+    const user =
+      existing ??
+      (await tx.user.create({
+        data: { email: invite.email, name: name?.trim() || null, passwordHash: null },
+        select: { id: true },
+      }));
+
+    await tx.membership.upsert({
+      where: { userId_organizationId: { userId: user.id, organizationId: invite.organizationId } },
+      update: { role },
+      create: { userId: user.id, organizationId: invite.organizationId, role },
+    });
+    await tx.invitation.update({ where: { id: invite.id }, data: { acceptedAt: new Date() } });
+    return user.id;
+  });
+
+  logger.info({ email: invite.email, organizationId: invite.organizationId, role }, 'invitation accepted via Google');
+  return { ok: true, userId, organizationId: invite.organizationId, needsPassword: false };
+}
+
 /** Re-reads authority on every request; a revoked role must take effect at once. */
 export async function contextFor(userId: string, organizationId?: string): Promise<SessionContext | null> {
   const user = await prisma.user.findUnique({

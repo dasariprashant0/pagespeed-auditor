@@ -12,7 +12,7 @@ import { ScheduleForm } from '@/components/settings/ScheduleForm';
 import { NotificationForm } from '@/components/settings/NotificationForm';
 import { OrgEmailForm } from '@/components/settings/OrgEmailForm';
 import { AutomationStatus, type AutomationHealth } from '@/components/settings/AutomationStatus';
-import { schedulerHealth } from '@/lib/redis';
+import { schedulerHealth } from '@/lib/opsState';
 import { emailConfigProblem } from '@/lib/notify/email';
 
 export const dynamic = 'force-dynamic';

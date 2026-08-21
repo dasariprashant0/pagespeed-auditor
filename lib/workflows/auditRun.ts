@@ -3,7 +3,7 @@ import { start } from 'workflow/api';
 import { prisma } from '../db.ts';
 import { getEnv } from '../env.ts';
 import { jobLogger } from '../logger.ts';
-import { getPsiRateLimiter, pushRunLogEvent } from '../redis.ts';
+import { getPsiRateLimiter, pushRunLogEvent } from '../opsState.ts';
 import { auditPage, errorResultFor, recordAuditResult } from '../services/audit.service.ts';
 import { buildMarkdownReport } from '../report/markdown.ts';
 import { RetryableError, PermanentError } from '../errors.ts';

@@ -4,8 +4,19 @@ import { useActionState } from 'react';
 import Link from 'next/link';
 import { loginAction, type AuthResult } from '@/app/actions/auth';
 import { AuthCard, Field, SubmitButton, FormError, FormNotice, AuthLink } from './AuthCard';
+import { GoogleButton } from './GoogleButton';
 
-export function LoginForm({ next, reason }: { next: string; reason?: string }) {
+export function LoginForm({
+  next,
+  reason,
+  googleEnabled,
+  googleError,
+}: {
+  next: string;
+  reason?: string;
+  googleEnabled: boolean;
+  googleError?: string;
+}) {
   const [state, action, pending] = useActionState<AuthResult | null, FormData>(loginAction, null);
   const error = state && !state.ok ? state.error : null;
 
@@ -19,7 +30,7 @@ export function LoginForm({ next, reason }: { next: string; reason?: string }) {
         </>
       }
     >
-      <form action={action} className="space-y-4">
+      <div className="space-y-4">
         {/* A revoked membership leaves a valid token but no access; saying so
             beats silently bouncing someone back to a login screen they just used. */}
         {reason === 'no-access' && (
@@ -28,32 +39,46 @@ export function LoginForm({ next, reason }: { next: string; reason?: string }) {
             re-invite you.
           </FormNotice>
         )}
+        <FormError message={googleError ?? null} />
 
-        <input type="hidden" name="next" value={next} />
-        <Field label="Email" name="email" type="email" autoComplete="username" autoFocus invalid={Boolean(error)} />
-        <Field
-          label="Password"
-          name="password"
-          type="password"
-          autoComplete="current-password"
-          invalid={Boolean(error)}
-        />
+        {googleEnabled && (
+          <>
+            <GoogleButton href={`/api/auth/google?intent=login&next=${encodeURIComponent(next)}`} label="Continue with Google" />
+            <div className="flex items-center gap-2 text-[11px] text-[var(--faint)]" aria-hidden="true">
+              <span className="h-px flex-1 bg-[var(--border)]" />
+              or
+              <span className="h-px flex-1 bg-[var(--border)]" />
+            </div>
+          </>
+        )}
 
-        <FormError message={error} />
+        <form action={action} className="space-y-4">
+          <input type="hidden" name="next" value={next} />
+          <Field label="Email" name="email" type="email" autoComplete="username" autoFocus invalid={Boolean(error)} />
+          <Field
+            label="Password"
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            invalid={Boolean(error)}
+          />
 
-        <SubmitButton pending={pending} pendingLabel="Signing in…">
-          Sign in
-        </SubmitButton>
+          <FormError message={error} />
 
-        <p className="text-center">
-          <Link
-            href="/forgot"
-            className="rounded-[3px] text-[11.5px] text-[var(--muted)] underline-offset-2 transition-colors hover:text-[var(--foreground)] hover:underline"
-          >
-            Forgot your password?
-          </Link>
-        </p>
-      </form>
+          <SubmitButton pending={pending} pendingLabel="Signing in…">
+            Sign in
+          </SubmitButton>
+
+          <p className="text-center">
+            <Link
+              href="/forgot"
+              className="rounded-[3px] text-[11.5px] text-[var(--muted)] underline-offset-2 transition-colors hover:text-[var(--foreground)] hover:underline"
+            >
+              Forgot your password?
+            </Link>
+          </p>
+        </form>
+      </div>
     </AuthCard>
   );
 }

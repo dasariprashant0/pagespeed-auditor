@@ -4,6 +4,7 @@ import { finalizeRun } from '../services/run.service.ts';
 import { buildSweepSummary } from '../services/sweepSummary.service.ts';
 import { pruneSiteHistory } from '../services/retention.service.ts';
 import { dispatchSweepNotification } from '../notify/index.ts';
+import { clearRunLog } from '../opsState.ts';
 import { getEnv } from '../env.ts';
 
 /**
@@ -26,6 +27,10 @@ export async function finalizeAndNotify(runId: string): Promise<void> {
     select: { type: true, siteId: true },
   });
   if (!run) return;
+
+  // The live terminal has nothing left to show once a run is terminal --
+  // every kind, not just full sweeps.
+  await clearRunLog(runId);
 
   try {
     const pruned = await pruneSiteHistory(prisma, run.siteId);

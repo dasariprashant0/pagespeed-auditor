@@ -16,7 +16,10 @@ model User {
   id           String    @id @default(cuid())
   email        String    @unique
   name         String?
-  passwordHash String
+  /// Nullable: a Google-only account never sets one. Password sign-in checks
+  /// this and fails cleanly (not a bcrypt crash) when it's null -- see
+  /// lib/services/account.service.ts's login().
+  passwordHash String?
   createdAt    DateTime  @default(now())
   lastLoginAt  DateTime?
   /// Null until dismissed. Per-user, not per-organisation: someone who
@@ -424,4 +427,42 @@ model NotificationSetting {
   emailTo         String?
   slackEnabled    Boolean @default(false)
   slackWebhookUrl String?
+}
+
+/// Replaces Redis entirely (see docs/DECISIONS.md #16) for three small,
+/// infrequent, latency-insensitive jobs that never needed a separate
+/// request-metered service once BullMQ -- the thing that originally
+/// justified Redis -- was removed. One fixed-window token bucket, keyed by
+/// name ("psi" today; nothing else needs one yet). windowStart is the
+/// window's own start time in epoch ms, not a TTL -- computed once from
+/// wall-clock time, the same value every caller in that window agrees on
+/// without needing to ask Redis what it is.
+model RateLimitBucket {
+  key         String @id
+  windowStart BigInt
+  count       Int
+}
+
+/// A tiny generic key/value store for operational state that doesn't merit
+/// its own table -- today, only the scheduler heartbeat.
+model KeyValue {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+/// "What is actually happening right now" for a run in flight -- the live
+/// terminal view. Deliberately not durable history (AuditResult already is
+/// that); rows are deleted once their run finalizes, in finalizeAndNotify.
+model RunLogEvent {
+  id        String   @id @default(cuid())
+  runId     String
+  kind      String // 'start' | 'ok' | 'retry' | 'error'
+  pageId    String
+  url       String
+  strategy  String
+  message   String?
+  createdAt DateTime @default(now())
+
+  @@index([runId, createdAt])
 }

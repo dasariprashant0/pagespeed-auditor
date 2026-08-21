@@ -1,41 +1,34 @@
-import type Redis from 'ioredis';
-
 /**
- * The real PSI rate limiter: a Redis token bucket shared by every caller.
+ * The real PSI rate limiter: a fixed-window token bucket, shared by every
+ * caller, backed by Postgres rather than Redis.
  *
- * BullMQ has its own limiter, but it only governs *queued* jobs. A synchronous
- * single-page audit triggered from the dashboard would bypass it entirely and
- * push us over the sustained rate while a sweep is running. So both paths call
- * this, and BullMQ's limiter becomes a coarse second layer.
+ * Redis used to hold this (see docs/DECISIONS.md #16 for the full story of
+ * why it was removed): a single incident showed that a Redis-backed
+ * limiter, polled by WORKER_CONCURRENCY workers all denied most of the
+ * time, generates enormous request volume against a service that bills by
+ * the request -- Upstash's 500k/month cap gone in two sweeps. Postgres has
+ * no such per-request meter, this app already depends on it unconditionally,
+ * and the same atomicity guarantee the Lua script gave (check-and-increment
+ * as one indivisible operation, so concurrent callers can't both read "2
+ * used" and both write "3") is exactly what `INSERT ... ON CONFLICT DO
+ * UPDATE ... RETURNING` gives for free.
  *
- * Sliding window over fixed buckets: `max` permits per `windowMs`. Implemented
- * as one Lua script so the check-and-increment is atomic -- with 20 concurrent
- * workers, a read-then-write in JS would let several through at once.
+ * A single-page or single-group audit calls this too, not just a full
+ * sweep -- one shared budget covers every path that calls PSI.
  */
 
-const ACQUIRE_LUA = `
-local key = KEYS[1]
-local max = tonumber(ARGV[1])
-local ttl = tonumber(ARGV[2])
-local n = redis.call('INCR', key)
-if n == 1 then
-  redis.call('PEXPIRE', key, ttl)
-end
-if n <= max then
-  return {1, 0}
-end
-local pttl = redis.call('PTTL', key)
-if pttl < 0 then pttl = ttl end
-return {0, pttl}
-`;
+export interface RateLimiterDb {
+  $queryRaw<T = unknown>(query: TemplateStringsArray, ...values: unknown[]): Promise<T>;
+}
 
 export interface RateLimiterOptions {
-  redis: Redis;
+  db: RateLimiterDb;
   /** Permits per window. */
   max: number;
   /** Window length in ms. */
   windowMs: number;
-  keyPrefix?: string;
+  /** Which bucket row this limiter owns. Only "psi" exists today. */
+  key?: string;
   /** Injectable for tests; defaults to Date.now. */
   now?: () => number;
   /** Injectable for tests; defaults to a real sleep. */
@@ -45,51 +38,69 @@ export interface RateLimiterOptions {
 const defaultSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 export class PsiRateLimiter {
-  private readonly redis: Redis;
+  private readonly db: RateLimiterDb;
   private readonly max: number;
   private readonly windowMs: number;
-  private readonly keyPrefix: string;
+  private readonly key: string;
   private readonly now: () => number;
   private readonly sleep: (ms: number) => Promise<void>;
 
   constructor(opts: RateLimiterOptions) {
-    this.redis = opts.redis;
+    this.db = opts.db;
     this.max = opts.max;
     this.windowMs = opts.windowMs;
-    this.keyPrefix = opts.keyPrefix ?? 'psa:psi:rate';
+    this.key = opts.key ?? 'psi';
     this.now = opts.now ?? (() => Date.now());
     this.sleep = opts.sleep ?? defaultSleep;
   }
 
-  private bucketKey(): string {
-    return `${this.keyPrefix}:${Math.floor(this.now() / this.windowMs)}`;
+  private windowStart(): bigint {
+    return BigInt(Math.floor(this.now() / this.windowMs) * this.windowMs);
   }
 
-  /** One non-blocking attempt. Returns ms to wait when denied. */
-  async tryAcquire(): Promise<{ ok: boolean; retryAfterMs: number }> {
-    const res = (await this.redis.eval(
-      ACQUIRE_LUA,
-      1,
-      this.bucketKey(),
-      String(this.max),
-      // Two windows of TTL so a bucket key can't expire mid-window and reset the count.
-      String(this.windowMs * 2),
-    )) as [number, number];
+  /**
+   * One non-blocking attempt. The UPSERT is the whole atomic operation: a
+   * fresh window resets the count to 1 (the CASE branch), the same window
+   * increments it, and the row is created on first use. No separate
+   * read-then-write exists for two concurrent callers to race inside of.
+   */
+  async tryAcquire(): Promise<{ ok: boolean }> {
+    const windowStart = this.windowStart();
+    const rows = await this.db.$queryRaw<Array<{ count: number | bigint }>>`
+      INSERT INTO "RateLimitBucket" AS b (key, "windowStart", count)
+      VALUES (${this.key}, ${windowStart}, 1)
+      ON CONFLICT (key) DO UPDATE SET
+        count = CASE WHEN b."windowStart" = ${windowStart} THEN b.count + 1 ELSE 1 END,
+        "windowStart" = ${windowStart}
+      RETURNING count
+    `;
+    const count = Number(rows[0]?.count ?? 1);
+    return { ok: count <= this.max };
+  }
 
-    return { ok: res[0] === 1, retryAfterMs: res[1] };
+  /** Time until the bucket window rolls over and permits reset. */
+  private msUntilNextWindow(): number {
+    const rem = this.now() % this.windowMs;
+    return this.windowMs - rem;
   }
 
   /**
    * Blocks until a permit is available. `signal` lets a shutting-down worker
    * stop waiting rather than holding the process open.
+   *
+   * Retries on the real window boundary -- deterministic, computed locally,
+   * no round trip needed to learn it -- rather than busy-polling. See the
+   * module comment and docs/DECISIONS.md #16 for why that distinction is
+   * the entire point of this file.
    */
   async acquire(signal?: AbortSignal): Promise<void> {
     for (;;) {
       if (signal?.aborted) throw new Error('rate limiter wait aborted');
-      const { ok, retryAfterMs } = await this.tryAcquire();
+      const { ok } = await this.tryAcquire();
       if (ok) return;
-      // Small jitter so 20 workers released by the same expiry don't collide.
-      await this.sleep(Math.max(25, retryAfterMs) + Math.floor(Math.random() * 50));
+      // Jitter so every denied caller released by the same boundary doesn't
+      // retry in the exact same instant.
+      await this.sleep(this.msUntilNextWindow() + Math.floor(Math.random() * 150));
     }
   }
 

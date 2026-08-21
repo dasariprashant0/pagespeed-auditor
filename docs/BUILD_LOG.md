@@ -1628,3 +1628,62 @@ changes what renders, never what's accepted.
 
 Verified: `npx tsc --noEmit`, `npm run lint`, `npm test` (138/138), `npm
 run build` all clean.
+
+## 21 Aug 2026 (later still) — Upstash exhausted for real; Redis removed from the app entirely
+
+Reported live: "You have reached the maximum monthly request limit
+(500,000) for your database" -- hit by exactly two full sweeps, and the
+same day Vercel Blob separately hit its own 2,000-advanced-operations
+cap. Fixing the rate limiter's polling interval (already done, same day,
+in `lib/psi/rateLimiter.ts`'s own history) prevents this from recurring,
+but doesn't undo an already-exhausted monthly quota, and Upstash allows
+only one database per account -- there was no "spin up a fresh free
+one" option. Asked directly, twice, to think about this from first
+principles rather than reach for another provider: full reasoning in
+`docs/DECISIONS.md` §16. Summary: Redis's only real justification was
+BullMQ's blocking commands, BullMQ left months ago (§11), and nothing
+that remained -- a token bucket, a heartbeat timestamp, a live log --
+ever needed a request-metered service instead of the Postgres this app
+already depends on unconditionally.
+
+**What moved.** Three new tables (`RateLimitBucket`, `KeyValue`,
+`RunLogEvent`) replace `lib/redis.ts` (deleted) with a new
+`lib/opsState.ts`. The PSI rate limiter's atomic check-and-increment
+becomes `INSERT ... ON CONFLICT DO UPDATE ... RETURNING` instead of a
+Lua script -- same guarantee, verified directly (30 concurrent
+`tryAcquire()` calls against a fresh bucket granted exactly 3, every
+time, not just in theory). The scheduler heartbeat and live run log
+became a row and a small table respectively; the run log is now deleted
+outright when a run finalizes rather than TTL'd. `lib/auth/rate-limit.ts`
+already had a memory-only fallback for whenever Redis was slow -- once
+Redis stopped existing, that fallback simply became the only behaviour,
+nothing to port. Five standalone scripts
+(`canary`/`queue-audit`/`throughput-dryrun`/`audit-group`/
+`verify-audit-path`) that constructed their own `PsiRateLimiter` directly
+against the old `{ redis, keyPrefix }` shape were updated to `{ db, key }`.
+`ioredis` is no longer a dependency; `REDIS_URL`/`QUEUE_PREFIX` no longer
+exist; the local `docker-compose.dev.yml` no longer runs a redis
+container.
+
+**Verified with real load, not just unit tests.** `npm run
+throughput-dryrun` -- the same real-Postgres/real-limiter/fake-PSI gate
+this project has used since before Redis was ever removed to validate
+the ~0.75 req/s assumption every duration estimate rests on -- read 0.911
+req/s at `JOBS=60` and failed its own tolerance check. Investigated
+rather than waved off: traced to the script's "steady state" sample being
+only 12 data points at that size (confirmed separately that 30 fully
+concurrent acquisitions still granted exactly 3, ruling out an actual
+race). At `JOBS=200`, steady-state measured 0.755 req/s against a 0.750
+target -- PASS.
+
+Also fixed along the way: `passwordHash` on `User` had already gone
+nullable (`String?`) for the in-progress "Continue with Google" work
+started earlier the same day, and `changePasswordAction` had not yet
+been updated for that -- a real TypeScript error, unrelated to Redis,
+caught by `tsc` while verifying this change. Fixed to fail safely (not
+crash) for an account with no password set yet, with an honest message
+rather than a generic wrong-password one.
+
+Verified: `npx tsc --noEmit`, `npm run lint`, `npm test` (141/141 --
+three new tests for the Postgres-backed rate limiter), `npm run build`,
+and the real throughput dry-run above, all clean.

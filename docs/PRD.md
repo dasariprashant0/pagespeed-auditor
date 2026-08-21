@@ -68,7 +68,7 @@ and §11 for the reasoning:
   schedule-only. There is no `run_full_sweep` MCP tool and never will be —
   it would let one click burn the entire daily PSI quota.
 - **No SSE/WebSocket push.** Every live view (`ActiveRunBar`, `RunTerminal`)
-  polls. The run executes in Vercel Workflow and writes to Postgres/Redis;
+  polls. The run executes in Vercel Workflow and writes to Postgres;
   a stream would still just be polling that state and re-emitting it.
 - **MCP is feature-complete but explicitly not being extended right now**
   (per direct instruction, 20 Aug 2026) — 9 tools exist (`list_groups`,

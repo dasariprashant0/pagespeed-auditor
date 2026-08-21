@@ -147,9 +147,16 @@ export async function changePasswordAction(_prev: unknown, form: FormData): Prom
       select: { passwordHash: true },
     });
     // Requiring the current password stops a borrowed open session from
-    // locking the real owner out.
-    if (!(await verifyPassword(current, user.passwordHash))) {
-      return { ok: false, error: 'Your current password is not correct.' };
+    // locking the real owner out. A null hash (a Google-only account that
+    // has never set one) falls back to '' -- verifyPassword's own dummy-hash
+    // comparison means this still fails safely rather than throwing.
+    if (!(await verifyPassword(current, user.passwordHash ?? ''))) {
+      return {
+        ok: false,
+        error: user.passwordHash
+          ? 'Your current password is not correct.'
+          : 'This account has no password yet — signed in with Google so far. Contact an admin if you need one set.',
+      };
     }
 
     await prisma.user.update({

@@ -12,7 +12,6 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { auditPage } from '../lib/services/audit.service.ts';
 import { createRun, finalizeRun } from '../lib/services/run.service.ts';
 import { PsiRateLimiter } from '../lib/psi/rateLimiter.ts';
-import { createRedis } from '../lib/redis.ts';
 
 let fail = 0;
 const check = (label: string, ok: boolean, detail = '') => {
@@ -22,12 +21,13 @@ const check = (label: string, ok: boolean, detail = '') => {
 
 async function main() {
   const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
-  const redis = createRedis(process.env.REDIS_URL!);
+  // A distinct key, not the real "psi" bucket, so this verification run
+  // never contends with (or is throttled by) whatever a real sweep is doing.
   const limiter = new PsiRateLimiter({
-    redis,
+    db: prisma,
     max: Number(process.env.PSI_RATE_MAX ?? 3),
     windowMs: Number(process.env.PSI_RATE_WINDOW_MS ?? 4000),
-    keyPrefix: `verify:${process.pid}`,
+    key: `verify:${process.pid}`,
   });
 
   try {
@@ -106,7 +106,6 @@ async function main() {
 
     console.log(`\n  run ${runId}`);
   } finally {
-    await redis.quit();
     await prisma.$disconnect();
   }
 

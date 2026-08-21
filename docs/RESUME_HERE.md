@@ -27,8 +27,9 @@ Nothing needed to continue lives outside this repo.
 Workflow, not a queue worker — see `docs/DECISIONS.md` §11), the
 dashboard, scheduling, notifications, regressions, AI recommendations, a
 9-tool MCP server, and a multi-tenant `Organization`/`Membership`/role
-model throughout. Deployed to Vercel with Neon (Postgres), Upstash
-(Redis), and Vercel Blob (see `docs/TRD.md` §1–2).
+model throughout. Deployed to Vercel with Neon (Postgres) and Vercel
+Blob (see `docs/TRD.md` §1–2). No Redis -- the rate limiter, scheduler
+heartbeat, and live run log all live in Postgres (`docs/DECISIONS.md` §16).
 
 Sign up at `/signup` — the first account becomes admin of a new
 organisation. `.env` holds only infrastructure secrets; everything else

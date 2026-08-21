@@ -2,10 +2,10 @@
  * THE GATE (docs/PLAN.md, M3).
  *
  * Every duration estimate in this project rests on one number: that we can
- * sustain ~0.75 PSI requests/second. This measures it end to end -- real Redis,
- * the real token bucket, the real concurrency model -- against a fake PSI that
- * reproduces the latency observed from the live API (11-24 s, occasionally
- * longer). Costs zero quota.
+ * sustain ~0.75 PSI requests/second. This measures it end to end -- real
+ * Postgres, the real token bucket, the real concurrency model -- against a
+ * fake PSI that reproduces the latency observed from the live API (11-24 s,
+ * occasionally longer). Costs zero quota.
  *
  *   npm run throughput-dryrun            # ~90 s
  *   JOBS=200 npm run throughput-dryrun   # longer, tighter numbers
@@ -14,14 +14,14 @@
  * estimates and the schedule-only design both need revisiting.
  */
 import 'dotenv/config';
-import { createRedis } from '../lib/redis.ts';
+import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
 import { PsiRateLimiter } from '../lib/psi/rateLimiter.ts';
 
 const JOBS = Number(process.env.JOBS ?? 60);
 const CONCURRENCY = Number(process.env.WORKER_CONCURRENCY ?? 20);
 const MAX = Number(process.env.PSI_RATE_MAX ?? 3);
 const WINDOW = Number(process.env.PSI_RATE_WINDOW_MS ?? 4000);
-const REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6379';
 
 /** Observed live latency spread, so the simulation matches reality. */
 const LATENCY_MIN = Number(process.env.FAKE_LATENCY_MIN ?? 11_000);
@@ -31,10 +31,10 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const fakeLatency = () => LATENCY_MIN + Math.random() * (LATENCY_MAX - LATENCY_MIN);
 
 async function main() {
-  const redis = createRedis(REDIS_URL);
-  // Unique prefix so a previous run's buckets can't skew this one.
-  const keyPrefix = `psa:dryrun:${process.pid}`;
-  const limiter = new PsiRateLimiter({ redis, max: MAX, windowMs: WINDOW, keyPrefix });
+  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
+  // A unique key so a previous run's bucket row can't skew this one.
+  const key = `dryrun:${process.pid}`;
+  const limiter = new PsiRateLimiter({ db: prisma, max: MAX, windowMs: WINDOW, key });
 
   const target = limiter.ratePerSecond;
   const projectedFullSweep = (2000 / target / 60).toFixed(0);
@@ -102,8 +102,8 @@ async function main() {
 
   console.log(`\n  projected 2000-call sweep: ${(2000 / steadyRate / 60).toFixed(0)} min\n`);
 
-  await redis.del(...(await redis.keys(`${keyPrefix}*`)).slice(0, 1000)).catch(() => {});
-  await redis.quit();
+  await prisma.rateLimitBucket.deleteMany({ where: { key } }).catch(() => {});
+  await prisma.$disconnect();
 
   if (!withinTolerance) {
     console.error(`  FAIL: steady-state ${steadyRate.toFixed(3)} req/s is outside ±0.08 of ${target}`);
