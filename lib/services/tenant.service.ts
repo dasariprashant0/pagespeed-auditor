@@ -1,4 +1,5 @@
-import { prisma } from '../db.ts';
+import { getTenantPrisma } from '../db/tenant.ts';
+import { centralPrisma } from '../db/central.ts';
 import { NotFoundError } from '../errors.ts';
 import type { SmtpOverride } from '../notify/email.ts';
 
@@ -41,6 +42,7 @@ const SITE_SELECT = {
 } as const;
 
 export async function listSites(organizationId: string): Promise<SiteRef[]> {
+  const prisma = await getTenantPrisma(organizationId);
   const sites = await prisma.site.findMany({
     where: { organizationId },
     orderBy: { createdAt: 'asc' },
@@ -51,6 +53,7 @@ export async function listSites(organizationId: string): Promise<SiteRef[]> {
 
 /** The site to show when none was named. Null when the org has none yet. */
 export async function defaultSite(organizationId: string): Promise<SiteRef | null> {
+  const prisma = await getTenantPrisma(organizationId);
   const site = await prisma.site.findFirst({
     where: { organizationId },
     orderBy: { createdAt: 'asc' },
@@ -66,6 +69,7 @@ export async function defaultSite(organizationId: string): Promise<SiteRef | nul
  * that an id exists but belongs to someone else is itself a disclosure.
  */
 export async function requireSiteAccess(organizationId: string, siteId: string): Promise<SiteRef> {
+  const prisma = await getTenantPrisma(organizationId);
   const site = await prisma.site.findFirst({
     where: { id: siteId, organizationId },
     select: SITE_SELECT,
@@ -75,7 +79,8 @@ export async function requireSiteAccess(organizationId: string, siteId: string):
 }
 
 /** The PSI key for a site. Server-side only; never returned to a component. */
-export async function psiKeyForSite(siteId: string): Promise<string | null> {
+export async function psiKeyForSite(organizationId: string, siteId: string): Promise<string | null> {
+  const prisma = await getTenantPrisma(organizationId);
   const site = await prisma.site.findUnique({ where: { id: siteId }, select: { psiApiKey: true } });
   return site?.psiApiKey?.trim() || null;
 }
@@ -86,7 +91,7 @@ export async function psiKeyForSite(siteId: string): Promise<string | null> {
  * psiKeyForSite above. Server-side only.
  */
 export async function emailConfigForOrg(organizationId: string): Promise<SmtpOverride | null> {
-  const org = await prisma.organization.findUnique({
+  const org = await centralPrisma.organization.findUnique({
     where: { id: organizationId },
     select: { smtpHost: true, smtpPort: true, smtpUser: true, smtpPass: true, smtpFrom: true },
   });
@@ -111,7 +116,7 @@ export interface OrgEmailRef {
 
 /** For the settings form: what's configured, without ever exposing the password. */
 export async function orgEmailRef(organizationId: string): Promise<OrgEmailRef> {
-  const org = await prisma.organization.findUnique({
+  const org = await centralPrisma.organization.findUnique({
     where: { id: organizationId },
     select: { smtpHost: true, smtpPort: true, smtpUser: true, smtpFrom: true },
   });
@@ -130,6 +135,7 @@ export async function orgEmailRef(organizationId: string): Promise<OrgEmailRef> 
  * one tenant reading another's report by pasting an id.
  */
 export async function requirePageAccess(organizationId: string, pageId: string) {
+  const prisma = await getTenantPrisma(organizationId);
   const page = await prisma.page.findFirst({
     where: { id: pageId, site: { organizationId } },
     select: { id: true, siteId: true, url: true, path: true },
@@ -140,6 +146,7 @@ export async function requirePageAccess(organizationId: string, pageId: string) 
 
 /** Same, for a group slug, which is only unique within a site. */
 export async function requireGroupAccess(organizationId: string, slug: string, siteId?: string) {
+  const prisma = await getTenantPrisma(organizationId);
   const group = await prisma.group.findFirst({
     where: { slug, site: { organizationId, ...(siteId ? { id: siteId } : {}) } },
     select: { id: true, slug: true, name: true, siteId: true },
@@ -150,6 +157,7 @@ export async function requireGroupAccess(organizationId: string, slug: string, s
 
 /** Same, for a run id, which appears in progress-polling URLs. */
 export async function requireRunAccess(organizationId: string, runId: string) {
+  const prisma = await getTenantPrisma(organizationId);
   const run = await prisma.auditRun.findFirst({
     where: { id: runId, site: { organizationId } },
     select: { id: true, siteId: true },
