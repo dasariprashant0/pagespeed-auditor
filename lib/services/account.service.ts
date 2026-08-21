@@ -1,5 +1,5 @@
 import { randomBytes, createHash } from 'node:crypto';
-import { prisma } from '../db.ts';
+import { centralPrisma } from '../db/central.ts';
 import { hashPassword, verifyPassword } from '../auth/password.ts';
 import { isRole, type Role } from '../auth/roles.ts';
 import { logger } from '../logger.ts';
@@ -36,7 +36,7 @@ async function uniqueSlug(base: string): Promise<string> {
   const root = slugify(base);
   for (let i = 0; i < 50; i++) {
     const candidate = i === 0 ? root : `${root}-${i + 1}`;
-    const taken = await prisma.organization.findUnique({ where: { slug: candidate }, select: { id: true } });
+    const taken = await centralPrisma.organization.findUnique({ where: { slug: candidate }, select: { id: true } });
     if (!taken) return candidate;
   }
   return `${root}-${randomBytes(3).toString('hex')}`;
@@ -63,13 +63,13 @@ export async function signup(input: {
   if (input.password.length < 12) return { ok: false, error: 'Use a password of at least 12 characters.' };
   if (!input.organizationName.trim()) return { ok: false, error: 'Give your organisation a name.' };
 
-  const existing = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+  const existing = await centralPrisma.user.findUnique({ where: { email }, select: { id: true } });
   if (existing) return { ok: false, error: 'An account already exists for that email. Sign in instead.' };
 
   const passwordHash = await hashPassword(input.password);
   const slug = await uniqueSlug(input.organizationName);
 
-  const result = await prisma.$transaction(async (tx) => {
+  const result = await centralPrisma.$transaction(async (tx) => {
     const org = await tx.organization.create({
       data: { name: input.organizationName.trim(), slug },
       select: { id: true },
@@ -106,7 +106,7 @@ export interface MembershipSummary {
  * more than one.
  */
 async function membershipSummaries(userId: string): Promise<MembershipSummary[]> {
-  const memberships = await prisma.membership.findMany({
+  const memberships = await centralPrisma.membership.findMany({
     where: { userId },
     orderBy: { createdAt: 'asc' },
     select: { organizationId: true, role: true, organization: { select: { name: true } } },
@@ -131,7 +131,7 @@ export type LoginOutcome =
 /** Constant-ish cost regardless of outcome; see verifyPassword. */
 export async function login(email: string, password: string): Promise<LoginOutcome> {
   const normalized = normalizeEmail(email);
-  const user = await prisma.user.findUnique({
+  const user = await centralPrisma.user.findUnique({
     where: { email: normalized },
     select: { id: true, email: true, name: true, passwordHash: true, roleTourSeenAt: true },
   });
@@ -148,7 +148,7 @@ export async function login(email: string, password: string): Promise<LoginOutco
 
   // The password has already been verified at this point, regardless of
   // which organisation gets chosen next.
-  await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+  await centralPrisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
 
   if (memberships.length > 1) {
     return { ok: true, kind: 'choose', userId: user.id, memberships };
@@ -182,7 +182,7 @@ export async function login(email: string, password: string): Promise<LoginOutco
  */
 export async function loginWithGoogle(email: string): Promise<LoginOutcome> {
   const normalized = normalizeEmail(email);
-  const user = await prisma.user.findUnique({
+  const user = await centralPrisma.user.findUnique({
     where: { email: normalized },
     select: { id: true, email: true, name: true, roleTourSeenAt: true },
   });
@@ -195,7 +195,7 @@ export async function loginWithGoogle(email: string): Promise<LoginOutcome> {
     return { ok: false, error: 'This account is not a member of any organisation. Ask an admin to invite you again.' };
   }
 
-  await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+  await centralPrisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
 
   if (memberships.length > 1) {
     return { ok: true, kind: 'choose', userId: user.id, memberships };
@@ -226,12 +226,12 @@ export async function signupWithGoogle(input: {
   const email = normalizeEmail(input.email);
   if (!input.organizationName.trim()) return { ok: false, error: 'Give your organisation a name.' };
 
-  const existing = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+  const existing = await centralPrisma.user.findUnique({ where: { email }, select: { id: true } });
   if (existing) return { ok: false, error: 'An account already exists for that email. Sign in instead.' };
 
   const slug = await uniqueSlug(input.organizationName);
 
-  const result = await prisma.$transaction(async (tx) => {
+  const result = await centralPrisma.$transaction(async (tx) => {
     const org = await tx.organization.create({
       data: { name: input.organizationName.trim(), slug },
       select: { id: true },
@@ -260,7 +260,7 @@ export async function acceptInvitationWithGoogle(
   googleEmail: string,
   name?: string | null,
 ): Promise<AcceptOutcome> {
-  const invite = await prisma.invitation.findUnique({
+  const invite = await centralPrisma.invitation.findUnique({
     where: { tokenHash: hashToken(token) },
     select: { id: true, organizationId: true, email: true, role: true, expiresAt: true, acceptedAt: true },
   });
@@ -276,10 +276,10 @@ export async function acceptInvitationWithGoogle(
     };
   }
 
-  const existing = await prisma.user.findUnique({ where: { email: invite.email }, select: { id: true } });
+  const existing = await centralPrisma.user.findUnique({ where: { email: invite.email }, select: { id: true } });
   const role: Role = isRole(invite.role) ? invite.role : 'viewer';
 
-  const userId = await prisma.$transaction(async (tx) => {
+  const userId = await centralPrisma.$transaction(async (tx) => {
     const user =
       existing ??
       (await tx.user.create({
@@ -302,13 +302,13 @@ export async function acceptInvitationWithGoogle(
 
 /** Re-reads authority on every request; a revoked role must take effect at once. */
 export async function contextFor(userId: string, organizationId?: string): Promise<SessionContext | null> {
-  const user = await prisma.user.findUnique({
+  const user = await centralPrisma.user.findUnique({
     where: { id: userId },
     select: { id: true, email: true, name: true, roleTourSeenAt: true },
   });
   if (!user) return null;
 
-  const membership = await prisma.membership.findFirst({
+  const membership = await centralPrisma.membership.findFirst({
     where: { userId, ...(organizationId ? { organizationId } : {}) },
     orderBy: { createdAt: 'asc' },
     select: { organizationId: true, role: true, organization: { select: { name: true } } },
@@ -328,7 +328,7 @@ export async function contextFor(userId: string, organizationId?: string): Promi
 
 /** Dismissed for good, regardless of how many organisations the person is in. */
 export async function markRoleTourSeen(userId: string): Promise<void> {
-  await prisma.user.update({ where: { id: userId }, data: { roleTourSeenAt: new Date() } });
+  await centralPrisma.user.update({ where: { id: userId }, data: { roleTourSeenAt: new Date() } });
 }
 
 // --- invitations -----------------------------------------------------------
@@ -359,7 +359,7 @@ export async function inviteMember(input: {
   const email = normalizeEmail(input.email);
   if (!email.includes('@')) return { ok: false, error: 'That does not look like an email address.' };
 
-  const already = await prisma.membership.findFirst({
+  const already = await centralPrisma.membership.findFirst({
     where: { organizationId: input.organizationId, user: { email } },
     select: { id: true },
   });
@@ -369,10 +369,10 @@ export async function inviteMember(input: {
   const expiresAt = new Date(Date.now() + INVITE_TTL_DAYS * 86_400_000);
 
   // Re-inviting replaces the outstanding invite rather than accumulating rows.
-  await prisma.invitation.deleteMany({
+  await centralPrisma.invitation.deleteMany({
     where: { organizationId: input.organizationId, email, acceptedAt: null },
   });
-  await prisma.invitation.create({
+  await centralPrisma.invitation.create({
     data: {
       organizationId: input.organizationId,
       email,
@@ -397,7 +397,7 @@ export type AcceptOutcome =
  * different email, or an intercepted link would let someone join as themselves.
  */
 export async function acceptInvitation(token: string, password?: string, name?: string): Promise<AcceptOutcome> {
-  const invite = await prisma.invitation.findUnique({
+  const invite = await centralPrisma.invitation.findUnique({
     where: { tokenHash: hashToken(token) },
     select: { id: true, organizationId: true, email: true, role: true, expiresAt: true, acceptedAt: true },
   });
@@ -406,7 +406,7 @@ export async function acceptInvitation(token: string, password?: string, name?: 
   if (invite.acceptedAt) return { ok: false, error: 'That invitation has already been used.' };
   if (invite.expiresAt < new Date()) return { ok: false, error: 'That invitation has expired. Ask for a new one.' };
 
-  const existing = await prisma.user.findUnique({
+  const existing = await centralPrisma.user.findUnique({
     where: { email: invite.email },
     select: { id: true },
   });
@@ -417,7 +417,7 @@ export async function acceptInvitation(token: string, password?: string, name?: 
 
   const role: Role = isRole(invite.role) ? invite.role : 'viewer';
 
-  const userId = await prisma.$transaction(async (tx) => {
+  const userId = await centralPrisma.$transaction(async (tx) => {
     const user =
       existing ??
       (await tx.user.create({
@@ -443,9 +443,9 @@ export async function acceptInvitation(token: string, password?: string, name?: 
  * way back through the UI. Both removal and demotion are blocked.
  */
 export async function wouldOrphanOrganization(organizationId: string, userId: string): Promise<boolean> {
-  const admins = await prisma.membership.count({ where: { organizationId, role: 'admin' } });
+  const admins = await centralPrisma.membership.count({ where: { organizationId, role: 'admin' } });
   if (admins > 1) return false;
-  const target = await prisma.membership.findFirst({
+  const target = await centralPrisma.membership.findFirst({
     where: { organizationId, userId },
     select: { role: true },
   });
@@ -468,15 +468,15 @@ export async function requestPasswordReset(
   appUrl: string,
 ): Promise<{ url: string | null }> {
   const normalized = normalizeEmail(email);
-  const user = await prisma.user.findUnique({ where: { email: normalized }, select: { id: true } });
+  const user = await centralPrisma.user.findUnique({ where: { email: normalized }, select: { id: true } });
   if (!user) return { url: null };
 
   const token = randomBytes(32).toString('base64url');
 
   // Outstanding resets are replaced, so an older link stops working the moment
   // a newer one is requested.
-  await prisma.passwordReset.deleteMany({ where: { userId: user.id, usedAt: null } });
-  await prisma.passwordReset.create({
+  await centralPrisma.passwordReset.deleteMany({ where: { userId: user.id, usedAt: null } });
+  await centralPrisma.passwordReset.create({
     data: {
       userId: user.id,
       tokenHash: hashToken(token),
@@ -495,7 +495,7 @@ export interface ResetTokenInfo {
 }
 
 export async function inspectResetToken(token: string): Promise<ResetTokenInfo> {
-  const row = await prisma.passwordReset.findUnique({
+  const row = await centralPrisma.passwordReset.findUnique({
     where: { tokenHash: hashToken(token) },
     select: { expiresAt: true, usedAt: true, user: { select: { email: true } } },
   });
@@ -514,7 +514,7 @@ export type ResetOutcome =
 export async function completePasswordReset(token: string, password: string): Promise<ResetOutcome> {
   if (password.length < 12) return { ok: false, error: 'Use a password of at least 12 characters.' };
 
-  const row = await prisma.passwordReset.findUnique({
+  const row = await centralPrisma.passwordReset.findUnique({
     where: { tokenHash: hashToken(token) },
     select: { id: true, userId: true, expiresAt: true, usedAt: true },
   });
@@ -523,11 +523,11 @@ export async function completePasswordReset(token: string, password: string): Pr
   if (row.expiresAt < new Date()) return { ok: false, error: 'That reset link has expired.' };
 
   const passwordHash = await hashPassword(password);
-  await prisma.$transaction([
-    prisma.user.update({ where: { id: row.userId }, data: { passwordHash } }),
+  await centralPrisma.$transaction([
+    centralPrisma.user.update({ where: { id: row.userId }, data: { passwordHash } }),
     // Marked used inside the same transaction, so the link cannot be replayed
     // even if two requests arrive together.
-    prisma.passwordReset.update({ where: { id: row.id }, data: { usedAt: new Date() } }),
+    centralPrisma.passwordReset.update({ where: { id: row.id }, data: { usedAt: new Date() } }),
   ]);
 
   logger.info({ userId: row.userId }, 'password reset completed');

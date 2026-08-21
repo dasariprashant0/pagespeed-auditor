@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { prisma } from '@/lib/db';
+import { centralPrisma } from '@/lib/db/central';
 import { AcceptInviteForm } from '@/components/auth/AcceptInviteForm';
 import { AuthCard, AuthLink } from '@/components/auth/AuthCard';
 import { ButtonLink } from '@/components/ui/Button';
@@ -29,7 +29,7 @@ export default async function InvitePage({
   }
 
   // Only the hash is stored, so the link itself is the credential.
-  const invite = await prisma.invitation.findUnique({
+  const invite = await centralPrisma.invitation.findUnique({
     where: { tokenHash: createHash('sha256').update(token).digest('hex') },
     select: {
       email: true, role: true, expiresAt: true, acceptedAt: true,
@@ -60,7 +60,7 @@ export default async function InvitePage({
   }
 
   const hasAccount = Boolean(
-    await prisma.user.findUnique({ where: { email: invite.email }, select: { id: true } }),
+    await centralPrisma.user.findUnique({ where: { email: invite.email }, select: { id: true } }),
   );
 
   return (

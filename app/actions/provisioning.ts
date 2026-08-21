@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { requireCapability, ForbiddenError } from '@/lib/http/auth-guard';
-import { prisma } from '@/lib/db';
+import { centralPrisma } from '@/lib/db/central';
 import { encryptSecret } from '@/lib/crypto/secretBox';
 import { provisionRefFor } from '@/lib/services/org.service';
 import { validateNeonUrl, validateD1Credentials, ensureD1Schema, runTenantMigrations } from '@/lib/tenantDb/provision';
@@ -75,7 +75,7 @@ export async function provisionTenantAction(_prev: ProvisionResult | null, form:
     // migrating is the slower, more failure-prone half; D1 only gets written
     // once Neon (if it changed) is confirmed ready.
     if (!neonUnchanged) {
-      await prisma.organization.update({
+      await centralPrisma.organization.update({
         where: { id: organizationId },
         // 'provisioning' first, not 'ready' -- a crash mid-migration then
         // reads as visibly stuck, not silently fine.
@@ -85,13 +85,13 @@ export async function provisionTenantAction(_prev: ProvisionResult | null, form:
         await runTenantMigrations(neonRaw);
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e);
-        await prisma.organization.update({
+        await centralPrisma.organization.update({
           where: { id: organizationId },
           data: { provisionStatus: 'failed', provisionError: message },
         });
         return { ok: false, error: `Migration failed: ${message}`, field: 'neon' };
       }
-      await prisma.organization.update({
+      await centralPrisma.organization.update({
         where: { id: organizationId },
         data: {
           provisionStatus: 'ready',
@@ -103,7 +103,7 @@ export async function provisionTenantAction(_prev: ProvisionResult | null, form:
     }
 
     if (!d1Unchanged) {
-      await prisma.organization.update({
+      await centralPrisma.organization.update({
         where: { id: organizationId },
         data: {
           d1AccountIdEnc: encryptSecret(d1AccountRaw, `${organizationId}:d1AccountId`),

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { requireCapability, ForbiddenError } from '@/lib/http/auth-guard';
-import { prisma } from '@/lib/db';
+import { centralPrisma } from '@/lib/db/central';
 import { inviteMember, wouldOrphanOrganization, normalizeEmail } from '@/lib/services/account.service';
 import { emailConfigForOrg } from '@/lib/services/tenant.service';
 import { isRole, type Role } from '@/lib/auth/roles';
@@ -73,7 +73,7 @@ export async function changeRoleAction(userId: string, roleRaw: string): Promise
       return { ok: false, error: 'This is the only admin. Promote someone else first.' };
     }
 
-    await prisma.membership.updateMany({
+    await centralPrisma.membership.updateMany({
       where: { organizationId: ctx.organizationId, userId },
       data: { role },
     });
@@ -92,7 +92,7 @@ export async function removeMemberAction(userId: string): Promise<MemberResult> 
       return { ok: false, error: 'This is the only admin. Promote someone else first.' };
     }
 
-    await prisma.membership.deleteMany({ where: { organizationId: ctx.organizationId, userId } });
+    await centralPrisma.membership.deleteMany({ where: { organizationId: ctx.organizationId, userId } });
     revalidatePath('/settings/team');
     return { ok: true, message: 'Member removed.' };
   } catch (e) {
@@ -103,7 +103,7 @@ export async function removeMemberAction(userId: string): Promise<MemberResult> 
 export async function revokeInviteAction(inviteId: string): Promise<MemberResult> {
   try {
     const ctx = await requireCapability('members:manage');
-    await prisma.invitation.deleteMany({
+    await centralPrisma.invitation.deleteMany({
       where: { id: inviteId, organizationId: ctx.organizationId, acceptedAt: null },
     });
     revalidatePath('/settings/team');
@@ -122,11 +122,11 @@ export async function updateProfileAction(_prev: unknown, form: FormData): Promi
 
     if (!email.includes('@')) return { ok: false, error: 'That does not look like an email address.' };
     if (email !== ctx.email) {
-      const taken = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+      const taken = await centralPrisma.user.findUnique({ where: { email }, select: { id: true } });
       if (taken) return { ok: false, error: 'Another account already uses that email.' };
     }
 
-    await prisma.user.update({ where: { id: ctx.userId }, data: { name: name || null, email } });
+    await centralPrisma.user.update({ where: { id: ctx.userId }, data: { name: name || null, email } });
     revalidatePath('/settings/profile');
     return { ok: true, message: 'Profile updated.' };
   } catch (e) {
@@ -142,7 +142,7 @@ export async function changePasswordAction(_prev: unknown, form: FormData): Prom
     if (next.length < 12) return { ok: false, error: 'Use a password of at least 12 characters.' };
 
     const { verifyPassword, hashPassword } = await import('@/lib/auth/password');
-    const user = await prisma.user.findUniqueOrThrow({
+    const user = await centralPrisma.user.findUniqueOrThrow({
       where: { id: ctx.userId },
       select: { passwordHash: true },
     });
@@ -159,7 +159,7 @@ export async function changePasswordAction(_prev: unknown, form: FormData): Prom
       };
     }
 
-    await prisma.user.update({
+    await centralPrisma.user.update({
       where: { id: ctx.userId },
       data: { passwordHash: await hashPassword(next) },
     });

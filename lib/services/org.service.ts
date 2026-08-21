@@ -1,4 +1,4 @@
-import { prisma } from '../db.ts';
+import { centralPrisma } from '../db/central.ts';
 import { decryptSecret } from '../crypto/secretBox.ts';
 import { NotFoundError } from '../errors.ts';
 import type { D1Credentials } from '../blob.ts';
@@ -28,7 +28,7 @@ export interface ProvisionRef {
 }
 
 export async function provisionRefFor(organizationId: string): Promise<ProvisionRef> {
-  const org = await prisma.organization.findUnique({
+  const org = await centralPrisma.organization.findUnique({
     where: { id: organizationId },
     select: {
       provisionStatus: true,
@@ -59,7 +59,7 @@ export async function provisionRefFor(organizationId: string): Promise<Provision
  * `creds` parameter is what actually applies that fallback.
  */
 export async function d1CredentialsForOrg(organizationId: string): Promise<D1Credentials | null> {
-  const org = await prisma.organization.findUnique({
+  const org = await centralPrisma.organization.findUnique({
     where: { id: organizationId },
     select: { d1AccountIdEnc: true, d1DatabaseIdEnc: true, d1ApiTokenEnc: true },
   });

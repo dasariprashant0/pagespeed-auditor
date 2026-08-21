@@ -1,6 +1,6 @@
 import { PageHeader } from '@/components/ui/PageHeader';
 import { requireSession } from '@/lib/http/auth-guard';
-import { prisma } from '@/lib/db';
+import { centralPrisma } from '@/lib/db/central';
 import { SettingsNav } from '@/components/settings/SettingsNav';
 import { TeamManager, type MemberRow, type InviteRow } from '@/components/settings/TeamManager';
 import { can, isRole } from '@/lib/auth/roles';
@@ -13,7 +13,7 @@ export default async function TeamPage() {
   const ctx = await requireSession();
 
   const [memberships, invitations] = await Promise.all([
-    prisma.membership.findMany({
+    centralPrisma.membership.findMany({
       where: { organizationId: ctx.organizationId },
       orderBy: { createdAt: 'asc' },
       select: {
@@ -21,7 +21,7 @@ export default async function TeamPage() {
         user: { select: { id: true, email: true, name: true } },
       },
     }),
-    prisma.invitation.findMany({
+    centralPrisma.invitation.findMany({
       where: { organizationId: ctx.organizationId, acceptedAt: null, expiresAt: { gt: new Date() } },
       orderBy: { createdAt: 'desc' },
       select: { id: true, email: true, role: true, expiresAt: true },
