@@ -18,6 +18,7 @@ export function SettingsNav({ active }: { active: string }) {
     { href: '/settings/team', label: 'Teammates' },
     { href: '/settings/site', label: 'Site' },
     { href: '/settings/automation', label: 'Automation' },
+    { href: '/settings/notifications', label: 'Notifications' },
   ];
 
   return (

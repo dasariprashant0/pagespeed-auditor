@@ -2,9 +2,12 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { requireSession } from '@/lib/http/auth-guard';
 import { can } from '@/lib/auth/roles';
 import { prisma } from '@/lib/db';
-import { listSites } from '@/lib/services/tenant.service';
+import { getEnv } from '@/lib/env';
+import { listSites, orgEmailRef } from '@/lib/services/tenant.service';
 import { listGroupsWithAggregates } from '@/lib/services/results.service';
 import { historyOverview } from '@/lib/services/retention.service';
+import { estimateRun } from '@/lib/services/estimate.service';
+import { emailConfigProblem } from '@/lib/notify/email';
 import { SettingsNav } from '@/components/settings/SettingsNav';
 import { AddSiteForm, EditSiteForm, PsiKeyForm } from '@/components/settings/SiteForms';
 import { IngestButton } from '@/components/settings/IngestButton';
@@ -30,6 +33,7 @@ function bytes(n: number): string {
 }
 
 export default async function SiteSettingsPage() {
+  const env = getEnv();
   // Visible to every role -- only site:manage decides whether these forms
   // actually accept input. See docs/DECISIONS.md.
   const ctx = await requireSession();
@@ -37,11 +41,19 @@ export default async function SiteSettingsPage() {
   const sites = await listSites(ctx.organizationId);
   const site = sites[0] ?? null;
 
-  const [groups, history] = await Promise.all([
+  const [groups, history, orgEmail] = await Promise.all([
     site ? listGroupsWithAggregates(site.id, { strategy: 'mobile' }) : Promise.resolve([]),
     site ? historyOverview(prisma, site.id) : Promise.resolve(null),
+    orgEmailRef(ctx.organizationId),
   ]);
   const pageCount = groups.reduce((n, g) => n + g.pageCount, 0);
+  const sweepEstimate = site ? await estimateRun(pageCount * 2, site.id) : null;
+
+  // An organisation's own SMTP override (orgEmail.hasOverride) bypasses the
+  // shared default entirely -- emailConfigProblem() only describes that
+  // shared default, so it would wrongly report "not configured" for an
+  // organisation that has already set its own mailbox.
+  const emailProblem = orgEmail.hasOverride ? null : emailConfigProblem();
 
   return (
     <>
@@ -111,6 +123,37 @@ export default async function SiteSettingsPage() {
                 )}
               </Panel>
             )}
+
+            <Panel
+              title="Configuration"
+              hint="A quick operational snapshot — some of this is set for the whole deployment (ask whoever manages hosting to change it), the rest is just measured."
+            >
+              <dl className="divide-y divide-[var(--border)] text-[12px]">
+                {([
+                  ['Pages tested at once', String(env.WORKER_CONCURRENCY)],
+                  ['Google rate limit', `${env.PSI_RATE_MAX} requests per ${env.PSI_RATE_WINDOW_MS / 1000}s`],
+                  [
+                    'Typical time per page',
+                    sweepEstimate?.measured ? `${Math.round(sweepEstimate.medianCallMs / 1000)} seconds (measured)` : 'not measured yet',
+                  ],
+                  [
+                    'Email',
+                    orgEmail.hasOverride
+                      ? `sending via your own mailbox (${orgEmail.host})`
+                      : emailProblem
+                        ? 'not sending — see Settings → Notifications'
+                        : process.env.EMAIL_TRANSPORT === 'resend'
+                          ? `sending as ${process.env.EMAIL_FROM} via Resend`
+                          : `sending via ${process.env.SMTP_HOST}`,
+                  ],
+                ] as Array<[string, string]>).map(([k, v]) => (
+                  <div key={k} className="flex flex-wrap gap-x-4 py-1.5">
+                    <dt className="w-44 shrink-0 text-[var(--muted)]">{k}</dt>
+                    <dd className="min-w-0 break-all">{v}</dd>
+                  </div>
+                ))}
+              </dl>
+            </Panel>
           </>
         )}
       </div>

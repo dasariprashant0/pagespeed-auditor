@@ -124,7 +124,10 @@ export async function updateOrgEmailAction(_prev: unknown, form: FormData): Prom
         where: { id: ctx.organizationId },
         data: { smtpHost: null, smtpPort: null, smtpUser: null, smtpPass: null, smtpFrom: null },
       });
-      revalidatePath('/settings/automation');
+      // Both revalidated: the form lives on Notifications, but Site's own
+      // Configuration panel shows the same "is there an override" status.
+      revalidatePath('/settings/notifications');
+      revalidatePath('/settings/site');
       return { ok: true, message: 'Cleared — invites and notifications will use the shared default again.' };
     }
 
@@ -154,7 +157,8 @@ export async function updateOrgEmailAction(_prev: unknown, form: FormData): Prom
       where: { id: ctx.organizationId },
       data: { smtpHost: host, smtpPort: port, smtpUser: user, smtpPass: pass, smtpFrom: from || null },
     });
-    revalidatePath('/settings/automation');
+    revalidatePath('/settings/notifications');
+    revalidatePath('/settings/site');
     return { ok: true, message: 'Saved and verified — invites and notifications now send from this mailbox.' };
   } catch (e) {
     return fail(e);

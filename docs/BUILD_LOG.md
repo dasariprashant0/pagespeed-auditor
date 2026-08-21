@@ -2087,3 +2087,42 @@ practice. `SignupForm.tsx`'s organisation-name field hint said "You can
 track several sites under it" -- actively wrong, not just optimistic.
 Reworded to "You'll add the one site you're measuring next." No other
 copy made the same claim.
+
+## 21 Aug 2026 (later still) -- Settings reorganized: Notifications split out of Automation
+
+Requested directly: "Automation" carried scheduling AND email/notification
+config, which didn't read as one thing, and the read-only "Configuration"
+block at the bottom belonged somewhere else entirely.
+
+- New **Notifications** tab (`/settings/notifications`): "Email sending"
+  (`OrgEmailForm`) and "Notifications" (`NotificationForm`), moved
+  verbatim out of Automation along with all their data-fetching
+  (`orgEmailRef`, `emailConfigProblem`, the `notif` query). Gated by the
+  same `automation:manage` capability that already governed them --
+  no new capability invented for a page split.
+- **Automation** now holds only `AutomationStatus` (scheduler health,
+  recent runs) and the schedule form -- matches its name again.
+- **Configuration** moved into the **Site** tab, trimmed rather than
+  copied verbatim: dropped `Site`/`Base URL`/`Sitemap`/`Pages
+  tracked`/`PSI API key` rows since the Site tab already shows every one
+  of those via `EditSiteForm`/`PsiKeyForm`/the `Pages` panel a few
+  inches above -- keeping them would've been the exact kind of
+  redundant-copy problem this session's earlier copy audit went looking
+  for. What's left (pages-tested-at-once, Google rate limit, typical
+  time per page, email status) isn't shown anywhere else on that page.
+- Extracted the `Section` component (was private to
+  `automation/page.tsx`) into `components/settings/Section.tsx` so
+  Notifications could reuse it instead of duplicating eight lines.
+- Fixed two `revalidatePath('/settings/automation')` calls in
+  `updateOrgEmailAction` (`app/actions/site.ts`) that would have
+  revalidated the wrong, now-unrelated page -- both now revalidate
+  `/settings/notifications` (where the form lives) and `/settings/site`
+  (whose new Configuration panel shows the same override status).
+
+Verified: `npx tsc --noEmit`, `npm run lint`, `npm test` (172/172), `npm
+run build` all clean -- `/settings/notifications` present as a real
+route. Browser click-through was attempted but hit the same preview-tool
+session/cookie friction as earlier this session (a login succeeded per
+the network log, but a subsequent navigate landed back on `/login`);
+asked the user to confirm visually themselves rather than keep fighting
+the tool.
