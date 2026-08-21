@@ -1,4 +1,4 @@
-import { prisma } from './db.ts';
+import { getTenantPrisma } from './db/tenant.ts';
 import { getEnv } from './env.ts';
 import { PsiRateLimiter } from './psi/rateLimiter.ts';
 
@@ -11,15 +11,15 @@ import { PsiRateLimiter } from './psi/rateLimiter.ts';
  * Redis's blocking commands -- was removed.
  */
 
-let limiter: PsiRateLimiter | undefined;
+const limiters = new Map<string, PsiRateLimiter>();
 
-export function getPsiRateLimiter(): PsiRateLimiter {
+export async function getPsiRateLimiter(organizationId: string): Promise<PsiRateLimiter> {
+  const cached = limiters.get(organizationId);
+  if (cached) return cached;
   const env = getEnv();
-  limiter ??= new PsiRateLimiter({
-    db: prisma,
-    max: env.PSI_RATE_MAX,
-    windowMs: env.PSI_RATE_WINDOW_MS,
-  });
+  const db = await getTenantPrisma(organizationId);
+  const limiter = new PsiRateLimiter({ db, max: env.PSI_RATE_MAX, windowMs: env.PSI_RATE_WINDOW_MS });
+  limiters.set(organizationId, limiter);
   return limiter;
 }
 
@@ -37,7 +37,8 @@ const HEARTBEAT_KEY = 'scheduler:heartbeat';
 const CRON_INTERVAL_MS = 15 * 60_000;
 const STALE_AFTER_MS = CRON_INTERVAL_MS * 2 + 60_000;
 
-export async function stampSchedulerHeartbeat(): Promise<void> {
+export async function stampSchedulerHeartbeat(organizationId: string): Promise<void> {
+  const prisma = await getTenantPrisma(organizationId);
   await prisma.keyValue
     .upsert({
       where: { key: HEARTBEAT_KEY },
@@ -52,8 +53,9 @@ export interface SchedulerHealth {
   lastTickSecondsAgo: number | null;
 }
 
-export async function schedulerHealth(): Promise<SchedulerHealth> {
+export async function schedulerHealth(organizationId: string): Promise<SchedulerHealth> {
   try {
+    const prisma = await getTenantPrisma(organizationId);
     const row = await prisma.keyValue.findUnique({ where: { key: HEARTBEAT_KEY } });
     if (!row) return { alive: false, lastTickSecondsAgo: null };
     const ageMs = Date.now() - Number(row.value);
@@ -87,8 +89,13 @@ export interface RunLogEvent {
 const RUN_LOG_MAX_LINES = 300;
 
 /** Never lets a logging failure break the actual audit -- swallows its own errors. */
-export async function pushRunLogEvent(runId: string, event: RunLogEvent): Promise<void> {
+export async function pushRunLogEvent(
+  organizationId: string,
+  runId: string,
+  event: RunLogEvent,
+): Promise<void> {
   try {
+    const prisma = await getTenantPrisma(organizationId);
     await prisma.runLogEvent.create({
       data: {
         runId,
@@ -120,8 +127,13 @@ export async function pushRunLogEvent(runId: string, event: RunLogEvent): Promis
 }
 
 /** Oldest first, so new lines append at the bottom like a real terminal. */
-export async function readRunLog(runId: string, limit = 150): Promise<RunLogEvent[]> {
+export async function readRunLog(
+  organizationId: string,
+  runId: string,
+  limit = 150,
+): Promise<RunLogEvent[]> {
   try {
+    const prisma = await getTenantPrisma(organizationId);
     const rows = await prisma.runLogEvent.findMany({
       where: { runId },
       orderBy: { createdAt: 'desc' },
@@ -143,6 +155,7 @@ export async function readRunLog(runId: string, limit = 150): Promise<RunLogEven
 }
 
 /** Called once a run is terminal -- the live log has nothing left to show. */
-export async function clearRunLog(runId: string): Promise<void> {
+export async function clearRunLog(organizationId: string, runId: string): Promise<void> {
+  const prisma = await getTenantPrisma(organizationId);
   await prisma.runLogEvent.deleteMany({ where: { runId } }).catch(() => {});
 }
