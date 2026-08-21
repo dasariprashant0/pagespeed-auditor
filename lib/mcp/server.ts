@@ -1,6 +1,6 @@
 import { createMcpHandler } from 'mcp-handler';
 import { z } from 'zod';
-import { prisma } from '../db.ts';
+import { getTenantPrisma } from '../db/tenant.ts';
 import { listGroupsWithAggregates, listPagesInGroup, getScoreHistory } from '../services/results.service.ts';
 import { getPageReport } from '../services/report.service.ts';
 import { getTopIssues } from '../services/issues.service.ts';
@@ -39,8 +39,10 @@ function orgIdOf(ctx: unknown): string {
 }
 
 async function siteId(ctx: unknown): Promise<string> {
+  const organizationId = orgIdOf(ctx);
+  const prisma = await getTenantPrisma(organizationId);
   const site = await prisma.site.findFirst({
-    where: { organizationId: orgIdOf(ctx) },
+    where: { organizationId },
     orderBy: { createdAt: 'asc' },
     select: { id: true },
   });
@@ -50,8 +52,10 @@ async function siteId(ctx: unknown): Promise<string> {
 
 /** Resolves a URL the way ingestion did, so agents can pass any form of it. */
 async function findPage(url: string, ctx: unknown) {
+  const organizationId = orgIdOf(ctx);
+  const prisma = await getTenantPrisma(organizationId);
   const site = await prisma.site.findFirst({
-    where: { organizationId: orgIdOf(ctx) },
+    where: { organizationId },
     orderBy: { createdAt: 'asc' },
     select: { id: true, baseUrl: true },
   });
@@ -88,7 +92,8 @@ export const mcpHandler = createMcpHandler((server) => {
       annotations: { readOnlyHint: true },
     },
     async ({ strategy }, ctx) => {
-      const groups = await listGroupsWithAggregates(await siteId(ctx), { strategy: strategy as PsiStrategy });
+      const organizationId = orgIdOf(ctx);
+      const groups = await listGroupsWithAggregates(organizationId, await siteId(ctx), { strategy: strategy as PsiStrategy });
       const rows = groups
         .filter((g) => g.pageCount > 0)
         .map((g) => `${g.slug}\t${g.pageCount} pages\tperf ${g.aggregate.performance ?? '--'}\tworst ${g.worstPerformance ?? '--'}\t${g.auditedCount} audited`);
@@ -109,18 +114,20 @@ export const mcpHandler = createMcpHandler((server) => {
       annotations: { readOnlyHint: true },
     },
     async ({ group, strategy, limit }, ctx) => {
+      const organizationId = orgIdOf(ctx);
       const sid = await siteId(ctx);
+      const prisma = await getTenantPrisma(organizationId);
       const g = group
         ? await prisma.group.findFirst({ where: { siteId: sid, slug: group }, select: { id: true } })
         : null;
       if (group && !g) throw new Error(`No group "${group}". Call list_groups first.`);
 
       const pages = g
-        ? await listPagesInGroup(g.id, { strategy: strategy as PsiStrategy })
+        ? await listPagesInGroup(organizationId, g.id, { strategy: strategy as PsiStrategy })
         : (await Promise.all(
-            (await listGroupsWithAggregates(sid, { strategy: strategy as PsiStrategy }))
+            (await listGroupsWithAggregates(organizationId, sid, { strategy: strategy as PsiStrategy }))
               .filter((x) => x.pageCount > 0)
-              .map((x) => listPagesInGroup(x.id, { strategy: strategy as PsiStrategy })),
+              .map((x) => listPagesInGroup(organizationId, x.id, { strategy: strategy as PsiStrategy })),
           )).flat();
 
       const shown = pages.slice(0, limit);
@@ -140,8 +147,9 @@ export const mcpHandler = createMcpHandler((server) => {
       annotations: { readOnlyHint: true },
     },
     async ({ url, strategy }, ctx) => {
+      const organizationId = orgIdOf(ctx);
       const page = await findPage(url, ctx);
-      const report = await getPageReport(page.id, strategy as PsiStrategy);
+      const report = await getPageReport(organizationId, page.id, strategy as PsiStrategy);
       if (!report.result) {
         return text(`${page.url} has not been audited on ${strategy}. Use run_page_audit to measure it.`);
       }
@@ -164,10 +172,11 @@ export const mcpHandler = createMcpHandler((server) => {
     },
     async ({ url, group, strategy, limit }, ctx) => {
       if (!url === !group) throw new Error('Pass exactly one of url or group.');
+      const organizationId = orgIdOf(ctx);
 
       if (url) {
         const page = await findPage(url, ctx);
-        const history = await getScoreHistory({ pageId: page.id }, { strategy: strategy as PsiStrategy, limit });
+        const history = await getScoreHistory(organizationId, { pageId: page.id }, { strategy: strategy as PsiStrategy, limit });
         const pts = history.filter((p) => p.v !== null);
         if (pts.length === 0) return text(`No history for ${page.url} on ${strategy}.`);
         return text(
@@ -178,8 +187,9 @@ export const mcpHandler = createMcpHandler((server) => {
       }
 
       const sid = await siteId(ctx);
+      const prisma = await getTenantPrisma(organizationId);
       const g = await prisma.group.findFirstOrThrow({ where: { siteId: sid, slug: group! }, select: { id: true } });
-      const history = await getScoreHistory({ groupId: g.id }, { strategy: strategy as PsiStrategy, limit });
+      const history = await getScoreHistory(organizationId, { groupId: g.id }, { strategy: strategy as PsiStrategy, limit });
       const pts = history.filter((p) => p.v !== null);
       return text(pts.length ? pts.map((p) => `${p.t.slice(0, 10)}  ${p.v}`).join('\n') : `No history for ${group}.`);
     },
@@ -194,7 +204,8 @@ export const mcpHandler = createMcpHandler((server) => {
       annotations: { readOnlyHint: true },
     },
     async ({ strategy, limit }, ctx) => {
-      const issues = await getTopIssues({ siteId: await siteId(ctx), strategy: strategy as PsiStrategy, limit });
+      const organizationId = orgIdOf(ctx);
+      const issues = await getTopIssues(organizationId, { siteId: await siteId(ctx), strategy: strategy as PsiStrategy, limit });
       if (issues.length === 0) return text('No completed run yet, so there is nothing to rank.');
       return text(
         issues.map((i) => `${String(i.pagesAffected).padStart(4)} of ${i.pagesTotal} pages  ${i.title}`).join('\n'),
@@ -211,8 +222,9 @@ export const mcpHandler = createMcpHandler((server) => {
       annotations: { readOnlyHint: false, idempotentHint: true },
     },
     async ({ url, strategy, refresh }, ctx) => {
+      const organizationId = orgIdOf(ctx);
       const page = await findPage(url, ctx);
-      const rec = await getOrCreateRecommendation(page.id, strategy as PsiStrategy, { force: refresh });
+      const rec = await getOrCreateRecommendation(organizationId, page.id, strategy as PsiStrategy, { force: refresh });
       return text(`${rec.cached ? '(cached) ' : ''}${rec.content}`);
     },
   );
@@ -226,8 +238,10 @@ export const mcpHandler = createMcpHandler((server) => {
       annotations: { readOnlyHint: false },
     },
     async ({ url, strategy }, ctx) => {
+      const organizationId = orgIdOf(ctx);
       const page = await findPage(url, ctx);
       const sid = await siteId(ctx);
+      const prisma = await getTenantPrisma(organizationId);
       const active = await findActiveRun(prisma, sid);
       if (active) throw new Error(`A ${active.type} run is already active (${active.id}). Poll it with get_run_status.`);
 
@@ -235,9 +249,9 @@ export const mcpHandler = createMcpHandler((server) => {
       const scope = { kind: 'page' as const, ref: page.id, strategies };
       const pairs = await expandScope(prisma, sid, scope);
       const runId = await createRun(prisma, { siteId: sid, type: 'page', triggeredBy: 'manual', scope, totalJobs: pairs.length });
-      await startAuditRun(runId, pairs);
+      await startAuditRun(runId, pairs, organizationId);
 
-      const est = await estimateRun(pairs.length, sid);
+      const est = await estimateRun(organizationId, pairs.length, sid);
       return text(`Queued ${pairs.length} audit(s) for ${page.url}.\nrunId: ${runId}\nEstimated ${formatDuration(est.seconds)}.`);
     },
   );
@@ -252,7 +266,9 @@ export const mcpHandler = createMcpHandler((server) => {
       annotations: { readOnlyHint: false },
     },
     async ({ group, strategy }, ctx) => {
+      const organizationId = orgIdOf(ctx);
       const sid = await siteId(ctx);
+      const prisma = await getTenantPrisma(organizationId);
       const active = await findActiveRun(prisma, sid);
       if (active) throw new Error(`A ${active.type} run is already active (${active.id}).`);
 
@@ -262,9 +278,9 @@ export const mcpHandler = createMcpHandler((server) => {
       if (pairs.length === 0) throw new Error(`No active pages in group "${group}".`);
 
       const runId = await createRun(prisma, { siteId: sid, type: 'group', triggeredBy: 'manual', scope, totalJobs: pairs.length });
-      await startAuditRun(runId, pairs);
+      await startAuditRun(runId, pairs, organizationId);
 
-      const est = await estimateRun(pairs.length, sid);
+      const est = await estimateRun(organizationId, pairs.length, sid);
       return text(`Queued ${pairs.length} audit(s) for "${group}".\nrunId: ${runId}\nEstimated ${formatDuration(est.seconds)}.`);
     },
   );
@@ -284,8 +300,9 @@ export const mcpHandler = createMcpHandler((server) => {
       // this one used to skip straight to getRunProgress(runId), which
       // would have let one tenant's agent read another's run status by
       // guessing or reusing a runId from anywhere it had seen one.
-      await requireRunAccess(orgIdOf(ctx), runId);
-      const p = await getRunProgress(runId);
+      const organizationId = orgIdOf(ctx);
+      await requireRunAccess(organizationId, runId);
+      const p = await getRunProgress(organizationId, runId);
       if (!p) throw new Error(`No run ${runId}.`);
       const eta = p.etaSeconds === null ? '' : `, ~${Math.round(p.etaSeconds / 60)} min left`;
       return text(
