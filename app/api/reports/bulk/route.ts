@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireApiSession } from '@/lib/http/auth-guard';
-import { prisma } from '@/lib/db';
+import { getTenantPrisma } from '@/lib/db/tenant';
 import { defaultSite } from '@/lib/services/tenant.service';
 import { getPageReport } from '@/lib/services/report.service';
 import { buildAgentReport } from '@/lib/report/agentMarkdown';
@@ -32,6 +32,7 @@ export async function GET(req: Request) {
   const site = await defaultSite(session.organizationId);
   if (!site) return new NextResponse('No site configured.', { status: 404 });
 
+  const prisma = await getTenantPrisma(session.organizationId);
   const pages = await prisma.page.findMany({
     where: {
       siteId: site.id,
@@ -54,7 +55,7 @@ export async function GET(req: Request) {
       const sections: string[] = [];
       for (const s of wanted) {
         try {
-          const report = await getPageReport(p.id, s);
+          const report = await getPageReport(session.organizationId, p.id, s);
           if (!report.result) continue;
           sections.push(
             wanted.length > 1

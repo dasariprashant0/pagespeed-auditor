@@ -34,7 +34,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ pageId: 
     return NextResponse.json({ error: 'not_found' }, { status: 404 });
   }
 
-  const reports = await Promise.all(wanted.map((s) => getPageReport(pageId, s)));
+  const reports = await Promise.all(wanted.map((s) => getPageReport(session.organizationId, pageId, s)));
   // A strategy the page was never measured on is skipped rather than emitted
   // as an empty section -- a heading with nothing under it reads as a result.
   const parts = reports

@@ -1,6 +1,6 @@
 import { can } from '@/lib/auth/roles';
 import { PageHeader } from '@/components/ui/PageHeader';
-import { prisma } from '@/lib/db';
+import { getTenantPrisma } from '@/lib/db/tenant';
 import { requireSession } from '@/lib/http/auth-guard';
 import { defaultSite, orgEmailRef } from '@/lib/services/tenant.service';
 import { redirect } from 'next/navigation';
@@ -23,6 +23,7 @@ export default async function NotificationsSettingsPage() {
   // forms below actually accept input, the same capability that already
   // gated these two sections when they lived under Automation.
   const ctx = await requireSession();
+  const prisma = await getTenantPrisma(ctx.organizationId);
   const canEdit = can(ctx.role, 'automation:manage');
   const site = await defaultSite(ctx.organizationId);
   if (!site) redirect('/');

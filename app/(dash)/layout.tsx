@@ -32,7 +32,7 @@ export default async function DashLayout({ children }: { children: React.ReactNo
 
   // The one place the section list is loaded. Everything else reads it from
   // the rendered rail rather than querying again.
-  const groups = site ? await listGroupsWithAggregates(site.id, { strategy: 'mobile' }) : [];
+  const groups = site ? await listGroupsWithAggregates(ctx.organizationId, site.id, { strategy: 'mobile' }) : [];
 
   return (
     <AppShell

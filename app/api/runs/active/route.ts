@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireApiSession } from '@/lib/http/auth-guard';
-import { prisma } from '@/lib/db';
+import { getTenantPrisma } from '@/lib/db/tenant';
 import { toRunProgress } from '@/lib/services/site.service';
 import { estimateRun } from '@/lib/services/estimate.service';
 
@@ -14,6 +14,7 @@ export async function GET() {
   const session = await requireApiSession();
   if (session instanceof NextResponse) return session;
 
+  const prisma = await getTenantPrisma(session.organizationId);
   const runs = await prisma.auditRun.findMany({
     // Scoped: an unfiltered poll would leak another tenant's activity, and
     // their scope labels name their pages.
@@ -33,7 +34,7 @@ export async function GET() {
   });
 
   // One measurement shared by every run in the response.
-  const seed = runs.length > 0 ? (await estimateRun(1)).throughputPerSecond : undefined;
+  const seed = runs.length > 0 ? (await estimateRun(session.organizationId, 1)).throughputPerSecond : undefined;
 
   // Retry backoff now happens inside one workflow step (lib/workflows/auditRun.ts)
   // rather than as BullMQ delayed jobs, so there is no longer a queue to

@@ -57,9 +57,9 @@ export default async function PageReport({
   );
   if (!owned) notFound();
 
-  const report = await getPageReport(pageId, strategy);
+  const report = await getPageReport(ctx.organizationId, pageId, strategy);
 
-  const regressions = await regressionsForPage(pageId, strategy);
+  const regressions = await regressionsForPage(ctx.organizationId, pageId, strategy);
 
   const r = report.result;
 

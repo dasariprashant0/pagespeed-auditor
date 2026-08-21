@@ -34,7 +34,7 @@ export default async function GroupPage({
   const group = await requireGroupAccess(ctx.organizationId, slug).catch(() => null);
   if (!group) notFound();
 
-  const pages = await listPagesInGroup(group.id, { strategy });
+  const pages = await listPagesInGroup(ctx.organizationId, group.id, { strategy });
 
   // Tuples, not objects: on a 324-page section the repeated field names were
   // most of a 4.3 MB payload. The table expands them on the client.

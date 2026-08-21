@@ -23,6 +23,6 @@ export async function GET(_req: Request, { params }: { params: Promise<{ runId: 
     return NextResponse.json({ error: 'not_found' }, { status: 404 });
   }
 
-  const events = await readRunLog(runId);
+  const events = await readRunLog(session.organizationId, runId);
   return NextResponse.json({ events }, { headers: { 'cache-control': 'no-store' } });
 }

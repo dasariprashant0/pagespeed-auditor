@@ -17,7 +17,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ runId: 
     return NextResponse.json({ error: 'not_found' }, { status: 404 });
   }
 
-  const progress = await getRunProgress(runId);
+  const progress = await getRunProgress(session.organizationId, runId);
   if (!progress) return NextResponse.json({ error: 'not_found' }, { status: 404 });
 
   return NextResponse.json(progress, { headers: { 'cache-control': 'no-store' } });

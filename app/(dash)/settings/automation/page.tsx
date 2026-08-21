@@ -1,6 +1,6 @@
 import { can } from '@/lib/auth/roles';
 import { PageHeader } from '@/components/ui/PageHeader';
-import { prisma } from '@/lib/db';
+import { getTenantPrisma } from '@/lib/db/tenant';
 import { requireSession } from '@/lib/http/auth-guard';
 import { defaultSite } from '@/lib/services/tenant.service';
 import { redirect } from 'next/navigation';
@@ -20,16 +20,17 @@ export default async function SettingsPage() {
   // Visible to every role -- only automation:manage decides whether the
   // schedule form below actually accepts input.
   const ctx = await requireSession();
+  const prisma = await getTenantPrisma(ctx.organizationId);
   const canEdit = can(ctx.role, 'automation:manage');
   const site = await defaultSite(ctx.organizationId);
   if (!site) redirect('/');
 
   const [groups, schedule, scheduler, recentRuns] = await Promise.all([
-    listGroupsWithAggregates(site.id, { strategy: 'mobile' }),
+    listGroupsWithAggregates(ctx.organizationId, site.id, { strategy: 'mobile' }),
     prisma.schedule.findUnique({ where: { siteId: site.id } }),
     // Never let a Redis blip take the settings page down with it: not knowing
     // whether the scheduler is ticking is a worse answer than a 500, but only just.
-    schedulerHealth().catch(() => ({ alive: false, lastTickSecondsAgo: null })),
+    schedulerHealth(ctx.organizationId).catch(() => ({ alive: false, lastTickSecondsAgo: null })),
     prisma.auditRun.findMany({
       where: { siteId: site.id },
       orderBy: { startedAt: 'desc' },
@@ -60,7 +61,7 @@ export default async function SettingsPage() {
   };
 
   const activePages = groups.reduce((n, g) => n + g.pageCount, 0);
-  const sweepEstimate = await estimateRun(activePages * 2, site.id);
+  const sweepEstimate = await estimateRun(ctx.organizationId, activePages * 2, site.id);
 
   return (
     <>

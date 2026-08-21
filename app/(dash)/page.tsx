@@ -52,9 +52,9 @@ export default async function HomePage({
   }
 
   const [summary, groups, topIssues] = await Promise.all([
-    getSiteSummary(site.id, strategy),
-    listGroupsWithAggregates(site.id, { strategy }),
-    getTopIssues({ siteId: site.id, strategy, limit: 8 }),
+    getSiteSummary(ctx.organizationId, site.id, strategy),
+    listGroupsWithAggregates(ctx.organizationId, site.id, { strategy }),
+    getTopIssues(ctx.organizationId, { siteId: site.id, strategy, limit: 8 }),
   ]);
 
   // Every measured page, with its section, so the charts can group, filter and
@@ -65,7 +65,7 @@ export default async function HomePage({
     pages: (
       await Promise.all(
         charted.map(async (g, gi) => {
-          const pages = await listPagesInGroup(g.id, { strategy });
+          const pages = await listPagesInGroup(ctx.organizationId, g.id, { strategy });
           return pages.map(
             (p) =>
               [p.id, p.path, gi, p.scores.performance, p.scores.accessibility, p.scores.bestPractices, p.scores.seo, p.lcp] as ChartData['pages'][number],
