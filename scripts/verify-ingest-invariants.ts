@@ -13,7 +13,7 @@
  */
 import 'dotenv/config';
 import { readFileSync } from 'node:fs';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '../lib/generated/tenant/index.js';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { ingestSitemap } from '../lib/services/ingest.service.ts';
 import { mergeGroups, renameGroup } from '../lib/services/group.service.ts';
@@ -36,15 +36,15 @@ function check(label: string, cond: boolean, detail = '') {
 }
 
 async function main() {
-  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
-  // Its own throwaway organisation as well as its own site, so the check can
-  // never touch a real tenant's data.
-  const org = await prisma.organization.create({
-    data: { name: '__invariant_test__', slug: `invariant-${Date.now()}` },
-  });
+  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.TENANT_DEV_DATABASE_URL! }) });
+  // A fabricated, unique organisationId -- not a real Organization row.
+  // Site.organizationId is a plain non-relational column (see
+  // prisma/tenant/schema.prisma's own comment on why), so the isolation
+  // this throwaway value is here for doesn't need a second, central-DB
+  // client just to satisfy a foreign key that doesn't exist.
   const site = await prisma.site.create({
     data: {
-      organizationId: org.id,
+      organizationId: `invariant-org-${Date.now()}`,
       name: '__invariant_test__',
       sitemapUrl: `${BASE}/sitemap.xml`,
       baseUrl: BASE,
@@ -117,7 +117,6 @@ async function main() {
     await prisma.groupAlias.deleteMany({ where: { group: { siteId: site.id } } });
     await prisma.group.deleteMany({ where: { siteId: site.id } });
     await prisma.site.delete({ where: { id: site.id } });
-    await prisma.organization.delete({ where: { id: org.id } });
     await prisma.$disconnect();
   }
 
