@@ -91,7 +91,7 @@ erDiagram
     lab runs never produce it. **Never write `tbt` into `inp`** — it
     silently poisons every trend and regression comparison downstream.
   - `fieldCls` is **already divided by 100** — CrUX reports CLS × 100 raw.
-  - `rawJson` (legacy inline) / `rawJsonBlobKey` (current, Vercel Blob) —
+  - `rawJson` (legacy inline) / `rawJsonBlobKey` (current, Cloudflare D1) —
     exactly one of the two is ever set for a given row; see §5.
   - `@@unique([auditRunId, pageId, strategy])` is the durable idempotency
     guarantee — it's what survives a replayed Workflow step, the way a
@@ -110,17 +110,20 @@ erDiagram
 
 ## 5. Where the pruned Lighthouse JSON actually lives
 
-Added 20 Aug 2026 (`docs/DECISIONS.md` §13). `AuditResult.rawJson` is now
-**legacy-only** — every new row writes it `null` and stores a
-`rawJsonBlobKey` pointing into Vercel Blob instead (`lib/blob.ts`), keyed
-by `audit-raw-json/{runId}/{pageId}-{strategy}.json` — the same
-`(auditRunId, pageId, strategy)` triple the unique constraint already
-treats as unique, not the row's own id (which doesn't exist until the DB
-assigns it on insert). No backfill ran; old rows keep their inline data
-until the 10-per-page retention window ages them out naturally.
-`pruneSiteHistory` and `deleteRuns` (the manual delete-checks picker) both
-collect and clean up orphaned Blob objects — Postgres's cascading delete
-can't reach a separate object store.
+Added 20 Aug 2026 (`docs/DECISIONS.md` §13), moved again 21 Aug 2026
+(`docs/DECISIONS.md` §18). `AuditResult.rawJson` is now **legacy-only** —
+every new row writes it `null` and stores a `rawJsonBlobKey` instead
+(`lib/blob.ts`), keyed by `audit-raw-json/{runId}/{pageId}-{strategy}.json`
+— the same `(auditRunId, pageId, strategy)` triple the unique constraint
+already treats as unique, not the row's own id (which doesn't exist until
+the DB assigns it on insert). That key currently points into a Cloudflare
+D1 database (a `raw_json_blobs` table, reached over D1's HTTP query API),
+having briefly pointed into Vercel Blob before that. No backfill ran
+either time; old rows keep their inline data until the 10-per-page
+retention window ages them out naturally. `pruneSiteHistory` and
+`deleteRuns` (the manual delete-checks picker) both collect and clean up
+the orphaned rows this leaves behind — Postgres's cascading delete can't
+reach a separate store.
 
 ## 6. Retention
 

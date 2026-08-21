@@ -52,28 +52,37 @@ Listed here as a flat checklist for planning purposes only:
 10. Built the live "what's running" terminal (`RunTerminal`) -- originally
     Redis-backed, moved to Postgres 21 Aug 2026 (`docs/DECISIONS.md` §16).
 11. Moved `AuditResult.rawJson` to Vercel Blob (~15× cheaper per GB than
-    Neon for the same bytes), with cleanup wired into both prune paths.
+    Neon for the same bytes), with cleanup wired into both prune paths --
+    then moved again, 21 Aug 2026, to Cloudflare D1, after Blob's free
+    write-operation allowance turned out smaller than one full sweep of
+    this site (`docs/DECISIONS.md` §18).
 12. This document suite.
 
-Items 10 and 11 share the same unresolved local-verification limitation as
-item 9's underlying cause — see §3.
+Item 10 shares the same unresolved local-verification limitation as item
+9's underlying cause — see §3. Item 11's second move (to D1) actually
+*removed* a local-verification gap rather than adding one: unlike Vercel
+Blob, D1's HTTP API works identically from local dev.
 
 ## 3. Standing risk: local dev cannot verify everything
 
-Three separate things can only be trusted against a real Vercel deployment,
+Two separate things can only be trusted against a real Vercel deployment,
 never `next dev`:
 
 1. **Vercel Workflow step execution** — steps get queued but sometimes
    never run locally, no error, no log line (`docs/DECISIONS.md` §11).
 2. **`DATABASE_URL`** — genuinely unpullable for this project's production
    database (`docs/DECISIONS.md` §12).
-3. **`BLOB_READ_WRITE_TOKEN`** — same symptom, no local fallback either
-   (`docs/DECISIONS.md` §13).
+
+This used to be three things. `BLOB_READ_WRITE_TOKEN` had the same
+symptom with no local fallback, but no longer applies now that raw JSON
+storage is on Cloudflare D1 (`docs/DECISIONS.md` §18) — its credentials
+work the same way from anywhere, so this was verified locally before it
+shipped, not just against a deployment.
 
 Practical consequence for anyone continuing this work: **budget a real
 Vercel deploy-and-verify cycle into any change touching
-`lib/workflows/*`, `lib/blob.ts`, or a schema migration.** Type-checking
-and a local build are necessary, not sufficient.
+`lib/workflows/*` or a schema migration.** Type-checking and a local
+build are necessary, not sufficient.
 
 ## 4. Open items
 

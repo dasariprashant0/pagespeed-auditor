@@ -1784,3 +1784,50 @@ now says so.
 
 Verified: `npx tsc --noEmit`, `npm run lint`, `npm test` (141/141) all
 clean.
+
+## 21 Aug 2026 (later still) — Raw JSON moved off Vercel Blob to Cloudflare D1
+
+The Vercel Blob quota incident from earlier today turned out not to be a
+bug: Blob bills `put()` as an "Advanced Operation," free allowance
+2,000/month, and this site's full sweeps (1,000-2,000 pages x
+strategies, one `put()` each) use up the whole month in one or two
+sweeps by design. The account had already hit that ceiling, twice, with
+no way to buy past it without upgrading off Hobby.
+
+Tried Cloudflare R2 first (the obvious like-for-like replacement) and
+ruled it out for real, not on suspicion: enabling R2 requires a card on
+file with no bypass, confirmed by actually trying it on two different
+Cloudflare accounts. Compared four no-card alternatives (Backblaze B2,
+Supabase Storage, staying on Neon Postgres permanently, Cloudflare D1)
+and picked D1: no card gate (unlike R2, confirmed -- only R2 requires
+billing info, not D1/KV/Workers), 5 GB free storage, 100k writes/day, 5M
+reads/day, 2 MB max row size (pruned responses are 150-750 KB), and the
+Cloudflare account needed for it was already sitting there authenticated
+via `wrangler` from the aborted R2 attempt.
+
+Built: a D1 database (`pagespeed-auditor-rawjson`, one table
+`raw_json_blobs`), `lib/blob.ts` rewritten to call D1's HTTP query API
+directly (no Workers runtime, just an authenticated `fetch()`) with the
+exact same exported function signatures, so every call site
+(`audit.service.ts`, `report.service.ts`, `retention.service.ts`) needed
+no changes at all. Removed the now-unused `@vercel/blob` dependency and
+its two env vars.
+
+Real, non-obvious win: unlike Vercel Blob, this can be fully exercised
+from local dev -- D1's HTTP API doesn't care who's calling it. Verified
+the entire store/fetch/overwrite-on-retry/delete round trip against the
+actual production D1 database before wiring it into the app, not just
+against types. `test/blob.test.ts` also grew real unit tests (fake
+`fetch`, 8 new cases) for logic that was previously untestable at all.
+
+Full reasoning, and the four-way comparison, in `docs/DECISIONS.md` §18.
+Left as an explicit follow-up, not bundled in: batching every page's
+result at finalize time instead of writing once per page, which would
+cut write volume by two to three orders of magnitude -- D1's allowance
+makes it non-urgent, unlike it was on Blob.
+
+Verified: `npx tsc --noEmit`, `npm run lint`, `npm test` (149/149,
+including the new `blob.test.ts` cases), `npm run build` all clean, plus
+the real D1 round trip described above. Production env vars
+(`CLOUDFLARE_ACCOUNT_ID`/`CLOUDFLARE_D1_DATABASE_ID`/`CLOUDFLARE_API_TOKEN`)
+not yet set on Vercel as of this entry -- next step.

@@ -158,9 +158,9 @@ export async function historyOverview(
   distinctRuns: number;
   oldest: Date | null;
   storageBytes: number;
-  /** Results whose JSON lives in Vercel Blob rather than inline -- not
-   * counted in storageBytes above, which is Postgres-only. Billed
-   * separately, and much cheaper per GB -- see docs/DECISIONS.md §13. */
+  /** Results whose JSON lives in Cloudflare D1 rather than inline -- not
+   * counted in storageBytes above, which is Postgres-only. See
+   * docs/DECISIONS.md §18 (and §13 for why it left Postgres at all). */
   blobBackedResults: number;
 }> {
   const [agg, runs, storage, blobBackedResults] = await Promise.all([

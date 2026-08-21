@@ -13,7 +13,7 @@
 | Language | TypeScript, React 19 | `useOptimistic`, `useSyncExternalStore` used deliberately, not `useEffect` + `setState` |
 | Database | Postgres via Neon (Vercel Marketplace) | Prisma 7, `PrismaPg` driver adapter — no `url` in the datasource block, see `prisma.config.ts` |
 | Rate limiter / ops state | Postgres (`lib/opsState.ts`) | Token bucket for PSI pacing, live run-log events, scheduler heartbeat. Was Redis via Upstash until 21 Aug 2026 — removed after a real incident, see `docs/DECISIONS.md` §16 |
-| Object storage | Vercel Blob | Pruned Lighthouse JSON (`AuditResult.rawJson` replacement) — see `docs/DECISIONS.md` §13 |
+| Raw JSON storage | Cloudflare D1 (`lib/blob.ts`, over its HTTP query API) | Pruned Lighthouse JSON (`AuditResult.rawJson` replacement). Was Vercel Blob until 21 Aug 2026 — moved after its free write-op allowance turned out smaller than one full sweep, and Cloudflare R2 (the obvious replacement) requires a card to enable even for free-tier use. See `docs/DECISIONS.md` §13 and §18 |
 | Durable execution | Vercel Workflow DevKit (`workflow`, `@workflow/core`) | Replaced BullMQ, 20 Aug 2026 — see `docs/DECISIONS.md` §11 |
 | Auth | Session cookie (JWT via `jose`), bcrypt password hashes | `proxy.ts` is a UX layer only; `requireSession()`/`requireCapability()` in every Server Action is the real boundary |
 | Styling | Tailwind v4, CSS-first (`@theme inline` in `globals.css`) | No `tailwind.config.js` |
@@ -31,13 +31,13 @@ flowchart LR
     mcp[/api/mcp]
   end
   neon[(Neon Postgres)]
-  blob[(Vercel Blob)]
+  d1[(Cloudflare D1<br/>raw JSON, via HTTP query API)]
   psi[Google PageSpeed<br/>Insights API]
 
   web --> neon
-  web --> blob
+  web --> d1
   wf --> neon
-  wf --> blob
+  wf --> d1
   wf --> psi
   cron --> web
   mcp --> web
@@ -46,6 +46,12 @@ flowchart LR
 No Redis: removed entirely 21 Aug 2026 (`docs/DECISIONS.md` §16). The rate
 limiter, scheduler heartbeat, and live run log all live in Neon Postgres
 now, alongside everything else.
+
+Cloudflare D1 is the one piece of infrastructure that lives outside
+Vercel/Neon entirely -- a separate Cloudflare account, reached over plain
+HTTPS (D1's REST query API), not through the Workers runtime. See
+`docs/DECISIONS.md` §18 for why (Vercel Blob's free tier, R2's mandatory
+card).
 
 There is **no standalone worker process**. `npm run worker` does not exist.
 Audit dispatch is `lib/workflows/auditRun.ts`, triggered from Server Actions,
@@ -107,9 +113,9 @@ locally-triggered audit produced zero PSI/job-logger activity. **Any change
 to `lib/workflows/*` must be verified against a real Vercel deployment**,
 never trusted from local dev alone.
 
-## 6. Two things that can't be pulled locally
+## 6. One thing that can't be pulled locally
 
-Discovered 20 Aug 2026, both load-bearing for anyone touching this project:
+Discovered 20 Aug 2026, load-bearing for anyone touching this project:
 
 - **`DATABASE_URL`** — `vercel env pull --environment=production` returns
   an empty string for this project specifically (confirmed with
@@ -118,11 +124,12 @@ Discovered 20 Aug 2026, both load-bearing for anyone touching this project:
   against production. Fixed structurally: `"build": "prisma generate &&
   prisma migrate deploy && next build"` — migrations now apply inside
   Vercel's own build, the one place that demonstrably has a working value.
-- **`BLOB_READ_WRITE_TOKEN`** — same symptom, and local `.env` has no
-  `BLOB_*` variables at all as a fallback. The Blob read/write code was
-  verified against types + a full `next build` locally, then against a
-  live production audit immediately after deploying (see
-  `docs/DECISIONS.md` §13).
+
+This used to be two things — `BLOB_READ_WRITE_TOKEN` had the identical
+problem when raw JSON storage was on Vercel Blob. It no longer applies:
+Cloudflare D1 (`docs/DECISIONS.md` §18) is reached over a plain
+authenticated HTTP API, so its credentials work identically from local
+dev, CI, or production — there's nothing Vercel-specific to fail to pull.
 
 ## 7. Multi-tenancy
 

@@ -899,3 +899,90 @@ to; a bare "sign in" attempt for an email with no existing `User` row
 does not, and creating one anyway would be a dead-end account nobody
 could act on. It fails with a message pointing at signing up or asking
 for an invite instead.
+
+## 18. Raw JSON moved again, from Vercel Blob to Cloudflare D1 (21 Aug 2026)
+
+**Chosen:** `lib/blob.ts` (same exported functions, same call sites) now
+stores the pruned Lighthouse JSON in a Cloudflare D1 database
+(`pagespeed-auditor-rawjson`, one table: `raw_json_blobs(pathname TEXT
+PRIMARY KEY, body TEXT, created_at INTEGER)`), reached over D1's plain
+HTTP query API (`POST .../d1/database/{id}/query` with a bearer token) --
+no Cloudflare Workers runtime involved, this is a fetch() from wherever
+the code runs, same as calling any other API.
+
+**Why it moved a second time in three days.** §13 moved this data out of
+Postgres into Vercel Blob to fix a real cost/performance problem. It
+worked, but created a different one: Vercel Blob bills `put()` as an
+"Advanced Operation," and the Hobby plan's free allowance is 2,000 of
+those a month -- smaller than a single full sweep of this site (1,000-
+2,000 pages x strategies, one `put()` each). The account hit that ceiling
+for real, twice, days apart, and Hobby has no pay-as-you-go path past it
+without upgrading.
+
+**Why not Cloudflare R2** (the obvious like-for-like: also S3-shaped
+object storage, also Cloudflare). Verified directly, not assumed:
+enabling R2 requires a card on file, with no way to bypass the dialog,
+even to stay entirely inside its free tier. That was a hard no for this
+project, so R2 was ruled out despite otherwise being the closest
+replacement.
+
+**Why D1.** Checked four options against "no card, ever," since that
+constraint eliminated R2 outright:
+- **Backblaze B2** -- genuinely no card, 10 GB free forever, ~2,500 free
+  transactions/day, real S3-compatible SDKs. The strongest *object
+  storage* candidate, and still the better call if this app ever needs a
+  real file store (images, exports) rather than small JSON documents --
+  but it's a brand-new account and vendor for one table's worth of data.
+- **Supabase Storage** -- no card, but only 500 MB-1 GB free and the
+  project auto-pauses after 7 days with no database activity. Too small
+  and too fragile for a dependency this load-bearing.
+- **Neon Postgres, permanently** (undoing §13) -- genuinely zero new
+  vendor, and retention already bounds the total volume. Not chosen
+  *this time* only because it wasn't checked against the account's actual
+  current plan/usage before D1 came up as the faster path; worth
+  revisiting later; not ruled out on principle.
+- **Cloudflare D1 (chosen)** -- no card (confirmed: only R2 gates on
+  billing, not D1/KV/Workers), 5 GB free storage, 100k writes/day, 5M
+  reads/day, 2 MB max row size (pruned responses are 150-750 KB, well
+  under it), and -- the deciding practical factor -- the Cloudflare
+  account needed for it was already sitting there, authenticated via
+  `wrangler`, from the earlier (correctly aborted) attempt to use R2. Zero
+  new signup for the database itself; only the API token needed a manual
+  step (see below).
+
+**The `wrangler login` OAuth token is not the production credential.**
+It's short-lived (observed 1-hour expiry) and tied to an interactive CLI
+session -- calling D1's REST API from the deployed app needs a proper
+Cloudflare API Token (dash.cloudflare.com/profile/api-tokens -> Custom
+Token -> `D1:Edit` on this account), which has no expiry by default and
+is exactly what long-lived server credentials are for. Confirmed by
+trying: the OAuth token's own scopes don't even include token creation
+(`403` on `/user/tokens/permission_groups`), so provisioning it via API
+using the OAuth session wasn't an option to begin with -- this one step
+requires the dashboard.
+
+**Same upsert semantics as before, same reason.** `storeRawJson` still
+writes to a deterministic key
+(`audit-raw-json/{runId}/{pageId}-{strategy}.json`) via `INSERT ... ON
+CONFLICT(pathname) DO UPDATE`, for the identical reason Vercel Blob's
+`allowOverwrite: true` existed: a Workflow step retry re-runs from the
+top and re-uploads to the same key, and without an upsert the second
+attempt fails on "already exists" instead of succeeding.
+
+**Unlike Vercel Blob, this can be exercised from local dev, and was.**
+§13 could not verify a real `put`/`get`/`del` round trip outside a live
+Vercel deployment at all -- no local token, no fallback. D1's HTTP API is
+just an authenticated fetch to `api.cloudflare.com` from anywhere, so the
+full round trip (store, fetch, overwrite-on-retry, delete) was verified
+directly against the real database before this shipped, not inferred
+from types -- see `test/blob.test.ts` for the fake-fetch unit tests and
+this decision's own verification for the real one.
+
+**Not addressed here, and not forgotten:** the write-side inefficiency
+this inherited from §13 -- one write call per (page, strategy) result,
+same as before -- is a separate, still-open idea (batch every page's
+result in Postgres during a run and write once per run at finalize
+instead). D1's free allowance is generous enough that it isn't urgent
+the way Vercel Blob's was, but it would still cut write volume by two to
+three orders of magnitude if done. Left as a follow-up, not bundled into
+this migration.

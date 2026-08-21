@@ -105,8 +105,8 @@ export default async function SiteSettingsPage() {
                 {history.blobBackedResults > 0 && (
                   <p className="mt-3 text-[11px] text-[var(--muted)]">
                     {history.blobBackedResults.toLocaleString()} of those results have their full report
-                    stored in Vercel Blob rather than here — billed separately, at a much lower per-GB
-                    rate, and not included in &ldquo;Storage used&rdquo; above.
+                    stored separately rather than here, and are not included in &ldquo;Storage
+                    used&rdquo; above.
                   </p>
                 )}
               </Panel>

@@ -27,10 +27,10 @@ notifications, regression detection, on-demand AI recommendations, and a
 ## Setup
 
 Requires **OrbStack** (or any `docker compose` runtime) and Node 26+ for local
-dev. Production runs on Vercel with Neon (Postgres) and Vercel Blob — see
-`docs/TRD.md` §1–2 for the full deployment topology. No Redis: the rate
-limiter, scheduler heartbeat, and live run log all live in Postgres — see
-`docs/DECISIONS.md` §16.
+dev. Production runs on Vercel with Neon (Postgres) and Cloudflare D1 (raw
+JSON storage) — see `docs/TRD.md` §1–2 for the full deployment topology. No
+Redis: the rate limiter, scheduler heartbeat, and live run log all live in
+Postgres — see `docs/DECISIONS.md` §16.
 
 ```bash
 brew install orbstack        # then launch it once
@@ -97,7 +97,7 @@ must filter `status: 'ok'` or the numbers will be wrong.
 Next.js app ──┐
               ├──> lib/services/* ──> Postgres (Prisma 7 + pg adapter)
 MCP server ───┤         │              (also: rate limiter, live run log, heartbeat)
-Vercel Cron ──┘         ├──> Vercel Blob (pruned Lighthouse JSON)
+Vercel Cron ──┘         ├──> Cloudflare D1 (pruned Lighthouse JSON)
                         └──> Vercel Workflow (lib/workflows/auditRun.ts) ──> PSI API
 ```
 

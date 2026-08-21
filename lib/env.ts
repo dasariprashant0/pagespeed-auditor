@@ -69,6 +69,19 @@ const schema = z.object({
    * worse than one that has plainly aged out.
    */
   RESULT_RETAIN_RUNS: int(10),
+
+  /**
+   * Where the pruned Lighthouse JSON actually lives -- see lib/blob.ts and
+   * docs/DECISIONS.md §18. A Cloudflare D1 database, called over its plain
+   * HTTP query API (no Workers runtime involved), because Vercel Blob's
+   * free "Advanced Operations" allowance (2,000/month) is smaller than a
+   * single full sweep of this site, and Cloudflare R2 -- the obvious
+   * like-for-like replacement -- requires a card to enable even on its free
+   * tier. D1's free tier does not.
+   */
+  CLOUDFLARE_ACCOUNT_ID: z.string().default(''),
+  CLOUDFLARE_D1_DATABASE_ID: z.string().default(''),
+  CLOUDFLARE_API_TOKEN: z.string().default(''),
 });
 
 export type Env = z.infer<typeof schema>;

@@ -47,12 +47,13 @@ npm test           # must pass — 138 tests as of this writing
    queued but sometimes never execute, no error, no log line. Confirmed
    again 20 Aug 2026. **Verify any change to `lib/workflows/*` against a
    real Vercel deployment, never trust local dev alone.**
-2. **Two env vars can't be pulled locally for this project's production
-   environment**: `DATABASE_URL` and `BLOB_READ_WRITE_TOKEN` both come
-   back empty from `vercel env pull`, with no local fallback for the
-   latter. Migrations run inside the build itself now
-   (`docs/DECISIONS.md` §12); Blob's read/write path can only be verified
-   against a live deployment (§13).
+2. **`DATABASE_URL` can't be pulled locally for this project's production
+   environment** -- comes back empty from `vercel env pull`, with no local
+   fallback. Migrations run inside the build itself now
+   (`docs/DECISIONS.md` §12). The equivalent Blob-token problem this used
+   to also name doesn't apply anymore: raw JSON storage moved off Vercel
+   Blob to Cloudflare D1 (§18), which unlike Blob CAN be exercised fully
+   from local dev.
 
 ## Things a fresh agent will get wrong unless told
 
@@ -90,7 +91,7 @@ there was when this file was last written.
 
 ## Decisions that are settled — do not re-litigate
 
-Full reasoning in `docs/DECISIONS.md` (§1–§13). In brief: Postgres +
+Full reasoning in `docs/DECISIONS.md` (§1–§18). In brief: Postgres +
 Prisma + Vercel Workflow (BullMQ was replaced, not the original plan);
 batch size sits above the rate limiter's throughput need, not below; full
 sweeps are schedule-only with no manual button and no `run_full_sweep`
@@ -99,4 +100,6 @@ beside it; the `AuditIssue` side table (never aggregate over `rawJson`);
 `GroupAlias` so merged groups don't reappear; pages are deactivated not
 deleted; Server Actions for all UI mutations with `requireSession()`/
 `requireCapability()` first in every one; no charting library; the pruned
-Lighthouse JSON lives in Vercel Blob for new rows, not inline in Postgres.
+Lighthouse JSON lives in Cloudflare D1 for new rows, not inline in
+Postgres (moved there from Vercel Blob, §18, after Blob's free write-op
+allowance turned out smaller than one full sweep).
