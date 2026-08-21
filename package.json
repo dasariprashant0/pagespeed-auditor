@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && prisma migrate deploy && next build",
+    "build": "prisma generate && prisma generate --config prisma/tenant/prisma.config.ts && prisma migrate deploy && next build",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
@@ -13,7 +13,7 @@
     "db:down": "docker compose -f docker-compose.dev.yml down",
     "db:migrate": "prisma migrate dev && prisma generate && echo \"\n  Schema changed — RESTART the dev server; it caches the generated client.\n\"",
     "db:studio": "prisma studio",
-    "db:generate": "prisma generate",
+    "db:generate": "prisma generate && prisma generate --config prisma/tenant/prisma.config.ts",
     "db:seed": "tsx prisma/seed.ts",
     "throughput-dryrun": "tsx scripts/throughput-dryrun.ts",
     "inspect-sitemap": "tsx scripts/inspect-sitemap.ts",
