@@ -1,161 +1,35 @@
-// PageSpeed Auditor data model.
+// The tenant half of the split described in docs/DECISIONS.md §19 -- one
+// database like this per organisation, provisioned on demand. Everything
+// here used to live in prisma/schema.prisma alongside the identity models
+// (User, Organization, Membership, ...); those stay in ONE shared database
+// (still prisma/schema.prisma today -- the actual rename to prisma/central/
+// happens together with the real cutover, not before, to avoid moving the
+// live app's schema and this draft one at the same time).
 //
-// Additions to the original build spec are marked "SPEC+" with the reason.
-// See docs/PLAN.md -> "Schema changes to the spec's reference model".
+// Not yet wired into the running app: nothing imports the client this
+// generates, and nothing calls migrate against a real tenant database yet.
+// This exists so the shape can be authored and its migration verified
+// ahead of the cutover that actually uses it.
 
 generator client {
   provider = "prisma-client-js"
+  output   = "../../lib/generated/tenant"
 }
 
 datasource db {
   provider = "postgresql"
 }
 
-/// A person. Identity is global; what they can DO comes from Membership.
-model User {
-  id           String    @id @default(cuid())
-  email        String    @unique
-  name         String?
-  /// Nullable: a Google-only account never sets one. Password sign-in checks
-  /// this and fails cleanly (not a bcrypt crash) when it's null -- see
-  /// lib/services/account.service.ts's login().
-  passwordHash String?
-  createdAt    DateTime  @default(now())
-  lastLoginAt  DateTime?
-  /// Null until dismissed. Per-user, not per-organisation: someone who
-  /// belongs to two tenants sees the "here's what your role can do" banner
-  /// once ever, not once per site they're a member of.
-  roleTourSeenAt DateTime?
-
-  memberships Membership[]
-  invitesSent Invitation[] @relation("InvitedBy")
-  resetTokens PasswordReset[]
-}
-
-/// A single-use password reset.
-///
-/// Hashed like an invitation, for the same reason: a leaked database row must
-/// not be redeemable. Short-lived, because an unused reset link sitting in a
-/// mailbox is a standing key to the account.
-model PasswordReset {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tokenHash String   @unique
-  expiresAt DateTime
-  usedAt    DateTime?
-  createdAt DateTime @default(now())
-
-  @@index([userId])
-}
-
-/// A tenant. Every Site, Page and AuditResult belongs to exactly one.
-model Organization {
-  id        String   @id @default(cuid())
-  name      String
-  slug      String   @unique
-  createdAt DateTime @default(now())
-
-  /// Per-organisation SMTP override, same shape as Site.psiApiKey below --
-  /// null means "use the shared SMTP_* env vars." Admin-editable, verified by
-  /// a real connection check before saving, never sent to the browser unmasked.
-  ///
-  /// Deliberately NOT used for password-reset emails: those are looked up by
-  /// email address alone, before any organisation is known, and one User can
-  /// belong to more than one Organisation (see Membership) -- there is no
-  /// single tenant to attribute that email to. Only sends that already have
-  /// an organisation in hand at send time (invitations, sweep notifications)
-  /// use this. See docs/DECISIONS.md.
-  smtpHost String?
-  smtpPort Int?
-  smtpUser String?
-  smtpPass String?
-  smtpFrom String?
-
-  /// Per-tenant infrastructure -- see docs/DECISIONS.md §19. Each organisation
-  /// brings its own Neon database and its own Cloudflare D1 database instead
-  /// of sharing the app owner's. All four secrets are envelope-encrypted
-  /// (lib/crypto/secretBox.ts, AES-256-GCM) -- NOT the plain-column
-  /// convention smtpPass/Site.psiApiKey use, since a leaked row here is full
-  /// read/write access to an external database, not "send email as this
-  /// mailbox." Additive only as of this migration: nothing reads or writes
-  /// these columns yet.
-  tenantDbUrlEnc  String?
-  d1AccountIdEnc  String?
-  d1DatabaseIdEnc String?
-  d1ApiTokenEnc   String?
-  /// unprovisioned | provisioning | ready | failed
-  provisionStatus String    @default("unprovisioned")
-  provisionError  String?
-  provisionedAt   DateTime?
-
-  members     Membership[]
-  sites       Site[]
-  invitations Invitation[]
-  mcpTokens   McpToken[]
-}
-
-/// An agent's key into ONE organisation.
-///
-/// A single shared token in an environment variable cannot work once there is
-/// more than one tenant: whoever holds it would reach whichever organisation
-/// happened to be queried. Tokens are per-organisation, stored hashed, and
-/// revocable individually.
-model McpToken {
-  id             String       @id @default(cuid())
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  label          String
-  tokenHash      String       @unique
-  createdById    String?
-  createdAt      DateTime     @default(now())
-  lastUsedAt     DateTime?
-  revokedAt      DateTime?
-
-  @@index([organizationId])
-}
-
-/// Roles, least to most privileged. Stored as a string rather than a Postgres
-/// enum so adding one later is a code change, not a migration with a lock.
-///   viewer    - read reports, download the agent markdown
-///   editor    - also run audits, generate recommendations, rename/merge groups
-///   developer - also the MCP token and raw PSI JSON
-///   admin     - also teammates, PSI key, site config, schedule, notifications
-model Membership {
-  id             String       @id @default(cuid())
-  userId         String
-  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  role           String       @default("viewer")
-  createdAt      DateTime     @default(now())
-
-  @@unique([userId, organizationId])
-  @@index([organizationId])
-}
-
-/// A pending invitation. The token is stored hashed: a leaked database row must
-/// not be redeemable.
-model Invitation {
-  id             String       @id @default(cuid())
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  email          String
-  role           String       @default("viewer")
-  tokenHash      String       @unique
-  invitedById    String?
-  invitedBy      User?        @relation("InvitedBy", fields: [invitedById], references: [id], onDelete: SetNull)
-  expiresAt      DateTime
-  acceptedAt     DateTime?
-  createdAt      DateTime     @default(now())
-
-  @@index([organizationId, email])
-}
-
 model Site {
-  id             String       @id @default(cuid())
+  id String @id @default(cuid())
+
+  /// Plain column, not a relation -- Organization lives in the OTHER
+  /// database once this is wired in, and Postgres foreign keys cannot cross
+  /// databases. Kept anyway (not just implied by "this is that org's DB")
+  /// as cheap defense-in-depth: requireSiteAccess still filters on it, so a
+  /// bug in the tenant-client resolver that opened the wrong org's database
+  /// fails a query instead of silently serving someone else's data.
   organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   name       String
   sitemapUrl String
@@ -172,6 +46,8 @@ model Site {
   groups   Group[]
   pages    Page[]
   runs     AuditRun[]
+
+  @@index([organizationId])
 }
 
 model Group {
@@ -334,13 +210,13 @@ model AuditResult {
   // Pruned before storage (screenshots/treemap/i18n/timing stripped).
   // Never SELECT * on this table -- use the shared summary select.
   //
-  // Legacy inline storage. New rows write null here and put the JSON in
-  // Vercel Blob instead (rawJsonBlobKey) -- see docs/DECISIONS.md §13. Kept,
-  // not backfilled: existing rows still have their data here, and the
-  // 10-per-page retention window ages them out naturally within weeks.
+  // Legacy inline storage from before this table's own database existed.
+  // New rows write null here and put the JSON in Cloudflare D1 instead
+  // (rawJsonBlobKey) -- see docs/DECISIONS.md §13 and §18.
   rawJson        Json?
-  /// Pathname in Vercel Blob holding the pruned JSON, when it isn't inline
-  /// in rawJson above. Null for legacy rows and for error rows (nothing to store).
+  /// Pathname in this org's own Cloudflare D1 database holding the pruned
+  /// JSON, when it isn't inline in rawJson above. Null for legacy rows and
+  /// for error rows (nothing to store).
   rawJsonBlobKey String?
   markdownReport String
 
@@ -350,8 +226,8 @@ model AuditResult {
   recommendations Recommendation[]
   issues         AuditIssue[]
 
-  // SPEC+ and load-bearing: the durable idempotency guarantee. BullMQ's jobId
-  // dedupe only holds while the job exists in Redis; this survives eviction.
+  // SPEC+ and load-bearing: the durable idempotency guarantee -- what
+  // survives a Workflow step replayed after a crash.
   @@unique([auditRunId, pageId, strategy])
   @@index([pageId, strategy, createdAt])
   @@index([auditRunId, status])
@@ -446,14 +322,10 @@ model NotificationSetting {
   slackWebhookUrl String?
 }
 
-/// Replaces Redis entirely (see docs/DECISIONS.md #16) for three small,
-/// infrequent, latency-insensitive jobs that never needed a separate
-/// request-metered service once BullMQ -- the thing that originally
-/// justified Redis -- was removed. One fixed-window token bucket, keyed by
-/// name ("psi" today; nothing else needs one yet). windowStart is the
-/// window's own start time in epoch ms, not a TTL -- computed once from
-/// wall-clock time, the same value every caller in that window agrees on
-/// without needing to ask Redis what it is.
+/// Postgres-backed rate limiter/ops state (docs/DECISIONS.md §16), scoped to
+/// this tenant's own database now instead of the shared one -- each site's
+/// PSI rate limit and scheduler heartbeat are that tenant's own concern, not
+/// something to track alongside every other org's in one shared table.
 model RateLimitBucket {
   key         String @id
   windowStart BigInt

@@ -54,14 +54,38 @@ export async function recordAuditResult(
     /** Measured PSI wall-clock, used to estimate future runs. */
     durationMs?: number;
   },
+  /** Injectable so a test can force the PermanentError/RetryableError paths
+   *  below without a real D1 round trip. Defaults to the real storeRawJson. */
+  storeRawJsonFn: typeof storeRawJson = storeRawJson,
 ): Promise<RecordOutcome> {
   const { runId, pageId, strategy, extracted, isFailure } = args;
 
   // Uploaded before the transaction, not after: see the pathname comment in
   // lib/blob.ts for why this doesn't need the row's own id. Nothing to
   // upload for an error row (args.rawJson is already null there).
-  const rawJsonBlobKey =
-    args.rawJson != null ? await storeRawJson(runId, pageId, strategy, args.rawJson) : null;
+  //
+  // A PermanentError here (D1 genuinely misconfigured) must NOT throw away a
+  // measurement that already succeeded -- retrying changes nothing about a
+  // config problem, and the caller's top-level PermanentError handling
+  // (auditOnePageStep) has no way to tell "PSI never ran" apart from
+  // "PSI succeeded but storage failed" once this throws. Recorded with
+  // rawJsonBlobKey null instead: the scores are real and worth keeping, the
+  // evidence tables just aren't available for this one result. A
+  // RetryableError (a transient D1 blip) is NOT swallowed here -- letting it
+  // propagate and retry the whole page is exactly what should happen, the
+  // same as any other transient failure this function's caller retries.
+  let rawJsonBlobKey: string | null = null;
+  if (args.rawJson != null) {
+    try {
+      rawJsonBlobKey = await storeRawJsonFn(runId, pageId, strategy, args.rawJson);
+    } catch (e) {
+      if (!(e instanceof PermanentError)) throw e;
+      jobLogger(runId, pageId, strategy).warn(
+        { message: e.message },
+        'raw JSON storage permanently failed — keeping the measured scores anyway',
+      );
+    }
+  }
 
   try {
     const run = await prisma.$transaction(

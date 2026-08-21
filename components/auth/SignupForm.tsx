@@ -42,7 +42,7 @@ export function SignupForm({ googleEnabled, googleError }: { googleEnabled: bool
             name="organizationName"
             autoComplete="organization"
             autoFocus
-            hint="Your company or team. You can track several sites under it."
+            hint="Your company or team. You'll add the one site you're measuring next."
           />
           <Field label="Your name" name="name" required={false} autoComplete="name" />
           <Field label="Email" name="email" type="email" autoComplete="username" invalid={Boolean(error)} />

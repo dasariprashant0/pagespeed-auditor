@@ -25,7 +25,9 @@
     "canary": "tsx scripts/canary.ts",
     "env": "tsx scripts/set-env.ts",
     "reset-password": "tsx scripts/reset-password.ts",
-    "verify:tenants": "tsx scripts/verify-tenant-isolation.ts"
+    "verify:tenants": "tsx scripts/verify-tenant-isolation.ts",
+    "db:migrate:tenant": "prisma migrate dev --config prisma/tenant/prisma.config.ts && npm run build:tenant-migrations",
+    "build:tenant-migrations": "tsx scripts/build-tenant-migrations.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.117.1",

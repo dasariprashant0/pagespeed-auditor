@@ -7,11 +7,11 @@ const eslintConfig = defineConfig([
   ...nextTs,
 
   // --- Architecture boundary -------------------------------------------
-  // The worker is a bare Node process that imports lib/services, lib/psi,
-  // lib/queue, lib/report and lib/sitemap directly. A single `next/*` or
-  // `react` import anywhere in that tree breaks it at load time, and the same
-  // boundary is what lets the stage-6 MCP server reuse the service layer
-  // untouched.
+  // node --test's native TS stripping and the stage-6 MCP server both import
+  // lib/services, lib/psi, lib/report and lib/sitemap directly as plain
+  // Node/TypeScript. A single `next/*` or `react` import anywhere in that
+  // tree breaks both at load time. (lib/queue/ used to be in this list too,
+  // before it was deleted entirely -- see docs/DECISIONS.md §11.)
   //
   // If you edit this rule, re-verify it still bites:
   //   echo "import 'next/headers';" >> lib/services/_probe.ts && npm run lint
@@ -20,7 +20,6 @@ const eslintConfig = defineConfig([
     files: [
       "lib/services/**/*.ts",
       "lib/psi/**/*.ts",
-      "lib/queue/**/*.ts",
       "lib/report/**/*.ts",
       "lib/sitemap/**/*.ts",
       "lib/env.ts",
@@ -68,6 +67,9 @@ const eslintConfig = defineConfig([
     "node_modules/**",
     // Vendored Ship Studio plugin source -- not ours to lint or fix.
     ".shipstudio/**",
+    // Generated Prisma clients (prisma/central, prisma/tenant) -- regenerated
+    // by `prisma generate`, same reason node_modules/@prisma/client isn't linted.
+    "lib/generated/**",
   ]),
 ]);
 

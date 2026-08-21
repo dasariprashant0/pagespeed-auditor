@@ -59,8 +59,26 @@ async function auditOnePageStep(runId: string, pageId: string, url: string, stra
       return;
     } catch (e) {
       if (e instanceof PermanentError) {
-        log.error({ message: e.message }, 'permanent failure — not retrying');
+        // Recorded as a result, the same as the exhausted-retries branch
+        // below and for the same reason: returning here without writing
+        // anything means completedJobs/failedJobs never advance for this
+        // job. shouldFinalize() only cares about completedJobs, so that's
+        // "just never finalizes" -- survivable. But finalizeRun()'s
+        // completed-vs-failed test is failedJobs >= totalJobs, and THAT
+        // silently reads as "everything's fine" once the reconcile
+        // backstop finalizes a run stuck at 0 completed for other reasons
+        // -- a run where every page hit this exact branch reported
+        // 'completed' with 0/2, not 'failed'. Observed live 21 Aug 2026.
+        log.error({ message: e.message }, 'permanent failure — recording an error row, not retrying');
         await pushRunLogEvent(runId, { ts: Date.now(), kind: 'error', pageId, url, strategy, message: e.message });
+        const extracted = errorResultFor(e.message);
+        const outcome = await recordAuditResult(prisma, {
+          runId, pageId, url, strategy,
+          extracted, rawJson: null, fieldJson: null,
+          markdownReport: buildMarkdownReport({ url, strategy, generatedAt: new Date(), result: extracted }),
+          isFailure: true,
+        });
+        if (outcome.readyToFinalize) await finalizeAndNotify(runId);
         return;
       }
 

@@ -18,7 +18,7 @@ import { Screenshot } from '@/components/report/Screenshot';
 import { RegressionBadge } from '@/components/report/RegressionBadge';
 import { RecommendationPanel } from '@/components/report/RecommendationPanel';
 import { regressionsForPage } from '@/lib/services/regression.service';
-import { explainRuntimeError } from '@/lib/report/runtimeError';
+import { explainRuntimeError, isPageContentFailure } from '@/lib/report/runtimeError';
 import type { PsiStrategy } from '@/lib/services/types';
 
 export const dynamic = 'force-dynamic';
@@ -116,8 +116,12 @@ export default async function PageReport({
       ) : r.status === 'error' ? (
         <EmptyState
           tone="warn"
-          title="Lighthouse could not measure this page"
-          body={`${explainRuntimeError(r.runtimeError)} This is a real finding about the page, not a failure of the audit.`}
+          title={isPageContentFailure(r.runtimeError) ? 'Lighthouse could not measure this page' : 'This check could not run'}
+          body={
+            isPageContentFailure(r.runtimeError)
+              ? `${explainRuntimeError(r.runtimeError)} This is a real finding about the page, not a failure of the audit.`
+              : `${explainRuntimeError(r.runtimeError)} This is a setup problem, not something wrong with the page itself.`
+          }
         />
       ) : (
         <>
