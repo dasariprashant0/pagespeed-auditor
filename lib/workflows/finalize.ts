@@ -1,4 +1,5 @@
-import { prisma } from '../db.ts';
+import { getTenantPrisma } from '../db/tenant.ts';
+import { d1CredentialsForOrg } from '../services/org.service.ts';
 import { runLogger } from '../logger.ts';
 import { finalizeRun } from '../services/run.service.ts';
 import { buildSweepSummary } from '../services/sweepSummary.service.ts';
@@ -16,8 +17,9 @@ import { getEnv } from '../env.ts';
  * Idempotent by construction: finalizeRun() reads the current status and does
  * nothing if the run is already terminal, so calling this twice is harmless.
  */
-export async function finalizeAndNotify(runId: string): Promise<void> {
+export async function finalizeAndNotify(organizationId: string, runId: string): Promise<void> {
   const log = runLogger(runId);
+  const prisma = await getTenantPrisma(organizationId);
 
   const status = await finalizeRun(prisma, runId);
   log.info({ status }, 'run finalized');
@@ -30,10 +32,11 @@ export async function finalizeAndNotify(runId: string): Promise<void> {
 
   // The live terminal has nothing left to show once a run is terminal --
   // every kind, not just full sweeps.
-  await clearRunLog(runId);
+  await clearRunLog(organizationId, runId);
 
   try {
-    const pruned = await pruneSiteHistory(prisma, run.siteId);
+    const d1 = (await d1CredentialsForOrg(organizationId)) ?? undefined;
+    const pruned = await pruneSiteHistory(prisma, run.siteId, d1);
     if (pruned.resultsDeleted > 0) log.info({ ...pruned }, 'aged-out history removed');
   } catch (e) {
     log.error({ err: e instanceof Error ? e.message : String(e) }, 'history prune failed');
@@ -49,11 +52,12 @@ export async function finalizeAndNotify(runId: string): Promise<void> {
   // succeeded. Same reasoning as the prune try/catch above.
   try {
     const summary = await buildSweepSummary(
+      organizationId,
       runId,
       status === 'failed' ? 'sweep.failed' : 'sweep.completed',
       getEnv().APP_URL,
     );
-    if (summary) await dispatchSweepNotification(run.siteId, summary);
+    if (summary) await dispatchSweepNotification(organizationId, run.siteId, summary);
   } catch (e) {
     log.error({ err: e instanceof Error ? e.message : String(e) }, 'sweep notification failed');
   }

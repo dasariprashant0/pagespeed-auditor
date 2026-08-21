@@ -1,4 +1,4 @@
-import { prisma } from '../db.ts';
+import { getTenantPrisma } from '../db/tenant.ts';
 import { getEnv } from '../env.ts';
 
 /**
@@ -17,10 +17,11 @@ import { getEnv } from '../env.ts';
  * remains. Accurate for the "N pages are waiting; M already started will
  * still finish" message controlRunAction shows -- not a live job count.
  */
-export function workflowRunQueue(runId: string) {
+export function workflowRunQueue(organizationId: string, runId: string) {
   const batchSize = getEnv().WORKER_CONCURRENCY;
 
   async function remaining(): Promise<number> {
+    const prisma = await getTenantPrisma(organizationId);
     const run = await prisma.auditRun.findUnique({
       where: { id: runId },
       select: { totalJobs: true, completedJobs: true },
