@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
+import { centralPrisma } from '@/lib/db/central';
+import { withTenantPrisma } from '@/lib/db/tenant';
 import { logger } from '@/lib/logger';
 import { reconcileStaleRuns } from '@/lib/services/run.service';
 import { dueSchedules, advanceSchedule } from '@/lib/services/schedule.service';
@@ -21,6 +22,17 @@ export const maxDuration = 60;
  *
  * Full-sweep-is-schedule-only (docs/DECISIONS.md 2.2) holds here by
  * construction: this route is the only caller of planAndStartSweep.
+ *
+ * Per-tenant cutover (phase 5): `Schedule`/`AuditRun` now live in each org's
+ * own Neon database, so "what's due right now" can no longer be answered by
+ * one query against one database. This route first asks the central
+ * database which orgs are actually provisioned, then opens each org's own
+ * tenant database via withTenantPrisma (not getTenantPrisma's cached pool --
+ * this fans out across every org in one invocation, and the cache is
+ * deliberately for single-org callers) to check/reconcile/sweep just that
+ * org. One org's failure (revoked credential, Neon outage) must not stop the
+ * tick for every other org, so each iteration is wrapped in its own
+ * try/catch.
  */
 export async function GET(request: Request): Promise<Response> {
   const auth = request.headers.get('authorization');
@@ -28,22 +40,45 @@ export async function GET(request: Request): Promise<Response> {
     return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 });
   }
 
-  await stampSchedulerHeartbeat();
+  const readyOrgs = await centralPrisma.organization.findMany({
+    where: { provisionStatus: 'ready' },
+    select: { id: true },
+  });
 
-  const reconciled = await reconcileStaleRuns(prisma, startAuditRun);
-  if (reconciled.resumed.length > 0 || reconciled.failed.length > 0) {
-    logger.info(reconciled, 'stale runs reconciled at cron tick');
+  let totalReconciled = { resumed: [] as string[], failed: [] as string[] };
+  let sweepsStarted = 0;
+
+  for (const { id: organizationId } of readyOrgs) {
+    try {
+      await stampSchedulerHeartbeat(organizationId);
+
+      const reconciled = await withTenantPrisma(organizationId, (prisma) =>
+        reconcileStaleRuns(prisma, (runId, pairs) => startAuditRun(runId, pairs, organizationId)),
+      );
+      if (reconciled.resumed.length > 0 || reconciled.failed.length > 0) {
+        logger.info({ organizationId, ...reconciled }, 'stale runs reconciled at cron tick');
+      }
+      totalReconciled = {
+        resumed: [...totalReconciled.resumed, ...reconciled.resumed],
+        failed: [...totalReconciled.failed, ...reconciled.failed],
+      };
+
+      const due = await dueSchedules(organizationId);
+      for (const s of due) {
+        if (!s.cronExpr) continue;
+        // Advance FIRST: a slow start must not let the next tick fire the
+        // same schedule again.
+        await advanceSchedule(organizationId, s.id, s.cronExpr, s.timezone);
+        await planAndStartSweep(organizationId, s.siteId, 'schedule');
+        logger.info({ organizationId, siteId: s.siteId, cron: s.cronExpr }, 'scheduled sweep queued');
+        sweepsStarted++;
+      }
+    } catch (e) {
+      // One org's tenant database being unreachable (revoked credential,
+      // Neon outage) must not stop the tick for every other org.
+      logger.error({ organizationId, err: e instanceof Error ? e.message : String(e) }, 'cron tick failed for org');
+    }
   }
 
-  const due = await dueSchedules();
-  for (const s of due) {
-    if (!s.cronExpr) continue;
-    // Advance FIRST: a slow start must not let the next tick fire the same
-    // schedule again.
-    await advanceSchedule(s.id, s.cronExpr, s.timezone);
-    await planAndStartSweep(s.siteId, 'schedule');
-    logger.info({ siteId: s.siteId, cron: s.cronExpr }, 'scheduled sweep queued');
-  }
-
-  return NextResponse.json({ ok: true, reconciled, sweepsStarted: due.length });
+  return NextResponse.json({ ok: true, reconciled: totalReconciled, sweepsStarted });
 }
