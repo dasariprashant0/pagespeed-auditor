@@ -1,4 +1,4 @@
-import { prisma } from '../db.ts';
+import { getTenantPrisma } from '../db/tenant.ts';
 import { logger } from '../logger.ts';
 import { sendEmail } from './email.ts';
 import { sendSlack } from './slack.ts';
@@ -24,9 +24,11 @@ export interface DispatchOutcome {
 }
 
 export async function dispatchSweepNotification(
+  organizationId: string,
   siteId: string,
   summary: SweepSummary,
 ): Promise<DispatchOutcome> {
+  const prisma = await getTenantPrisma(organizationId);
   const site = await prisma.site.findUnique({
     where: { id: siteId },
     select: { organizationId: true, notif: true },

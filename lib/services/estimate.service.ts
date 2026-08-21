@@ -1,4 +1,4 @@
-import { prisma } from '../db.ts';
+import { getTenantPrisma } from '../db/tenant.ts';
 import { getEnv } from '../env.ts';
 
 /**
@@ -47,7 +47,8 @@ export function throughputPerSecond(callMs: number, concurrency: number, rateMax
   return Math.min(limiterRate, poolRate);
 }
 
-export async function estimateRun(jobs: number, siteId?: string): Promise<RunEstimate> {
+export async function estimateRun(organizationId: string, jobs: number, siteId?: string): Promise<RunEstimate> {
+  const prisma = await getTenantPrisma(organizationId);
   const env = getEnv();
 
   // Recent history only: the site changes, and so does its latency.

@@ -1,4 +1,4 @@
-import { prisma } from '../db.ts';
+import { getTenantPrisma } from '../db/tenant.ts';
 import { NotFoundError } from '../errors.ts';
 import type { PsiStrategy } from '../psi/types.ts';
 import { computeAggregate, latestResultIdFor } from './results.service.ts';
@@ -150,12 +150,14 @@ export function toRunProgress(
   };
 }
 
-export async function getRunProgress(runId: string): Promise<RunProgressDTO | null> {
+export async function getRunProgress(organizationId: string, runId: string): Promise<RunProgressDTO | null> {
+  const prisma = await getTenantPrisma(organizationId);
   const run = await prisma.auditRun.findUnique({ where: { id: runId }, select: RUN_SELECT });
   return run ? toRunProgress(run) : null;
 }
 
-export async function listRecentRuns(siteId: string, limit = 20): Promise<RunProgressDTO[]> {
+export async function listRecentRuns(organizationId: string, siteId: string, limit = 20): Promise<RunProgressDTO[]> {
+  const prisma = await getTenantPrisma(organizationId);
   const runs = await prisma.auditRun.findMany({
     where: { siteId },
     select: RUN_SELECT,
@@ -173,9 +175,11 @@ export async function listRecentRuns(siteId: string, limit = 20): Promise<RunPro
  * in a different strategy from the cards below it would be quietly misleading.
  */
 export async function getSiteSummary(
+  organizationId: string,
   siteId: string,
   strategy: PsiStrategy = 'mobile',
 ): Promise<SiteSummaryDTO> {
+  const prisma = await getTenantPrisma(organizationId);
   const site = await prisma.site.findUnique({
     where: { id: siteId },
     select: { id: true, name: true, baseUrl: true, sitemapUrl: true },

@@ -1,4 +1,4 @@
-import { prisma } from '../db.ts';
+import { getTenantPrisma } from '../db/tenant.ts';
 import { bucketOf, BUCKET_RANK } from '../psi/buckets.ts';
 import type { Bucket, MetricId } from '../psi/types.ts';
 
@@ -125,7 +125,8 @@ function bucketLabel(b: Bucket): string {
 }
 
 /** The last three successful audits for a page, newest first. */
-export async function regressionsForPage(pageId: string, strategy: string): Promise<Regression[]> {
+export async function regressionsForPage(organizationId: string, pageId: string, strategy: string): Promise<Regression[]> {
+  const prisma = await getTenantPrisma(organizationId);
   const rows = await prisma.auditResult.findMany({
     where: { pageId, strategy, status: 'ok' },
     orderBy: { createdAt: 'desc' },
