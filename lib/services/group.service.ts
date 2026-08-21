@@ -1,4 +1,4 @@
-import type { PrismaClient } from '@prisma/client';
+import type { TenantPrismaClient } from '../db/tenant.ts';
 
 /**
  * Manual group edits. Both operations leave a GroupAlias behind, which is the
@@ -7,7 +7,7 @@ import type { PrismaClient } from '@prisma/client';
  */
 
 export async function renameGroup(
-  prisma: PrismaClient,
+  prisma: TenantPrismaClient,
   groupId: string,
   newName: string,
   newSlug?: string,
@@ -32,7 +32,7 @@ export async function renameGroup(
 }
 
 export async function mergeGroups(
-  prisma: PrismaClient,
+  prisma: TenantPrismaClient,
   sourceIds: string[],
   targetId: string,
 ): Promise<{ pagesMoved: number; aliasesCreated: number }> {

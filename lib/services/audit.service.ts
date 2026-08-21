@@ -1,4 +1,5 @@
-import type { PrismaClient } from '@prisma/client';
+import type { TenantPrismaClient } from '../db/tenant.ts';
+import type { D1Credentials } from '../blob.ts';
 import { runPagespeed, type PsiFetchResult } from '../psi/client.ts';
 import { extractResult, fieldJsonOf } from '../psi/extract.ts';
 import { pruneResponse } from '../psi/prune.ts';
@@ -40,7 +41,7 @@ export interface RecordOutcome {
  * never finalize, and a replay would double-count.
  */
 export async function recordAuditResult(
-  prisma: PrismaClient,
+  prisma: TenantPrismaClient,
   args: {
     runId: string;
     pageId: string;
@@ -54,6 +55,7 @@ export async function recordAuditResult(
     /** Measured PSI wall-clock, used to estimate future runs. */
     durationMs?: number;
   },
+  d1?: D1Credentials,
   /** Injectable so a test can force the PermanentError/RetryableError paths
    *  below without a real D1 round trip. Defaults to the real storeRawJson. */
   storeRawJsonFn: typeof storeRawJson = storeRawJson,
@@ -77,7 +79,7 @@ export async function recordAuditResult(
   let rawJsonBlobKey: string | null = null;
   if (args.rawJson != null) {
     try {
-      rawJsonBlobKey = await storeRawJsonFn(runId, pageId, strategy, args.rawJson);
+      rawJsonBlobKey = await storeRawJsonFn(runId, pageId, strategy, args.rawJson, d1);
     } catch (e) {
       if (!(e instanceof PermanentError)) throw e;
       jobLogger(runId, pageId, strategy).warn(
@@ -210,8 +212,10 @@ export function errorResultFor(code: string): ExtractedResult {
 }
 
 export interface AuditPageDeps {
-  prisma: PrismaClient;
+  prisma: TenantPrismaClient;
   limiter: PsiRateLimiter;
+  organizationId: string;
+  d1?: D1Credentials;
   /** Injected so the throughput dry-run and tests can substitute a fake PSI. */
   fetchImpl?: typeof fetch;
   now?: () => Date;
@@ -246,7 +250,7 @@ export async function auditPage(
     where: { id: args.pageId },
     select: { siteId: true },
   });
-  const apiKey = (page ? await psiKeyForSite(page.siteId) : null) ?? env.PSI_API_KEY;
+  const apiKey = (page ? await psiKeyForSite(deps.organizationId, page.siteId) : null) ?? env.PSI_API_KEY;
 
   if (!apiKey) {
     // Naming the cause here saves a very confusing 403 on every page of a run.
@@ -271,20 +275,24 @@ export async function auditPage(
     // would otherwise repeat silently across every remaining job.
     log.error({ status: res.status, message: res.message }, 'psi permanent failure');
     const extracted = errorResultFor(`HTTP_${res.status ?? 'ERROR'}`);
-    const outcome = await recordAuditResult(deps.prisma, {
-      ...args,
-      extracted,
-      rawJson: null,
-      fieldJson: null,
-      markdownReport: buildMarkdownReport({
-        url: args.url,
-        strategy: args.strategy,
-        generatedAt: at,
-        result: extracted,
-      }),
-      isFailure: true,
-      durationMs: res.elapsedMs,
-    });
+    const outcome = await recordAuditResult(
+      deps.prisma,
+      {
+        ...args,
+        extracted,
+        rawJson: null,
+        fieldJson: null,
+        markdownReport: buildMarkdownReport({
+          url: args.url,
+          strategy: args.strategy,
+          generatedAt: at,
+          result: extracted,
+        }),
+        isFailure: true,
+        durationMs: res.elapsedMs,
+      },
+      deps.d1,
+    );
     if (res.status === 403) throw new PermanentError(`PSI rejected the API key or quota: ${res.message}`);
     return outcome;
   }
@@ -294,20 +302,24 @@ export async function auditPage(
     // 4xx'd, never painted...). Storable, and NOT worth retrying.
     log.info({ code: res.code }, 'lighthouse content error');
     const extracted = errorResultFor(res.code ?? 'LIGHTHOUSE_ERROR');
-    return recordAuditResult(deps.prisma, {
-      ...args,
-      extracted,
-      rawJson: null,
-      fieldJson: null,
-      markdownReport: buildMarkdownReport({
-        url: args.url,
-        strategy: args.strategy,
-        generatedAt: at,
-        result: extracted,
-      }),
-      isFailure: true,
-      durationMs: res.elapsedMs,
-    });
+    return recordAuditResult(
+      deps.prisma,
+      {
+        ...args,
+        extracted,
+        rawJson: null,
+        fieldJson: null,
+        markdownReport: buildMarkdownReport({
+          url: args.url,
+          strategy: args.strategy,
+          generatedAt: at,
+          result: extracted,
+        }),
+        isFailure: true,
+        durationMs: res.elapsedMs,
+      },
+      deps.d1,
+    );
   }
 
   const extracted = extractResult(res.raw);
@@ -342,13 +354,17 @@ export async function auditPage(
 
   const { pruned } = pruneResponse(res.raw);
 
-  return recordAuditResult(deps.prisma, {
-    ...args,
-    extracted,
-    rawJson: pruned,
-    fieldJson: fieldJsonOf(res.raw),
-    markdownReport,
-    isFailure: extracted.status === 'error',
-    durationMs: res.elapsedMs,
-  });
+  return recordAuditResult(
+    deps.prisma,
+    {
+      ...args,
+      extracted,
+      rawJson: pruned,
+      fieldJson: fieldJsonOf(res.raw),
+      markdownReport,
+      isFailure: extracted.status === 'error',
+      durationMs: res.elapsedMs,
+    },
+    deps.d1,
+  );
 }

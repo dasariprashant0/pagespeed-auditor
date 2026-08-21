@@ -1,4 +1,4 @@
-import type { PrismaClient } from '@prisma/client';
+import type { TenantPrismaClient } from '../db/tenant.ts';
 import type { PsiStrategy } from '../psi/types.ts';
 import type { RunProgressDTO, RunStatus } from './types.ts';
 import { NotFoundError } from '../errors.ts';
@@ -157,7 +157,7 @@ const RUN_PROGRESS_SELECT = {
 } as const;
 
 export async function getRunProgress(
-  prisma: PrismaClient,
+  prisma: TenantPrismaClient,
   runId: string,
   now: Date = new Date(),
 ): Promise<RunProgressDTO> {
@@ -187,7 +187,7 @@ export async function getRunProgress(
 
 /** The overlap guard's input: a sweep must not start while another is in flight. */
 export async function findActiveRun(
-  prisma: PrismaClient,
+  prisma: TenantPrismaClient,
   siteId: string,
   type?: RunType,
 ): Promise<{ id: string; type: string; startedAt: Date } | null> {
@@ -213,7 +213,7 @@ export interface CreateRunInput {
   status?: RunStatus;
 }
 
-export async function createRun(prisma: PrismaClient, input: CreateRunInput): Promise<string> {
+export async function createRun(prisma: TenantPrismaClient, input: CreateRunInput): Promise<string> {
   const run = await prisma.auditRun.create({
     data: {
       siteId: input.siteId,
@@ -230,7 +230,7 @@ export async function createRun(prisma: PrismaClient, input: CreateRunInput): Pr
 
 /** Records a sweep that never started because another was already running. */
 export async function createSkippedRun(
-  prisma: PrismaClient,
+  prisma: TenantPrismaClient,
   input: Omit<CreateRunInput, 'status' | 'totalJobs'>,
   reason: string,
 ): Promise<string> {
@@ -256,7 +256,7 @@ export async function createSkippedRun(
  * Terminal state for a run. Idempotent: the finalize job has a deterministic id,
  * but BullMQ retries and a manual replay can both deliver it twice.
  */
-export async function finalizeRun(prisma: PrismaClient, runId: string): Promise<RunStatus> {
+export async function finalizeRun(prisma: TenantPrismaClient, runId: string): Promise<RunStatus> {
   const run = await prisma.auditRun.findUnique({
     where: { id: runId },
     select: { id: true, status: true, totalJobs: true, completedJobs: true, failedJobs: true },
@@ -294,7 +294,7 @@ export async function finalizeRun(prisma: PrismaClient, runId: string): Promise<
   return status;
 }
 
-export async function failRun(prisma: PrismaClient, runId: string, message: string): Promise<void> {
+export async function failRun(prisma: TenantPrismaClient, runId: string, message: string): Promise<void> {
   const now = new Date();
   await prisma.auditRun.updateMany({
     where: { id: runId, status: { in: ['queued', 'running'] } },
@@ -308,7 +308,7 @@ export async function failRun(prisma: PrismaClient, runId: string, message: stri
 
 /** The (page, strategy) pairs a run's scope covers, as the site stands today. */
 export async function expandScope(
-  prisma: PrismaClient,
+  prisma: TenantPrismaClient,
   siteId: string,
   scope: RunScope,
 ): Promise<AuditPair[]> {
@@ -363,7 +363,7 @@ export interface FailedResult {
  * unmeasurable page would sit at "running" forever.
  */
 export async function failedResultsForRun(
-  prisma: PrismaClient,
+  prisma: TenantPrismaClient,
   runId: string,
 ): Promise<FailedResult[]> {
   const rows = await prisma.auditResult.findMany({
@@ -388,7 +388,7 @@ export async function failedResultsForRun(
   }));
 }
 
-async function failedPairsForRun(prisma: PrismaClient, runId: string): Promise<AuditPair[]> {
+async function failedPairsForRun(prisma: TenantPrismaClient, runId: string): Promise<AuditPair[]> {
   const failed = await failedResultsForRun(prisma, runId);
   // Only pages that still exist and are still in the sitemap. Re-measuring a
   // page that has since been dropped would spend quota on a 404.
@@ -419,7 +419,7 @@ export interface ResumeSummary {
  * the results are not, and a `completedJobs` left at its pre-crash value would
  * either finalize the run early or never finalize it at all.
  */
-export async function resumeRun(prisma: PrismaClient, runId: string, dispatch: AuditDispatcher): Promise<ResumeSummary> {
+export async function resumeRun(prisma: TenantPrismaClient, runId: string, dispatch: AuditDispatcher): Promise<ResumeSummary> {
   const run = await prisma.auditRun.findUnique({
     where: { id: runId },
     select: { id: true, siteId: true, scopeLabel: true, totalJobs: true },
@@ -531,7 +531,7 @@ export interface ReconcileSummary {
  * disagree about a run's state.
  */
 export async function reconcileStaleRuns(
-  prisma: PrismaClient,
+  prisma: TenantPrismaClient,
   dispatch: AuditDispatcher,
   now: Date = new Date(),
 ): Promise<ReconcileSummary> {
@@ -624,7 +624,7 @@ export interface RunControlResult {
 const PAUSABLE: RunStatus[] = ['queued', 'running'];
 
 export async function controlRun(
-  prisma: PrismaClient,
+  prisma: TenantPrismaClient,
   runId: string,
   action: RunControl,
   queue: {

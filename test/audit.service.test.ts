@@ -62,6 +62,7 @@ describe('recordAuditResult — raw JSON storage failure handling', () => {
     const outcome = await recordAuditResult(
       prisma,
       { ...BASE_ARGS, extracted: OK_RESULT, rawJson: { some: 'payload' }, fieldJson: null },
+      undefined,
       storeRawJsonFn,
     );
 
@@ -85,6 +86,7 @@ describe('recordAuditResult — raw JSON storage failure handling', () => {
         recordAuditResult(
           prisma,
           { ...BASE_ARGS, extracted: OK_RESULT, rawJson: { some: 'payload' }, fieldJson: null },
+          undefined,
           storeRawJsonFn,
         ),
       RetryableError,
@@ -104,6 +106,7 @@ describe('recordAuditResult — raw JSON storage failure handling', () => {
     const outcome = await recordAuditResult(
       prisma,
       { ...BASE_ARGS, extracted: errorResult, rawJson: null, fieldJson: null, isFailure: true },
+      undefined,
       storeRawJsonFn,
     );
 

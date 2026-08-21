@@ -41,7 +41,7 @@ describe('pruneSiteHistory', () => {
       { id: 'r2', pageId: 'p2', bytes: 50, rawJsonBlobKey: null },
     ]);
     const deletedBlobKeys: string[] = [];
-    const summary = await pruneSiteHistory(prisma, 'site1', async (keys) => {
+    const summary = await pruneSiteHistory(prisma, 'site1', undefined, async (keys) => {
       deletedBlobKeys.push(...keys);
     });
 
@@ -55,7 +55,7 @@ describe('pruneSiteHistory', () => {
   test('nothing stale means no deletes and no attempt at blob cleanup', async () => {
     const prisma = fakePrismaForPrune([]);
     let blobCleanupCalled = false;
-    const summary = await pruneSiteHistory(prisma, 'site1', async () => {
+    const summary = await pruneSiteHistory(prisma, 'site1', undefined, async () => {
       blobCleanupCalled = true;
     });
 
@@ -85,7 +85,7 @@ describe('deleteRuns', () => {
       [{ rawJsonBlobKey: 'k1' }],
     );
     const deletedBlobKeys: string[] = [];
-    const { runsDeleted } = await deleteRuns(prisma, 'site1', ['running1', 'done1'], async (keys) => {
+    const { runsDeleted } = await deleteRuns(prisma, 'site1', ['running1', 'done1'], undefined, async (keys) => {
       deletedBlobKeys.push(...keys);
     });
 
