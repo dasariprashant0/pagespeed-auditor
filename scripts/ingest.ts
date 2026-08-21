@@ -5,12 +5,12 @@
  *   npm run ingest -- --dry     # crawl and report, write nothing
  */
 import 'dotenv/config';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '../lib/generated/tenant/index.js';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { ingestSitemap } from '../lib/services/ingest.service.ts';
 
 async function main() {
-  const connectionString = process.env.DATABASE_URL!;
+  const connectionString = process.env.TENANT_DEV_DATABASE_URL!;
   const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const dryRun = process.argv.includes('--dry');
 

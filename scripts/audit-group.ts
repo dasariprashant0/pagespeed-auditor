@@ -5,7 +5,7 @@
  *   npm run audit:group -- platform 8 mobile
  */
 import 'dotenv/config';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '../lib/generated/tenant/index.js';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { auditPage } from '../lib/services/audit.service.ts';
 import { createRun, finalizeRun } from '../lib/services/run.service.ts';
@@ -17,7 +17,7 @@ async function main() {
   const limit = Number(process.argv[3] ?? 8);
   const strategy = (process.argv[4] ?? 'mobile') as PsiStrategy;
 
-  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
+  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.TENANT_DEV_DATABASE_URL! }) });
   const limiter = new PsiRateLimiter({
     db: prisma,
     max: Number(process.env.PSI_RATE_MAX ?? 3),
@@ -48,7 +48,7 @@ async function main() {
     for (const [i, p] of pages.entries()) {
       const started = Date.now();
       try {
-        const o = await auditPage({ prisma, limiter }, { runId, pageId: p.id, url: p.url, strategy });
+        const o = await auditPage({ prisma, limiter, organizationId: site.organizationId }, { runId, pageId: p.id, url: p.url, strategy });
         const r = await prisma.auditResult.findFirst({
           where: { auditRunId: runId, pageId: p.id, strategy },
           select: { performanceScore: true, status: true },
