@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { requireCapability } from '@/lib/http/auth-guard';
+import { friendlyErrorMessage } from '@/lib/http/actionError';
 import { getTenantPrisma } from '@/lib/db/tenant';
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
@@ -35,7 +36,7 @@ export async function reorderGroupsAction(slugsInOrder: string[]): Promise<Actio
     revalidatePath('/', 'layout');
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not save the order.' };
+    return { ok: false, error: friendlyErrorMessage(e, 'Could not save the order.') };
   }
 }
 
@@ -51,7 +52,7 @@ export async function resetGroupOrderAction(): Promise<ActionResult> {
     revalidatePath('/', 'layout');
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not reset the order.' };
+    return { ok: false, error: friendlyErrorMessage(e, 'Could not reset the order.') };
   }
 }
 
@@ -70,6 +71,6 @@ export async function setGroupPriorityAction(slugsInOrder: string[]): Promise<Ac
     revalidatePath('/', 'layout');
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not save the order.' };
+    return { ok: false, error: friendlyErrorMessage(e, 'Could not save the order.') };
   }
 }

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { requireCapability } from '@/lib/http/auth-guard';
+import { friendlyErrorMessage } from '@/lib/http/actionError';
 import { requirePageAccess } from '@/lib/services/tenant.service';
 import {
   getOrCreateRecommendation,
@@ -36,7 +37,7 @@ export async function generateRecommendationAction(input: {
       generatedAt: r.generatedAt,
     };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Something went wrong.' };
+    return { ok: false, error: friendlyErrorMessage(e, 'Something went wrong.') };
   }
 }
 
@@ -50,6 +51,6 @@ export async function recommendationHistoryAction(input: {
     await requirePageAccess(ctx.organizationId, input.pageId);
     return { ok: true, versions: await listRecommendations(ctx.organizationId, input.pageId, input.strategy) };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not load earlier answers.' };
+    return { ok: false, error: friendlyErrorMessage(e, 'Could not load earlier answers.') };
   }
 }

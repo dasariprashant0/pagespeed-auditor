@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { requireCapability } from '@/lib/http/auth-guard';
+import { friendlyErrorMessage } from '@/lib/http/actionError';
 import { getTenantPrisma } from '@/lib/db/tenant';
 import { defaultSite } from '@/lib/services/tenant.service';
 import { saveSchedule, validateCron } from '@/lib/services/schedule.service';
@@ -30,7 +31,7 @@ export async function saveScheduleAction(_prev: unknown, form: FormData): Promis
       next: result.next,
     };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not save the schedule.' };
+    return { ok: false, error: friendlyErrorMessage(e, 'Could not save the schedule.') };
   }
 }
 
@@ -63,7 +64,7 @@ export async function saveNotificationsAction(_prev: unknown, form: FormData): P
     revalidatePath('/settings');
     return { ok: true, message: 'Notification settings saved.' };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not save notification settings.' };
+    return { ok: false, error: friendlyErrorMessage(e, 'Could not save notification settings.') };
   }
 }
 
@@ -109,7 +110,7 @@ export async function sendTestNotificationAction(): Promise<SettingsResult> {
     }
     return { ok: true, message: `Delivered via ${outcome.attempted.join(' and ')}.` };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not send the test notification.' };
+    return { ok: false, error: friendlyErrorMessage(e, 'Could not send the test notification.') };
   }
 }
 

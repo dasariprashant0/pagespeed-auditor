@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { requireCapability } from '@/lib/http/auth-guard';
+import { friendlyErrorMessage } from '@/lib/http/actionError';
 import { getTenantPrisma } from '@/lib/db/tenant';
 import { defaultSite, requireRunAccess } from '@/lib/services/tenant.service';
 import { BOTH_STRATEGIES, createRun, expandScope, findActiveRun, failedResultsForRun, type FailedResult } from '@/lib/services/run.service';
@@ -78,7 +79,7 @@ export async function queueAuditAction(input: {
       measured: estimate.measured,
     };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not start the audit.' };
+    return { ok: false, error: friendlyErrorMessage(e, 'Could not start the audit.') };
   }
 }
 
@@ -132,7 +133,7 @@ export async function retryFailedAction(input: { runId: string }): Promise<Queue
       measured: estimate.measured,
     };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not start the retry.' };
+    return { ok: false, error: friendlyErrorMessage(e, 'Could not start the retry.') };
   }
 }
 
@@ -146,6 +147,6 @@ export async function failedResultsAction(input: {
   try {
     return { ok: true, failures: await failedResultsForRun(prisma, input.runId) };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not load the failures.' };
+    return { ok: false, error: friendlyErrorMessage(e, 'Could not load the failures.') };
   }
 }

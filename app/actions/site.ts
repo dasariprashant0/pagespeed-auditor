@@ -1,7 +1,8 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { requireCapability, ForbiddenError } from '@/lib/http/auth-guard';
+import { requireCapability } from '@/lib/http/auth-guard';
+import { friendlyErrorMessage } from '@/lib/http/actionError';
 import { getTenantPrisma } from '@/lib/db/tenant';
 import { centralPrisma } from '@/lib/db/central';
 import { d1CredentialsForOrg } from '@/lib/services/org.service';
@@ -12,8 +13,7 @@ import { verifySmtpConnection } from '@/lib/notify/email';
 export type SiteResult = { ok: true; message: string } | { ok: false; error: string };
 
 function fail(e: unknown): SiteResult {
-  if (e instanceof ForbiddenError) return { ok: false, error: e.message };
-  return { ok: false, error: e instanceof Error ? e.message : 'Something went wrong.' };
+  return { ok: false, error: friendlyErrorMessage(e, 'Something went wrong.') };
 }
 
 /** Adding a site is how a new organisation gets started; admin only. */

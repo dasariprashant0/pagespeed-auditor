@@ -1,7 +1,8 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { requireCapability, ForbiddenError } from '@/lib/http/auth-guard';
+import { requireCapability } from '@/lib/http/auth-guard';
+import { friendlyErrorMessage } from '@/lib/http/actionError';
 import { centralPrisma } from '@/lib/db/central';
 import { encryptSecret, decryptSecret } from '@/lib/crypto/secretBox';
 import { validateNeonUrl, validateD1Credentials, ensureD1Schema, runTenantMigrations } from '@/lib/tenantDb/provision';
@@ -26,8 +27,7 @@ export type ProvisionResult =
   | { ok: false; error: string };
 
 function fail(e: unknown): ProvisionResult {
-  if (e instanceof ForbiddenError) return { ok: false, error: e.message };
-  return { ok: false, error: e instanceof Error ? e.message : 'Something went wrong.' };
+  return { ok: false, error: friendlyErrorMessage(e, 'Something went wrong.') };
 }
 
 const DOT_PLACEHOLDER = '•';

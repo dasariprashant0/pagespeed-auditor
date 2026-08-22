@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { requireCapability } from '@/lib/http/auth-guard';
+import { friendlyErrorMessage } from '@/lib/http/actionError';
 import { requireRunAccess } from '@/lib/services/tenant.service';
 import { getTenantPrisma } from '@/lib/db/tenant';
 import { controlRun, type RunControl, type RunControlResult } from '@/lib/services/run.service';
@@ -28,6 +29,6 @@ export async function controlRunAction(input: {
     revalidatePath(`/runs/${input.runId}`);
     return { ok: true, ...r };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not change the run.' };
+    return { ok: false, error: friendlyErrorMessage(e, 'Could not change the run.') };
   }
 }

@@ -1,7 +1,8 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { requireCapability, ForbiddenError } from '@/lib/http/auth-guard';
+import { requireCapability } from '@/lib/http/auth-guard';
+import { friendlyErrorMessage } from '@/lib/http/actionError';
 import { centralPrisma } from '@/lib/db/central';
 import { inviteMember, wouldOrphanOrganization, normalizeEmail } from '@/lib/services/account.service';
 import { emailConfigForOrg } from '@/lib/services/tenant.service';
@@ -12,8 +13,7 @@ import { sendEmail } from '@/lib/notify/email';
 export type MemberResult = { ok: true; message: string; inviteUrl?: string } | { ok: false; error: string };
 
 function fail(e: unknown): MemberResult {
-  if (e instanceof ForbiddenError) return { ok: false, error: e.message };
-  return { ok: false, error: e instanceof Error ? e.message : 'Something went wrong.' };
+  return { ok: false, error: friendlyErrorMessage(e, 'Something went wrong.') };
 }
 
 export async function inviteMemberAction(_prev: unknown, form: FormData): Promise<MemberResult> {
