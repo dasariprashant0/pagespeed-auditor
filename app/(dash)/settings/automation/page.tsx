@@ -7,6 +7,7 @@ import { redirect } from 'next/navigation';
 import { SettingsNav } from '@/components/settings/SettingsNav';
 import { Section } from '@/components/settings/Section';
 import { getEnv } from '@/lib/env';
+import { NotProvisionedError } from '@/lib/errors';
 import { listGroupsWithAggregates } from '@/lib/services/results.service';
 import { estimateRun, formatDuration } from '@/lib/services/estimate.service';
 import { ScheduleForm } from '@/components/settings/ScheduleForm';
@@ -20,9 +21,16 @@ export default async function SettingsPage() {
   // Visible to every role -- only automation:manage decides whether the
   // schedule form below actually accepts input.
   const ctx = await requireSession();
-  const prisma = await getTenantPrisma(ctx.organizationId);
+  let prisma: Awaited<ReturnType<typeof getTenantPrisma>>;
+  let site: Awaited<ReturnType<typeof defaultSite>>;
+  try {
+    prisma = await getTenantPrisma(ctx.organizationId);
+    site = await defaultSite(ctx.organizationId);
+  } catch (e) {
+    if (e instanceof NotProvisionedError) redirect('/settings/database');
+    throw e;
+  }
   const canEdit = can(ctx.role, 'automation:manage');
-  const site = await defaultSite(ctx.organizationId);
   if (!site) redirect('/');
 
   const [groups, schedule, scheduler, recentRuns] = await Promise.all([

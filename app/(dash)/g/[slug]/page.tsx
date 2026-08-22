@@ -1,7 +1,8 @@
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { requireSession } from '@/lib/http/auth-guard';
 import { can } from '@/lib/auth/roles';
 import { defaultSite, requireGroupAccess } from '@/lib/services/tenant.service';
+import { NotProvisionedError } from '@/lib/errors';
 import { listPagesInGroup } from '@/lib/services/results.service';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { StrategyTabs } from '@/components/ui/StrategyTabs';
@@ -27,7 +28,13 @@ export default async function GroupPage({
   const strategy: PsiStrategy = raw === 'desktop' ? 'desktop' : 'mobile';
 
   const ctx = await requireSession();
-  const site = await defaultSite(ctx.organizationId);
+  let site: Awaited<ReturnType<typeof defaultSite>>;
+  try {
+    site = await defaultSite(ctx.organizationId);
+  } catch (e) {
+    if (e instanceof NotProvisionedError) redirect('/settings/database');
+    throw e;
+  }
   if (!site) notFound();
 
   // Slugs appear in URLs, so ownership is checked rather than assumed.

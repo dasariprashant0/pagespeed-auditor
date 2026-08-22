@@ -1,8 +1,10 @@
+import { redirect } from 'next/navigation';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { requireSession } from '@/lib/http/auth-guard';
 import { can } from '@/lib/auth/roles';
 import { getTenantPrisma } from '@/lib/db/tenant';
 import { getEnv } from '@/lib/env';
+import { NotProvisionedError } from '@/lib/errors';
 import { listSites, orgEmailRef } from '@/lib/services/tenant.service';
 import { listGroupsWithAggregates } from '@/lib/services/results.service';
 import { historyOverview } from '@/lib/services/retention.service';
@@ -37,9 +39,16 @@ export default async function SiteSettingsPage() {
   // Visible to every role -- only site:manage decides whether these forms
   // actually accept input. See docs/DECISIONS.md.
   const ctx = await requireSession();
-  const prisma = await getTenantPrisma(ctx.organizationId);
+  let prisma: Awaited<ReturnType<typeof getTenantPrisma>>;
+  let sites: Awaited<ReturnType<typeof listSites>>;
+  try {
+    prisma = await getTenantPrisma(ctx.organizationId);
+    sites = await listSites(ctx.organizationId);
+  } catch (e) {
+    if (e instanceof NotProvisionedError) redirect('/settings/database');
+    throw e;
+  }
   const canEdit = can(ctx.role, 'site:manage');
-  const sites = await listSites(ctx.organizationId);
   const site = sites[0] ?? null;
 
   const [groups, history, orgEmail] = await Promise.all([

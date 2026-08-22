@@ -3,6 +3,7 @@ import { requireApiSession } from '@/lib/http/auth-guard';
 import { getTenantPrisma } from '@/lib/db/tenant';
 import { toRunProgress } from '@/lib/services/site.service';
 import { estimateRun } from '@/lib/services/estimate.service';
+import { NotProvisionedError } from '@/lib/errors';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,7 +15,15 @@ export async function GET() {
   const session = await requireApiSession();
   if (session instanceof NextResponse) return session;
 
-  const prisma = await getTenantPrisma(session.organizationId);
+  let prisma: Awaited<ReturnType<typeof getTenantPrisma>>;
+  try {
+    prisma = await getTenantPrisma(session.organizationId);
+  } catch (e) {
+    if (e instanceof NotProvisionedError) {
+      return NextResponse.json({ error: 'not_provisioned' }, { status: 409 });
+    }
+    throw e;
+  }
   const runs = await prisma.auditRun.findMany({
     // Scoped: an unfiltered poll would leak another tenant's activity, and
     // their scope labels name their pages.

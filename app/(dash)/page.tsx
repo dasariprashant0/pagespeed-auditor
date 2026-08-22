@@ -1,6 +1,8 @@
+import { redirect } from 'next/navigation';
 import { requireSession } from '@/lib/http/auth-guard';
 import { defaultSite } from '@/lib/services/tenant.service';
 import { onboardingState } from '@/lib/services/onboarding.service';
+import { NotProvisionedError } from '@/lib/errors';
 import { SetupChecklist } from '@/components/onboarding/SetupChecklist';
 import { RoleTourBanner } from '@/components/onboarding/RoleTourBanner';
 import { WaitingOnAdmin } from '@/components/onboarding/WaitingOnAdmin';
@@ -31,8 +33,15 @@ export default async function HomePage({
   // Scoped to the caller's organisation. findFirst() with no filter would show
   // whichever site happens to be first in the table -- another tenant's.
   const ctx = await requireSession();
-  const site = await defaultSite(ctx.organizationId);
-  const setup = await onboardingState(ctx.organizationId);
+  let site: Awaited<ReturnType<typeof defaultSite>>;
+  let setup: Awaited<ReturnType<typeof onboardingState>>;
+  try {
+    site = await defaultSite(ctx.organizationId);
+    setup = await onboardingState(ctx.organizationId);
+  } catch (e) {
+    if (e instanceof NotProvisionedError) redirect('/settings/database');
+    throw e;
+  }
   const canManage = can(ctx.role, 'site:manage');
   const canReorderGroups = can(ctx.role, 'groups:manage');
 

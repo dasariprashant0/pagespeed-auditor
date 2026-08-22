@@ -1,7 +1,8 @@
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { requireSession } from '@/lib/http/auth-guard';
 import { can } from '@/lib/auth/roles';
 import { defaultSite, requirePageAccess } from '@/lib/services/tenant.service';
+import { NotProvisionedError } from '@/lib/errors';
 import { getPageReport } from '@/lib/services/report.service';
 import { DownloadMarkdown } from '@/components/report/DownloadMarkdown';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -42,7 +43,13 @@ export default async function PageReport({
   const strategy: PsiStrategy = raw === 'desktop' ? 'desktop' : 'mobile';
 
   const ctx = await requireSession();
-  const site = await defaultSite(ctx.organizationId);
+  let site: Awaited<ReturnType<typeof defaultSite>>;
+  try {
+    site = await defaultSite(ctx.organizationId);
+  } catch (e) {
+    if (e instanceof NotProvisionedError) redirect('/settings/database');
+    throw e;
+  }
   if (!site) notFound();
 
   // Page ids appear in URLs. Without this check, pasting another tenant's id

@@ -9,6 +9,7 @@ import { Section } from '@/components/settings/Section';
 import { NotificationForm } from '@/components/settings/NotificationForm';
 import { OrgEmailForm } from '@/components/settings/OrgEmailForm';
 import { emailConfigProblem } from '@/lib/notify/email';
+import { NotProvisionedError } from '@/lib/errors';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,9 +24,16 @@ export default async function NotificationsSettingsPage() {
   // forms below actually accept input, the same capability that already
   // gated these two sections when they lived under Automation.
   const ctx = await requireSession();
-  const prisma = await getTenantPrisma(ctx.organizationId);
+  let prisma: Awaited<ReturnType<typeof getTenantPrisma>>;
+  let site: Awaited<ReturnType<typeof defaultSite>>;
+  try {
+    prisma = await getTenantPrisma(ctx.organizationId);
+    site = await defaultSite(ctx.organizationId);
+  } catch (e) {
+    if (e instanceof NotProvisionedError) redirect('/settings/database');
+    throw e;
+  }
   const canEdit = can(ctx.role, 'automation:manage');
-  const site = await defaultSite(ctx.organizationId);
   if (!site) redirect('/');
 
   const [notif, orgEmail] = await Promise.all([
