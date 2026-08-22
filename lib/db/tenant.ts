@@ -33,7 +33,7 @@ const MAX_CACHED_TENANT_CLIENTS = 20;
 const globalForTenant = globalThis as unknown as {
   __psaTenantPool?: Map<string, CachedTenantClient>;
 };
-// Survives Next dev's HMR module reloads, the same reason lib/db.ts's
+// Survives Next dev's HMR module reloads, the same reason lib/db/central.ts's
 // singleton does.
 globalForTenant.__psaTenantPool ??= new Map();
 

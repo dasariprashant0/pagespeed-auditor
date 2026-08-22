@@ -24,7 +24,6 @@ const eslintConfig = defineConfig([
       "lib/sitemap/**/*.ts",
       "lib/tenantDb/**/*.ts",
       "lib/env.ts",
-      "lib/db.ts",
       "lib/db/**/*.ts",
       "lib/crypto/**/*.ts",
       "lib/logger.ts",

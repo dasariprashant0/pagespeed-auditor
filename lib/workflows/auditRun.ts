@@ -152,6 +152,12 @@ async function reconcileIfNeededStep(organizationId: string, runId: string): Pro
  * This function itself runs in a sandboxed VM -- no Node built-ins, no fetch,
  * no setTimeout. All real work happens in the "use step" functions above;
  * this only orchestrates them.
+ *
+ * `organizationId` is LAST here (and on `startAuditRun` below), unlike every
+ * other function in this file, which all take it first. Deliberate, not an
+ * oversight: `[runId, pairs, batchSize, organizationId]` is Vercel Workflow's
+ * persisted argument list, and appending the new parameter at the end
+ * minimizes the diff against what shipped before this parameter existed.
  */
 export async function auditRunWorkflow(
   runId: string,

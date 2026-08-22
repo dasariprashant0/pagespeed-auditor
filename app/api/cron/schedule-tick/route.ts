@@ -27,13 +27,19 @@ export const maxDuration = 60;
  * Per-tenant cutover (phase 5): `Schedule`/`AuditRun` now live in each org's
  * own Neon database, so "what's due right now" can no longer be answered by
  * one query against one database. This route first asks the central
- * database which orgs are actually provisioned, then opens each org's own
- * tenant database via withTenantPrisma (not getTenantPrisma's cached pool --
- * this fans out across every org in one invocation, and the cache is
- * deliberately for single-org callers) to check/reconcile/sweep just that
- * org. One org's failure (revoked credential, Neon outage) must not stop the
- * tick for every other org, so each iteration is wrapped in its own
- * try/catch.
+ * database which orgs are actually provisioned, then does the
+ * check/reconcile/sweep work for each one in turn. Only `reconcileStaleRuns`
+ * actually goes through `withTenantPrisma` (opening, using and closing a
+ * client without touching the shared cache) -- that's the one call here that
+ * needs a client closed right after use rather than left warm, since this
+ * route fans out across every org in one invocation and the cache is
+ * deliberately for single-org callers. `stampSchedulerHeartbeat`,
+ * `dueSchedules`, `advanceSchedule` and `planAndStartSweep` all resolve
+ * `getTenantPrisma` internally instead, the same per-org cache everywhere
+ * else in the app uses. One org's failure (revoked credential, Neon outage)
+ * must not stop the tick for every other org -- see
+ * lib/cron/orgLoop.ts's forEachOrgIsolated, which this route delegates the
+ * loop to.
  */
 export async function GET(request: Request): Promise<Response> {
   const auth = request.headers.get('authorization');
