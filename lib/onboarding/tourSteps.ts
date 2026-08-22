@@ -48,14 +48,6 @@ export const TOUR_STEPS: TourStep[] = [
     requiredCapability: 'recommendations:generate',
   },
   {
-    id: 'report-raw-json',
-    route: '/p/[pageId]',
-    targetSelector: 'raw-json-toggle',
-    title: 'The real PageSpeed JSON',
-    body: "Everything this report is built from, if you'd rather read the source than the summary.",
-    requiredCapability: 'developer:access',
-  },
-  {
     id: 'settings-team',
     route: '/settings/team',
     targetSelector: 'invite-form',
