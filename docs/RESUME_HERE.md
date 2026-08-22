@@ -38,7 +38,7 @@ is configured in the app.
 ```bash
 npx tsc --noEmit   # must be clean
 npm run lint       # must be clean
-npm test           # must pass — 138 tests as of this writing
+npm test           # must pass — 187 tests as of this writing
 ```
 
 ## Two things that will cost you real time if you don't know them first

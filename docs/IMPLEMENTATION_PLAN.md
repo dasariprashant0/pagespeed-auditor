@@ -6,6 +6,13 @@
 > open. Written 20 Aug 2026. Cross-check against `docs/BUILD_LOG.md` (the
 > chronological detail) before trusting any status here more than a few
 > weeks old.
+>
+> **Updated 22 Aug 2026** to add the two rows below and close item 2 --
+> everything else in §1–§3 is still the 20 Aug 2026 snapshot and may have
+> drifted further since. The per-tenant cutover in particular is a bigger
+> architectural change than anything else in this table; read
+> `docs/PER_TENANT_ARCHITECTURE.md` before touching auth, `lib/db/*`, or
+> any Server Action/route/workflow that reads tenant data.
 
 ## 1. Status by stage
 
@@ -18,7 +25,9 @@
 | 5. Trends / regressions | **Done** | Score history per page, regression badges |
 | 6. AI recommendations | **Done** | Versioned, Claude via `@anthropic-ai/sdk` |
 | MCP server | **Done, not being extended this pass** | 9 tools, full list in `docs/PRD.md` §4 |
-| Multi-tenant rebuild | **Done** | `Organization`/`Membership`/role model throughout |
+| Multi-tenant rebuild | **Done** | `Organization`/`Membership`/role model throughout (shared database, one org's data alongside another's) |
+| Per-tenant cutover (Phase 5) | **Done** | Each org now provisions its OWN Neon + Cloudflare D1, not a shared one — see `docs/PER_TENANT_ARCHITECTURE.md`, `docs/DECISIONS.md` §19, and the Phase 5 entries in `docs/BUILD_LOG.md`. Phase 6 (dropping the old shared tables, removing the `CLOUDFLARE_*` env fallback) is **not started** |
+| Onboarding tour | **Done** | Per-membership, DOM-anchored, opportunistic tour plus a persistent floating checklist — `docs/superpowers/specs/2026-08-22-onboarding-tour-design.md`, BUILD_LOG's 22 Aug entry |
 
 `CLAUDE.md`'s scope note ("current scope: stages 1–2... MCP deliberately
 out of scope") is stale against this table — flagged in `docs/PRD.md` §6
@@ -89,7 +98,7 @@ build are necessary, not sufficient.
 | # | Item | Why it's still open |
 |---|---|---|
 | 1 | ~~`CLAUDE.md`'s stale scope note~~ | **Resolved** — `CLAUDE.md`'s "What this is" section now reflects the built system rather than the original stage-1/2 scope |
-| 2 | Storage panel doesn't show Blob usage | `historyOverview` reports Postgres bytes only; Blob is a separate, cheaper line not yet surfaced anywhere in the UI |
+| 2 | ~~Storage panel doesn't show Blob/D1 usage~~ | **Resolved** — `historyOverview` (Settings → Site) reports the `blobBackedResults` count, and Settings → Database now shows live Neon (`pg_database_size`) and Cloudflare D1 (`file_size`) usage, read on demand, once an org has connected either |
 | 3 | Two PSI fixtures never captured (per `docs/RESUME_HERE.md`) | A page with no CrUX data, and one with `origin_fallback: true` |
 | 4 | ~~`AUTH_USERNAME`/`AUTH_PASSWORD_HASH` single-tenant leftovers~~ | **Resolved** — these were dead: read only by a display panel and by `scripts/hash-password.ts`/`set-password.ts`, never by the real per-user login path in `lib/services/account.service.ts`. Removed from `lib/env.ts`, `.env`/`.env.example`, the Settings → Automation panel, `package.json`, and the two scripts deleted. `scripts/reset-password.ts` is unrelated and stays — it resets a real `User` row's password hash |
 | 5 | MCP tool surface | Feature-complete, explicitly not being extended this pass (direct instruction, 20 Aug 2026) |

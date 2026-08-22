@@ -3,7 +3,7 @@
 > This file replaced the Ship Studio marketing-site template, which told agents to
 > run `/onboarding` and build a landing page. This is an internal data tool for
 > engineers — that guidance was actively misleading. The original is kept at
-> `docs/CLAUDE.shipstudio-original.md` for reference.
+> `docs/archive/CLAUDE.shipstudio-original.md` for reference.
 
 ## Read these before doing anything
 
@@ -26,9 +26,12 @@ where they disagree with the files above, the files above win):
 | `docs/UI_UX.md` | Design system, theming, component inventory. |
 | `docs/BACKEND_SCHEMA.md` | The Prisma schema, explained model by model. |
 | `docs/IMPLEMENTATION_PLAN.md` | Status by stage, open items, the verification bar. |
+| `docs/PER_TENANT_ARCHITECTURE.md` | **The central-DB/tenant-DB split (Phase 5) — read this before touching auth, `lib/db/*`, or any Server Action/route/workflow that reads tenant data.** |
 
 Everything needed to continue lives in the repo. Nothing depends on a particular
-tool's session.
+tool's session. `docs/archive/` holds superseded content (old `BUILD_LOG.md`
+sections, the original Ship Studio template) kept for history — normal work
+never needs to open it.
 
 ## What this is
 
