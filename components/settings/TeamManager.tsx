@@ -64,7 +64,7 @@ export function TeamManager({
             : 'Only an admin can invite teammates.'}
         </p>
 
-        <form action={inviteAction} className="flex flex-wrap items-end gap-2">
+        <form action={inviteAction} className="flex flex-wrap items-end gap-2" data-tour="invite-form">
           <fieldset disabled={!canEdit} className="flex flex-wrap items-end gap-2">
             <label className="min-w-[14rem] flex-1">
               <span className="eyebrow mb-1 block">Email</span>

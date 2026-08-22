@@ -136,6 +136,7 @@ function NeonPanel({ provision, canEdit }: { provision: ProvisionRef; canEdit: b
     <form
       action={action}
       className="space-y-3"
+      data-tour="neon-connection-form"
       onSubmit={(e) => {
         const submitter = (e.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
         setActiveIntent((submitter?.value as Intent) ?? null);

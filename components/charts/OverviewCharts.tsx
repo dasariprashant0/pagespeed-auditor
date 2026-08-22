@@ -146,7 +146,7 @@ export function OverviewCharts({ data, strategy }: { data: ChartData; strategy: 
   const active = CHARTS.find((c) => c.value === kind)!;
 
   return (
-    <div className="panel overflow-hidden">
+    <div className="panel overflow-hidden" data-tour="overview-charts">
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-[var(--border)] px-3.5 py-2.5">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <div role="tablist" aria-label="Chart" className="flex rounded-[6px] border border-[var(--border)] p-0.5">

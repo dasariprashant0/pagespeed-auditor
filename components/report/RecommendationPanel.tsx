@@ -70,7 +70,7 @@ export function RecommendationPanel({
   };
 
   return (
-    <section className="rounded-[8px] border border-[var(--border)] bg-[var(--surface)]" aria-busy={pending}>
+    <section className="rounded-[8px] border border-[var(--border)] bg-[var(--surface)]" aria-busy={pending} data-tour="recommendation-panel">
       <div className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2.5">
         <h3 className="font-[family-name:var(--font-display)] text-[13px] font-medium">
           What to fix first

@@ -45,7 +45,7 @@ export function RunAuditButton({
   };
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2" data-tour="run-audit-button">
       <Button
         variant={variant}
         type="button"
