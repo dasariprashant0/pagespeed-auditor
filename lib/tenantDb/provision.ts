@@ -102,6 +102,37 @@ export async function ensureD1Schema(
 }
 
 /**
+ * Read-only usage for the Settings → Database page -- a plain GET against
+ * the same D1 database resource `validateD1Credentials`/`ensureD1Schema`
+ * already talk to, not a new API surface or a new credential. Cloudflare's
+ * `file_size` is the on-disk size of the whole SQLite file, which is what
+ * counts against the account's D1 storage.
+ */
+export async function getD1Usage(
+  accountId: string,
+  databaseId: string,
+  apiToken: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<{ bytes: number; numTables: number } | { error: string }> {
+  try {
+    const res = await fetchImpl(`https://api.cloudflare.com/client/v4/accounts/${accountId}/d1/database/${databaseId}`, {
+      headers: { Authorization: `Bearer ${apiToken}` },
+    });
+    const body = (await res.json()) as {
+      success: boolean;
+      result?: { file_size?: number; num_tables?: number };
+      errors?: unknown[];
+    };
+    if (!res.ok || !body.success) {
+      return { error: `Cloudflare rejected that (HTTP ${res.status}): ${JSON.stringify(body.errors ?? {})}` };
+    }
+    return { bytes: body.result?.file_size ?? 0, numTables: body.result?.num_tables ?? 0 };
+  } catch (e) {
+    return { error: `Could not reach Cloudflare: ${e instanceof Error ? e.message : String(e)}` };
+  }
+}
+
+/**
  * Every tenant migration, in order, inside one transaction -- a partial
  * failure leaves zero tables, so a retry starts clean rather than needing
  * per-statement idempotency.

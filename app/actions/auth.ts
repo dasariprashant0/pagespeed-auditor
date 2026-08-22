@@ -158,9 +158,7 @@ export async function requestResetAction(_prev: unknown, form: FormData): Promis
     message: 'If that address has an account, a reset link is on its way. It works for 30 minutes.',
     // Without a mail transport the link would be unreachable, which in a
     // self-hosted install means nobody can ever get back in.
-    ...(url && process.env.EMAIL_TRANSPORT !== 'resend' && process.env.EMAIL_TRANSPORT !== 'smtp'
-      ? { devUrl: url }
-      : {}),
+    ...(url && getEnv().EMAIL_TRANSPORT !== 'resend' && getEnv().EMAIL_TRANSPORT !== 'smtp' ? { devUrl: url } : {}),
   };
 }
 

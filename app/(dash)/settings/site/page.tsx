@@ -10,6 +10,7 @@ import {
   demoAwareListSites,
 } from '@/lib/onboarding/demoTenant';
 import { emailConfigProblem } from '@/lib/notify/email';
+import { formatBytes } from '@/lib/view/bytes';
 import { SettingsNav } from '@/components/settings/SettingsNav';
 import { AddSiteForm, EditSiteForm, PsiKeyForm } from '@/components/settings/SiteForms';
 import { IngestButton } from '@/components/settings/IngestButton';
@@ -25,13 +26,6 @@ function Panel({ title, hint, children }: { title: string; hint?: string; childr
       {children}
     </section>
   );
-}
-
-function bytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1048576) return `${Math.round(n / 1024)} KB`;
-  if (n < 1073741824) return `${(n / 1048576).toFixed(1)} MB`;
-  return `${(n / 1073741824).toFixed(2)} GB`;
 }
 
 export default async function SiteSettingsPage() {
@@ -108,7 +102,7 @@ export default async function SiteSettingsPage() {
                     ['Results stored', history.totalResults.toLocaleString()],
                     ['Checks recorded', history.distinctRuns.toLocaleString()],
                     ['Oldest', history.oldest ? new Date(history.oldest).toLocaleDateString() : '—'],
-                    ['Storage used', bytes(history.storageBytes)],
+                    ['Storage used', formatBytes(history.storageBytes)],
                   ].map(([k, v]) => (
                     <div key={k}>
                       <dt className="eyebrow">{k}</dt>
@@ -144,9 +138,9 @@ export default async function SiteSettingsPage() {
                       ? `sending via your own mailbox (${orgEmail.host})`
                       : emailProblem
                         ? 'not sending — see Settings → Notifications'
-                        : process.env.EMAIL_TRANSPORT === 'resend'
-                          ? `sending as ${process.env.EMAIL_FROM} via Resend`
-                          : `sending via ${process.env.SMTP_HOST}`,
+                        : env.EMAIL_TRANSPORT === 'resend'
+                          ? `sending as ${env.EMAIL_FROM} via Resend`
+                          : `sending via ${env.SMTP_HOST}`,
                   ],
                 ] as Array<[string, string]>).map(([k, v]) => (
                   <div key={k} className="flex flex-wrap gap-x-4 py-1.5">

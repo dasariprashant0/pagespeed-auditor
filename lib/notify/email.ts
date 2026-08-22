@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer';
 import { logger } from '../logger.ts';
+import { getEnv } from '../env.ts';
 
 /**
  * SMTP rather than a hosted API on purpose: for roughly thirty emails a month,
@@ -23,18 +24,18 @@ export type EmailOutcome =
  * harder to trace.
  */
 export function emailConfigProblem(): string | null {
-  const transport = process.env.EMAIL_TRANSPORT ?? 'none';
-  if (transport === 'resend') {
-    if (!process.env.RESEND_API_KEY || !process.env.EMAIL_FROM) {
+  const env = getEnv();
+  if (env.EMAIL_TRANSPORT === 'resend') {
+    if (!env.RESEND_API_KEY || !env.EMAIL_FROM) {
       return 'This deployment\'s shared sender isn\'t finished setting up — ask whoever manages hosting, or set your own mailbox above instead.';
     }
     return null;
   }
 
-  if (transport !== 'smtp') {
+  if (env.EMAIL_TRANSPORT !== 'smtp') {
     return 'This deployment has no shared sender configured, so messages are written to the log instead of sent. Set your own mailbox above, or ask whoever manages hosting to configure one.';
   }
-  if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
+  if (!env.SMTP_HOST || !env.SMTP_USER || !env.SMTP_PASS) {
     return 'This deployment\'s shared mailbox isn\'t finished setting up — ask whoever manages hosting, or set your own mailbox above instead.';
   }
   return null;
@@ -58,10 +59,11 @@ export interface SmtpOverride {
 }
 
 function transporterFor(override?: SmtpOverride) {
-  const host = override?.host ?? process.env.SMTP_HOST!;
-  const port = override?.port ?? Number(process.env.SMTP_PORT ?? 587);
-  const user = override?.user ?? process.env.SMTP_USER;
-  const pass = override?.pass ?? process.env.SMTP_PASS;
+  const env = getEnv();
+  const host = override?.host ?? env.SMTP_HOST;
+  const port = override?.port ?? env.SMTP_PORT;
+  const user = override?.user ?? env.SMTP_USER;
+  const pass = override?.pass ?? env.SMTP_PASS;
   return nodemailer.createTransport({
     host,
     port,
@@ -119,7 +121,10 @@ export async function sendEmail(
   }
 
   const transporter = transporterFor(override);
-  const from = override?.from ?? process.env.SMTP_FROM ?? 'PageSpeed Auditor <noreply@localhost>';
+  // || not ?? -- SMTP_FROM's zod default is '' (unset), not undefined, same
+  // reason as everywhere else in lib/env.ts that checks truthiness rather
+  // than nullishness for an optional string field.
+  const from = override?.from || getEnv().SMTP_FROM || 'PageSpeed Auditor <noreply@localhost>';
 
   try {
     await transporter.sendMail({ from, to: to.join(', '), subject, text, html });

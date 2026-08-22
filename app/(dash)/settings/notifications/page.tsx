@@ -9,6 +9,7 @@ import { Section } from '@/components/settings/Section';
 import { NotificationForm } from '@/components/settings/NotificationForm';
 import { OrgEmailForm } from '@/components/settings/OrgEmailForm';
 import { emailConfigProblem } from '@/lib/notify/email';
+import { getEnv } from '@/lib/env';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,9 +38,8 @@ export default async function NotificationsSettingsPage() {
   // shared default, so it would wrongly report "not configured" for an
   // organisation that has already set its own mailbox.
   const emailProblem = orgEmail.hasOverride ? null : emailConfigProblem();
-  const sentFromAddress = orgEmail.hasOverride
-    ? orgEmail.user
-    : process.env.EMAIL_TRANSPORT === 'resend' ? (process.env.EMAIL_FROM ?? null) : (process.env.SMTP_USER ?? null);
+  const env = getEnv();
+  const sentFromAddress = orgEmail.hasOverride ? orgEmail.user : env.EMAIL_TRANSPORT === 'resend' ? env.EMAIL_FROM || null : env.SMTP_USER || null;
 
   return (
     <>
@@ -68,7 +68,7 @@ export default async function NotificationsSettingsPage() {
         >
           <NotificationForm
             sentFrom={sentFromAddress}
-            appSender={!orgEmail.hasOverride && process.env.EMAIL_TRANSPORT === 'resend'}
+            appSender={!orgEmail.hasOverride && env.EMAIL_TRANSPORT === 'resend'}
             sharedDefault={!orgEmail.hasOverride}
             initial={{
               emailEnabled: notif?.emailEnabled ?? false,

@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import { logger } from '../logger.ts';
+import { getEnv } from '../env.ts';
 import { SYSTEM_PROMPT } from './prompt.ts';
 
 /**
@@ -33,7 +34,7 @@ export function resolveProvider(): RecommendationProvider {
   // The SDK also picks up an `ant auth login` profile with no env var set, but
   // that cannot be detected without constructing a client, so an explicit key
   // is the only thing auto-detection trusts.
-  if (process.env.ANTHROPIC_API_KEY) return anthropicProvider();
+  if (getEnv().ANTHROPIC_API_KEY) return anthropicProvider();
   if (process.env.CLAUDE_CODE_OAUTH_TOKEN || process.env.RECOMMENDATION_ALLOW_CLI === '1') return claudeCliProvider();
   return claudeCliProvider();
 }
@@ -50,7 +51,7 @@ function noneProvider(): RecommendationProvider {
 
 /** The plain API path: one request, one response, billed per token. */
 function anthropicProvider(): RecommendationProvider {
-  const model = process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-5';
+  const model = getEnv().ANTHROPIC_MODEL;
   return {
     name: 'anthropic-sdk',
     model,
