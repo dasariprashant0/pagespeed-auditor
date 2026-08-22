@@ -4,7 +4,6 @@ import { revalidatePath } from 'next/cache';
 import { requireCapability, ForbiddenError } from '@/lib/http/auth-guard';
 import { centralPrisma } from '@/lib/db/central';
 import { encryptSecret } from '@/lib/crypto/secretBox';
-import { provisionRefFor } from '@/lib/services/org.service';
 import { validateNeonUrl, validateD1Credentials, ensureD1Schema, runTenantMigrations } from '@/lib/tenantDb/provision';
 
 /**
@@ -51,11 +50,9 @@ export async function provisionTenantAction(_prev: ProvisionResult | null, form:
       return { ok: true, message: 'Nothing changed.' };
     }
 
-    const current = await provisionRefFor(organizationId);
-
     if (!neonUnchanged) {
       if (!neonRaw) return { ok: false, error: 'The Neon connection string is required.', field: 'neon' };
-      const neonError = await validateNeonUrl(neonRaw, current.status === 'ready');
+      const neonError = await validateNeonUrl(neonRaw);
       if (neonError) return { ok: false, error: neonError, field: 'neon' };
     }
 

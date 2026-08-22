@@ -10,21 +10,30 @@ import { TENANT_MIGRATIONS } from './migrations.generated.ts';
  */
 
 /**
- * A real connect, plus (unless this org is already 'ready' and just
- * re-saving) a check that the target is empty. That check is a heuristic
- * -- it only looks for a pre-existing `Site` table -- so the caller's own
- * copy should say "must be a fresh, empty database" explicitly rather than
- * implying this is exhaustive.
+ * A real connect, plus a check that the target is empty. That check is a
+ * heuristic -- it only looks for a pre-existing `Site` table -- so the
+ * caller's own copy should say "must be a fresh, empty database" explicitly
+ * rather than implying this is exhaustive.
+ *
+ * Always runs, even when the caller is already 'ready' from an earlier
+ * provisioning. A prior version skipped it in that case, on the theory that
+ * an already-ready org typing a new value must be rotating to a fresh
+ * database -- but that assumption doesn't hold if the new value is the same
+ * (or another already-migrated) database: the skip let `runTenantMigrations`
+ * run straight into `relation "Site" already exists`, a raw driver error
+ * instead of this function's own clear message. The one case that
+ * legitimately needs no re-check -- resubmitting the exact same,
+ * already-working value -- is handled earlier, in the caller, by the
+ * dot-placeholder "unchanged" shortcut, which skips calling this function
+ * at all.
  */
-export async function validateNeonUrl(connectionString: string, alreadyReady: boolean): Promise<string | null> {
+export async function validateNeonUrl(connectionString: string): Promise<string | null> {
   const client = new Client({ connectionString });
   try {
     await client.connect();
-    if (!alreadyReady) {
-      const { rows } = await client.query<{ t: string | null }>(`SELECT to_regclass('"Site"') AS t`);
-      if (rows[0]?.t !== null) {
-        return 'That database already has tables in it. This must be a fresh, empty database.';
-      }
+    const { rows } = await client.query<{ t: string | null }>(`SELECT to_regclass('"Site"') AS t`);
+    if (rows[0]?.t !== null) {
+      return 'That database already has tables in it. This must be a fresh, empty database.';
     }
     return null;
   } catch (e) {
