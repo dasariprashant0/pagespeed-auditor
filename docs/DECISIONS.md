@@ -1087,18 +1087,27 @@ inventory, and the phase-by-phase sequencing) captured going into
 implementation; BUILD_LOG entries for each phase as they land are the
 current-state record from here.
 
-**Side effect noted at the Phase 5 cutover's final review: the PSI rate
-limiter is now per-organization, not global.** `RateLimitBucket` moved
-into each org's own tenant database along with everything else this
-decision covers, so `PsiRateLimiter` now paces each organization's PSI
-calls independently rather than sharing one global bucket. This is
-correct and intended for an organization that supplies its own PSI key
-(`Site.psiApiKey`) -- it should only ever be paced against its own quota.
-It's a minor, low-probability corner case for organizations that fall
-back to the shared `PSI_API_KEY` env var instead: they now compete for
-that one shared Google quota N-ways, each pacing itself as if it had the
-whole thing, rather than sharing one global rate limit that kept the
-combined call rate within it. Not treated as a defect worth blocking on --
-BYO-PSI-key is already the norm this app pushes every organization
-toward, and the failure mode of exceeding the shared key's quota is a 429
-from PSI, not data loss or cross-tenant leakage.
+**Side effect noted at the Phase 5 cutover's final review, fixed 22 Aug
+2026: the PSI rate limiter had become per-organization, not global.**
+`RateLimitBucket` moved into each org's own tenant database along with
+everything else this decision covers, so `PsiRateLimiter` paced each
+organization's PSI calls independently rather than sharing one global
+bucket. Correct and intended for an organization that supplies its own
+PSI key (`Site.psiApiKey`) -- it should only ever be paced against its
+own quota. Not correct for organizations that fall back to the shared
+`PSI_API_KEY` env var instead: they compete for that one shared Google
+quota N-ways, and a per-org bucket let each pace itself as if it had the
+whole thing, rather than sharing one real limit.
+
+**Fixed** (`lib/opsState.ts`'s `getSharedPsiRateLimiter`): a second
+limiter, backed by the CENTRAL database (genuinely shared across every
+org, unlike a tenant database) rather than any org's own. `RateLimitBucket`
+already existed in the central schema too -- a leftover from before the
+Phase 5 split that had gone unused since, reused here rather than adding
+a new table. `auditPage` (`lib/services/audit.service.ts`) now resolves
+which key it's about to spend BEFORE acquiring (it used to acquire
+first, then resolve the key), and picks the limiter that matches: the
+org's own tenant-scoped one for a BYO key, the shared central one for
+the env fallback. Tested in `test/audit.service.test.ts` via an
+injectable `resolveSiteKey` dependency, without needing a live tenant
+database.

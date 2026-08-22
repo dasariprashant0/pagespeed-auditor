@@ -59,7 +59,7 @@ async function main() {
       windowMs: Number(process.env.PSI_RATE_WINDOW_MS ?? 4000),
     });
     for (const p of pairs) {
-      await auditPage({ prisma, limiter, organizationId: site.organizationId }, { runId, pageId: p.pageId, url: p.url, strategy: p.strategy });
+      await auditPage({ prisma, limiter, sharedLimiter: limiter, organizationId: site.organizationId }, { runId, pageId: p.pageId, url: p.url, strategy: p.strategy });
     }
 
     const est = await estimateRun(site.organizationId, pairs.length, site.id);

@@ -4,7 +4,7 @@ import { getTenantPrisma } from '../db/tenant.ts';
 import { d1CredentialsForOrg } from '../services/org.service.ts';
 import { getEnv } from '../env.ts';
 import { jobLogger } from '../logger.ts';
-import { getPsiRateLimiter, pushRunLogEvent } from '../opsState.ts';
+import { getPsiRateLimiter, getSharedPsiRateLimiter, pushRunLogEvent } from '../opsState.ts';
 import { auditPage, errorResultFor, recordAuditResult } from '../services/audit.service.ts';
 import { buildMarkdownReport } from '../report/markdown.ts';
 import { RetryableError, PermanentError } from '../errors.ts';
@@ -59,7 +59,7 @@ async function auditOnePageStep(
   for (let attempt = 1; ; attempt++) {
     try {
       const outcome = await auditPage(
-        { prisma, limiter: await getPsiRateLimiter(organizationId), organizationId, d1 },
+        { prisma, limiter: await getPsiRateLimiter(organizationId), sharedLimiter: getSharedPsiRateLimiter(), organizationId, d1 },
         { runId, pageId, url, strategy },
       );
       if (!outcome.written) {

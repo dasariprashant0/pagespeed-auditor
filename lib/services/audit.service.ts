@@ -213,12 +213,17 @@ export function errorResultFor(code: string): ExtractedResult {
 
 export interface AuditPageDeps {
   prisma: TenantPrismaClient;
+  /** Paces this org's OWN Google quota -- used when the site has its own psiApiKey. */
   limiter: PsiRateLimiter;
+  /** Paces the shared deployment-level PSI_API_KEY -- used when the site has none of its own. See docs/DECISIONS.md §19. */
+  sharedLimiter: PsiRateLimiter;
   organizationId: string;
   d1?: D1Credentials;
   /** Injected so the throughput dry-run and tests can substitute a fake PSI. */
   fetchImpl?: typeof fetch;
   now?: () => Date;
+  /** Injected so a test can control which limiter gets picked without a live tenant database -- defaults to the real psiKeyForSite lookup. */
+  resolveSiteKey?: (organizationId: string, siteId: string) => Promise<string | null>;
 }
 
 /**
@@ -237,20 +242,17 @@ export async function auditPage(
   const log = jobLogger(args.runId, args.pageId, args.strategy);
   const at = deps.now?.() ?? new Date();
 
-  // Both the queued and the synchronous path acquire here, which is the only
-  // reason a dashboard-triggered audit cannot push the sustained rate over the
-  // line during a sweep.
-  await deps.limiter.acquire();
-
   // The key belongs to the SITE, not the deployment: each organisation uses
   // its own Google quota rather than sharing one and starving each other.
   // Falling back to the environment keeps single-tenant installs working.
-  const { psiKeyForSite } = await import('./tenant.service.ts');
+  const resolveSiteKey =
+    deps.resolveSiteKey ?? (async (organizationId: string, siteId: string) => (await import('./tenant.service.ts')).psiKeyForSite(organizationId, siteId));
   const page = await deps.prisma.page.findUnique({
     where: { id: args.pageId },
     select: { siteId: true },
   });
-  const apiKey = (page ? await psiKeyForSite(deps.organizationId, page.siteId) : null) ?? env.PSI_API_KEY;
+  const siteKey = page ? await resolveSiteKey(deps.organizationId, page.siteId) : null;
+  const apiKey = siteKey ?? env.PSI_API_KEY;
 
   if (!apiKey) {
     // Naming the cause here saves a very confusing 403 on every page of a run.
@@ -258,6 +260,18 @@ export async function auditPage(
       'No Google API key is configured for this site. An admin can add one under Settings → Site.',
     );
   }
+
+  // Resolved AFTER the key, not before -- which bucket paces this call
+  // depends on which Google quota it's actually about to spend. An org
+  // with its own key paces only against itself (deps.limiter, backed by
+  // its own tenant database); one falling back to the shared deployment
+  // key paces against everyone else doing the same (deps.sharedLimiter,
+  // backed by the central database) -- otherwise every org falling back
+  // paces itself as if it had the whole shared quota. See
+  // docs/DECISIONS.md §19. Both the queued and the synchronous path
+  // acquire here, which is the only reason a dashboard-triggered audit
+  // cannot push the sustained rate over the line during a sweep.
+  await (siteKey ? deps.limiter : deps.sharedLimiter).acquire();
 
   const res: PsiFetchResult = await runPagespeed(args.url, args.strategy, {
     apiKey,

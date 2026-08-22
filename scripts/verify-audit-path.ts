@@ -46,7 +46,7 @@ async function main() {
 
     console.log(`\n  auditing ${page.url} (mobile) — one real PSI call, ~15-25s\n`);
     const t0 = Date.now();
-    const outcome = await auditPage({ prisma, limiter, organizationId: site.organizationId }, {
+    const outcome = await auditPage({ prisma, limiter, sharedLimiter: limiter, organizationId: site.organizationId }, {
       runId, pageId: page.id, url: page.url, strategy: 'mobile',
     });
     console.log(`  completed in ${((Date.now() - t0) / 1000).toFixed(1)}s\n`);
@@ -91,7 +91,7 @@ async function main() {
 
     // Replay: the same job delivered twice must NOT double-count.
     const before = await prisma.auditRun.findUniqueOrThrow({ where: { id: runId }, select: { completedJobs: true } });
-    const replay = await auditPage({ prisma, limiter, organizationId: site.organizationId }, {
+    const replay = await auditPage({ prisma, limiter, sharedLimiter: limiter, organizationId: site.organizationId }, {
       runId, pageId: page.id, url: page.url, strategy: 'mobile',
     });
     const after = await prisma.auditRun.findUniqueOrThrow({ where: { id: runId }, select: { completedJobs: true } });

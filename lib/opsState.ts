@@ -1,4 +1,5 @@
 import { getTenantPrisma } from './db/tenant.ts';
+import { centralPrisma } from './db/central.ts';
 import { getEnv } from './env.ts';
 import { PsiRateLimiter } from './psi/rateLimiter.ts';
 
@@ -13,6 +14,12 @@ import { PsiRateLimiter } from './psi/rateLimiter.ts';
 
 const limiters = new Map<string, PsiRateLimiter>();
 
+/**
+ * Paces an organisation's OWN Google quota -- `RateLimitBucket` lives in
+ * that org's own tenant database (docs/DECISIONS.md §19), so this is
+ * naturally per-organisation already. Correct when the org supplies its
+ * own `Site.psiApiKey`; see getSharedPsiRateLimiter for the other case.
+ */
 export async function getPsiRateLimiter(organizationId: string): Promise<PsiRateLimiter> {
   const cached = limiters.get(organizationId);
   if (cached) return cached;
@@ -21,6 +28,32 @@ export async function getPsiRateLimiter(organizationId: string): Promise<PsiRate
   const limiter = new PsiRateLimiter({ db, max: env.PSI_RATE_MAX, windowMs: env.PSI_RATE_WINDOW_MS });
   limiters.set(organizationId, limiter);
   return limiter;
+}
+
+/**
+ * Paces the shared deployment-level `PSI_API_KEY` fallback -- the ONE
+ * bucket every organisation without its own site key competes for,
+ * backed by the central database (genuinely shared across every org,
+ * unlike a tenant database). Fixes the gap noted at the Phase 5 cutover's
+ * final review (docs/DECISIONS.md §19): moving RateLimitBucket into each
+ * org's own tenant database made per-org pacing correct for a BYO key,
+ * but left every org still using the shared fallback pacing itself as if
+ * it had the whole quota, rather than sharing one real limit. A distinct
+ * key (not the tenant limiter's default 'psi') keeps this table, still
+ * physically present in the central schema from before the Phase 5
+ * split, from ever colliding with something else that might use it.
+ */
+let sharedLimiter: PsiRateLimiter | undefined;
+
+export function getSharedPsiRateLimiter(): PsiRateLimiter {
+  const env = getEnv();
+  sharedLimiter ??= new PsiRateLimiter({
+    db: centralPrisma,
+    max: env.PSI_RATE_MAX,
+    windowMs: env.PSI_RATE_WINDOW_MS,
+    key: 'psi:shared-fallback',
+  });
+  return sharedLimiter;
 }
 
 // --- scheduler heartbeat ----------------------------------------------------

@@ -48,7 +48,7 @@ async function main() {
     for (const [i, p] of pages.entries()) {
       const started = Date.now();
       try {
-        const o = await auditPage({ prisma, limiter, organizationId: site.organizationId }, { runId, pageId: p.id, url: p.url, strategy });
+        const o = await auditPage({ prisma, limiter, sharedLimiter: limiter, organizationId: site.organizationId }, { runId, pageId: p.id, url: p.url, strategy });
         const r = await prisma.auditResult.findFirst({
           where: { auditRunId: runId, pageId: p.id, strategy },
           select: { performanceScore: true, status: true },
