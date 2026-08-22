@@ -45,7 +45,28 @@ const TARGETS: Target[] = [
     name: 'mobile-no-field',
     url: 'https://www.iana.org/help/example-domains',
     strategy: 'mobile',
+    // Turned out to have real page-level field data when this was recorded --
+    // see mobile-origin-fallback below for the case this name originally
+    // wanted. Kept (and kept its name) since other tests already use it for
+    // its actual content (the CLS-percentile scaling assertions).
     proves: 'low-traffic URL -> loadingExperience absent or origin_fallback',
+  },
+  {
+    name: 'mobile-origin-fallback',
+    url: 'https://httpbin.org/anything/psi-fixture-probe',
+    strategy: 'mobile',
+    // The one still missing per docs/RESUME_HERE.md as of 20 Aug 2026: this
+    // specific page doesn't get enough real Chrome traffic for its OWN CrUX
+    // entry, but httpbin.org's origin overall does -- loadingExperience.
+    // origin_fallback: true. Found by probing several public reference
+    // domains (Wikipedia, MDN, RFC editor, IANA, w3.org) on 22 Aug 2026;
+    // most of those turned out to have real page-level data of their own.
+    // The other missing case -- loadingExperience absent entirely, meaning
+    // even the ORIGIN doesn't qualify -- was not reproduced against any
+    // public domain tried; every reasonably well-known reference domain
+    // has at least origin-level CrUX volume. That path stays covered only
+    // by the hand-built {} case in test/extract.test.ts.
+    proves: 'origin_fallback: true (page has no CrUX entry of its own, origin does)',
   },
   {
     name: 'mobile-runtime-error',

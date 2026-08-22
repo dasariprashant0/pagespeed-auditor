@@ -1,14 +1,15 @@
 import { can } from '@/lib/auth/roles';
 import { PageHeader } from '@/components/ui/PageHeader';
-import { prisma } from '@/lib/db';
 import { requireSession } from '@/lib/http/auth-guard';
-import { defaultSite, orgEmailRef } from '@/lib/services/tenant.service';
+import { orgEmailRef } from '@/lib/services/tenant.service';
+import { demoAwareDefaultSite, demoAwareNotificationSetting } from '@/lib/onboarding/demoTenant';
 import { redirect } from 'next/navigation';
 import { SettingsNav } from '@/components/settings/SettingsNav';
 import { Section } from '@/components/settings/Section';
 import { NotificationForm } from '@/components/settings/NotificationForm';
 import { OrgEmailForm } from '@/components/settings/OrgEmailForm';
 import { emailConfigProblem } from '@/lib/notify/email';
+import { getEnv } from '@/lib/env';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,12 +24,12 @@ export default async function NotificationsSettingsPage() {
   // forms below actually accept input, the same capability that already
   // gated these two sections when they lived under Automation.
   const ctx = await requireSession();
+  const site = await demoAwareDefaultSite(ctx.organizationId);
   const canEdit = can(ctx.role, 'automation:manage');
-  const site = await defaultSite(ctx.organizationId);
   if (!site) redirect('/');
 
   const [notif, orgEmail] = await Promise.all([
-    prisma.notificationSetting.findUnique({ where: { siteId: site.id } }),
+    demoAwareNotificationSetting(ctx.organizationId, site.id),
     orgEmailRef(ctx.organizationId),
   ]);
 
@@ -37,9 +38,8 @@ export default async function NotificationsSettingsPage() {
   // shared default, so it would wrongly report "not configured" for an
   // organisation that has already set its own mailbox.
   const emailProblem = orgEmail.hasOverride ? null : emailConfigProblem();
-  const sentFromAddress = orgEmail.hasOverride
-    ? orgEmail.user
-    : process.env.EMAIL_TRANSPORT === 'resend' ? (process.env.EMAIL_FROM ?? null) : (process.env.SMTP_USER ?? null);
+  const env = getEnv();
+  const sentFromAddress = orgEmail.hasOverride ? orgEmail.user : env.EMAIL_TRANSPORT === 'resend' ? env.EMAIL_FROM || null : env.SMTP_USER || null;
 
   return (
     <>
@@ -68,7 +68,7 @@ export default async function NotificationsSettingsPage() {
         >
           <NotificationForm
             sentFrom={sentFromAddress}
-            appSender={!orgEmail.hasOverride && process.env.EMAIL_TRANSPORT === 'resend'}
+            appSender={!orgEmail.hasOverride && env.EMAIL_TRANSPORT === 'resend'}
             sharedDefault={!orgEmail.hasOverride}
             initial={{
               emailEnabled: notif?.emailEnabled ?? false,

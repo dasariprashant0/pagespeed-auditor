@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireApiSession } from '@/lib/http/auth-guard';
 import { requireRunAccess } from '@/lib/services/tenant.service';
 import { readRunLog } from '@/lib/opsState';
+import { NotProvisionedError } from '@/lib/errors';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,10 +20,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ runId: 
   const { runId } = await params;
   try {
     await requireRunAccess(session.organizationId, runId);
-  } catch {
+  } catch (e) {
+    if (e instanceof NotProvisionedError) {
+      return NextResponse.json({ error: 'not_provisioned' }, { status: 409 });
+    }
     return NextResponse.json({ error: 'not_found' }, { status: 404 });
   }
 
-  const events = await readRunLog(runId);
+  const events = await readRunLog(session.organizationId, runId);
   return NextResponse.json({ events }, { headers: { 'cache-control': 'no-store' } });
 }

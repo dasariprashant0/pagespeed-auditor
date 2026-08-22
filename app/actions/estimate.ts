@@ -1,7 +1,7 @@
 'use server';
 
 import { requireCapability } from '@/lib/http/auth-guard';
-import { prisma } from '@/lib/db';
+import { getTenantPrisma } from '@/lib/db/tenant';
 import { estimateRun, formatDuration } from '@/lib/services/estimate.service';
 
 export type EstimatePreview = {
@@ -23,7 +23,8 @@ export async function previewEstimateAction(input: {
   ref: string;
   strategyCount?: number;
 }): Promise<EstimatePreview> {
-  await requireCapability('reports:read');
+  const ctx = await requireCapability('reports:read');
+  const prisma = await getTenantPrisma(ctx.organizationId);
 
   const strategies = input.strategyCount ?? 2;
   const pageCount =
@@ -31,7 +32,7 @@ export async function previewEstimateAction(input: {
       ? 1
       : await prisma.page.count({ where: { isActive: true, group: { slug: input.ref } } });
 
-  const est = await estimateRun(pageCount * strategies);
+  const est = await estimateRun(ctx.organizationId, pageCount * strategies);
   return {
     jobs: est.jobs,
     eta: formatDuration(est.seconds),

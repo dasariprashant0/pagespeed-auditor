@@ -1,4 +1,4 @@
-import { prisma } from '../db.ts';
+import { getTenantPrisma, type TenantPrismaClient } from '../db/tenant.ts';
 import type { SweepSummary, NotificationEvent } from '../notify/types.ts';
 
 /**
@@ -6,10 +6,12 @@ import type { SweepSummary, NotificationEvent } from '../notify/types.ts';
  * the dashboard: did it complete, did scores move, and which pages are worst.
  */
 export async function buildSweepSummary(
+  organizationId: string,
   runId: string,
   event: NotificationEvent,
   appUrl: string,
 ): Promise<SweepSummary | null> {
+  const prisma = await getTenantPrisma(organizationId);
   const run = await prisma.auditRun.findUnique({
     where: { id: runId },
     select: {
@@ -33,7 +35,7 @@ export async function buildSweepSummary(
       ? Math.round(scored.reduce((a, r) => a + r.performanceScore!, 0) / scored.length)
       : null;
 
-  const previous = await previousSweepAverage(run.siteId, runId);
+  const previous = await previousSweepAverage(prisma, run.siteId, runId);
 
   const worstPages = [...scored]
     .sort((a, b) => (a.performanceScore ?? 0) - (b.performanceScore ?? 0))
@@ -62,7 +64,11 @@ export async function buildSweepSummary(
 }
 
 /** The comparison point: the previous COMPLETED sweep, not merely the previous run. */
-async function previousSweepAverage(siteId: string, excludeRunId: string): Promise<number | null> {
+async function previousSweepAverage(
+  prisma: TenantPrismaClient,
+  siteId: string,
+  excludeRunId: string,
+): Promise<number | null> {
   const prev = await prisma.auditRun.findFirst({
     where: { siteId, type: 'full_sweep', status: 'completed', id: { not: excludeRunId } },
     orderBy: { finishedAt: 'desc' },

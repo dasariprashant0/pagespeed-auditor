@@ -1,8 +1,11 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { requireCapability, ForbiddenError } from '@/lib/http/auth-guard';
-import { prisma } from '@/lib/db';
+import { requireCapability } from '@/lib/http/auth-guard';
+import { friendlyErrorMessage } from '@/lib/http/actionError';
+import { getTenantPrisma } from '@/lib/db/tenant';
+import { centralPrisma } from '@/lib/db/central';
+import { d1CredentialsForOrg } from '@/lib/services/org.service';
 import { requireSiteAccess } from '@/lib/services/tenant.service';
 import { runPagespeed } from '@/lib/psi/client';
 import { verifySmtpConnection } from '@/lib/notify/email';
@@ -10,14 +13,14 @@ import { verifySmtpConnection } from '@/lib/notify/email';
 export type SiteResult = { ok: true; message: string } | { ok: false; error: string };
 
 function fail(e: unknown): SiteResult {
-  if (e instanceof ForbiddenError) return { ok: false, error: e.message };
-  return { ok: false, error: e instanceof Error ? e.message : 'Something went wrong.' };
+  return { ok: false, error: friendlyErrorMessage(e, 'Something went wrong.') };
 }
 
 /** Adding a site is how a new organisation gets started; admin only. */
 export async function createSiteAction(_prev: unknown, form: FormData): Promise<SiteResult> {
   try {
     const ctx = await requireCapability('site:manage');
+    const prisma = await getTenantPrisma(ctx.organizationId);
     const name = String(form.get('name') ?? '').trim();
     const baseUrl = String(form.get('baseUrl') ?? '').trim().replace(/\/+$/, '');
     const sitemapUrl = String(form.get('sitemapUrl') ?? '').trim();
@@ -52,6 +55,7 @@ export async function updateSiteAction(_prev: unknown, form: FormData): Promise<
     const ctx = await requireCapability('site:manage');
     const siteId = String(form.get('siteId') ?? '');
     await requireSiteAccess(ctx.organizationId, siteId);
+    const prisma = await getTenantPrisma(ctx.organizationId);
 
     const name = String(form.get('name') ?? '').trim();
     const baseUrl = String(form.get('baseUrl') ?? '').trim().replace(/\/+$/, '');
@@ -78,6 +82,7 @@ export async function updatePsiKeyAction(_prev: unknown, form: FormData): Promis
     const ctx = await requireCapability('site:manage');
     const siteId = String(form.get('siteId') ?? '');
     await requireSiteAccess(ctx.organizationId, siteId);
+    const prisma = await getTenantPrisma(ctx.organizationId);
 
     const raw = String(form.get('psiApiKey') ?? '').trim();
     if (raw.includes('•')) return { ok: true, message: 'Key unchanged.' };
@@ -120,7 +125,7 @@ export async function updateOrgEmailAction(_prev: unknown, form: FormData): Prom
     const passRaw = String(form.get('smtpPass') ?? '').trim();
 
     if (!host && !user && !from && !portRaw && !passRaw) {
-      await prisma.organization.update({
+      await centralPrisma.organization.update({
         where: { id: ctx.organizationId },
         data: { smtpHost: null, smtpPort: null, smtpUser: null, smtpPass: null, smtpFrom: null },
       });
@@ -135,7 +140,7 @@ export async function updateOrgEmailAction(_prev: unknown, form: FormData): Prom
 
     let pass = passRaw;
     if (passRaw.includes('•')) {
-      const existing = await prisma.organization.findUnique({
+      const existing = await centralPrisma.organization.findUnique({
         where: { id: ctx.organizationId },
         select: { smtpPass: true },
       });
@@ -153,7 +158,7 @@ export async function updateOrgEmailAction(_prev: unknown, form: FormData): Prom
     const check = await verifySmtpConnection({ host, port, user, pass, from: from || 'PageSpeed Auditor <noreply@localhost>' });
     if (!check.ok) return { ok: false, error: `Could not connect: ${check.message}` };
 
-    await prisma.organization.update({
+    await centralPrisma.organization.update({
       where: { id: ctx.organizationId },
       data: { smtpHost: host, smtpPort: port, smtpUser: user, smtpPass: pass, smtpFrom: from || null },
     });
@@ -176,6 +181,7 @@ export async function ingestSitemapAction(siteId: string): Promise<SiteResult> {
   try {
     const ctx = await requireCapability('site:manage');
     await requireSiteAccess(ctx.organizationId, siteId);
+    const prisma = await getTenantPrisma(ctx.organizationId);
 
     const { ingestSitemap } = await import('@/lib/services/ingest.service');
     const s = await ingestSitemap(prisma, siteId);
@@ -208,9 +214,11 @@ export async function deleteRunsAction(siteId: string, runIds: string[]): Promis
     const ctx = await requireCapability('site:manage');
     await requireSiteAccess(ctx.organizationId, siteId);
     if (runIds.length === 0) return { ok: false, error: 'Select at least one check to delete.' };
+    const prisma = await getTenantPrisma(ctx.organizationId);
 
     const { deleteRuns } = await import('@/lib/services/retention.service');
-    const { runsDeleted, resultsDeleted } = await deleteRuns(prisma, siteId, runIds);
+    const d1 = (await d1CredentialsForOrg(ctx.organizationId)) ?? undefined;
+    const { runsDeleted, resultsDeleted } = await deleteRuns(prisma, siteId, runIds, d1);
 
     if (runsDeleted === 0) {
       return { ok: false, error: 'Nothing was deleted — a run still in progress cannot be removed this way.' };

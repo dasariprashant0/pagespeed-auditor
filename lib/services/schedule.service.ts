@@ -1,5 +1,5 @@
 import { CronExpressionParser } from 'cron-parser';
-import { prisma } from '../db.ts';
+import { getTenantPrisma } from '../db/tenant.ts';
 import { logger } from '../logger.ts';
 
 /**
@@ -66,9 +66,11 @@ export function nextRunAt(expr: string, timezone = 'UTC'): Date | null {
 }
 
 export async function saveSchedule(
+  organizationId: string,
   siteId: string,
   input: { cronExpr: string | null; timezone: string; enabled: boolean },
 ): Promise<CronValidation> {
+  const prisma = await getTenantPrisma(organizationId);
   if (input.enabled) {
     if (!input.cronExpr) return { valid: false, error: 'Enter a schedule before enabling it.', next: [] };
     const check = validateCron(input.cronExpr, input.timezone);
@@ -88,7 +90,8 @@ export async function saveSchedule(
 }
 
 /** Schedules whose next fire time has passed. Called by the worker's ticker. */
-export async function dueSchedules(now = new Date()) {
+export async function dueSchedules(organizationId: string, now = new Date()) {
+  const prisma = await getTenantPrisma(organizationId);
   return prisma.schedule.findMany({
     where: { enabled: true, cronExpr: { not: null }, nextRunAt: { lte: now } },
     select: { id: true, siteId: true, cronExpr: true, timezone: true },
@@ -96,7 +99,8 @@ export async function dueSchedules(now = new Date()) {
 }
 
 /** Advances nextRunAt after a firing, so the same tick cannot fire twice. */
-export async function advanceSchedule(scheduleId: string, cronExpr: string, timezone: string): Promise<void> {
+export async function advanceSchedule(organizationId: string, scheduleId: string, cronExpr: string, timezone: string): Promise<void> {
+  const prisma = await getTenantPrisma(organizationId);
   await prisma.schedule.update({
     where: { id: scheduleId },
     data: { lastRunAt: new Date(), nextRunAt: nextRunAt(cronExpr, timezone) },

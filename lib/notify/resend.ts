@@ -1,5 +1,6 @@
 import { Resend } from 'resend';
 import { logger } from '../logger.ts';
+import { getEnv } from '../env.ts';
 import type { EmailOutcome } from './email.ts';
 
 /**
@@ -18,10 +19,11 @@ export async function sendViaResend(
   html: string,
   text: string,
 ): Promise<EmailOutcome> {
-  const key = process.env.RESEND_API_KEY;
+  const env = getEnv();
+  const key = env.RESEND_API_KEY;
   if (!key) return { sent: false, reason: 'RESEND_API_KEY is not set.' };
 
-  const from = process.env.EMAIL_FROM;
+  const from = env.EMAIL_FROM;
   if (!from) {
     return {
       sent: false,

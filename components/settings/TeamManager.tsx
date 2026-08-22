@@ -64,7 +64,7 @@ export function TeamManager({
             : 'Only an admin can invite teammates.'}
         </p>
 
-        <form action={inviteAction} className="flex flex-wrap items-end gap-2">
+        <form action={inviteAction} className="flex flex-wrap items-end gap-2" data-tour="invite-form">
           <fieldset disabled={!canEdit} className="flex flex-wrap items-end gap-2">
             <label className="min-w-[14rem] flex-1">
               <span className="eyebrow mb-1 block">Email</span>
@@ -153,7 +153,11 @@ export function TeamManager({
                 <button
                   type="button"
                   disabled={!canEdit || busy || m.isYou || lastAdmin}
-                  onClick={() => act(() => removeMemberAction(m.userId))}
+                  onClick={() => {
+                    if (confirm(`Remove ${m.name ?? m.email} from this organisation? They lose access immediately.`)) {
+                      act(() => removeMemberAction(m.userId));
+                    }
+                  }}
                   className="text-[11px] text-[var(--muted)] hover:text-[var(--danger)] disabled:opacity-30"
                   title={
                     !canEdit

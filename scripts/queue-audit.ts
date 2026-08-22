@@ -13,11 +13,11 @@
  * see the same note in scripts/canary.ts.
  */
 import 'dotenv/config';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '../lib/generated/tenant/index.js';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { BOTH_STRATEGIES, createRun, expandScope, findActiveRun } from '../lib/services/run.service.ts';
 import { auditPage } from '../lib/services/audit.service.ts';
-import { getPsiRateLimiter } from '../lib/opsState.ts';
+import { PsiRateLimiter } from '../lib/psi/rateLimiter.ts';
 import { estimateRun, formatDuration } from '../lib/services/estimate.service.ts';
 import type { PsiStrategy } from '../lib/psi/types.ts';
 
@@ -30,7 +30,7 @@ async function main() {
   const only = process.argv[3] as PsiStrategy | undefined;
   const strategies = only ? [only] : BOTH_STRATEGIES;
 
-  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
+  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.TENANT_DEV_DATABASE_URL! }) });
   try {
     const site = await prisma.site.findFirstOrThrow();
 
@@ -53,12 +53,16 @@ async function main() {
     console.log(`\n  running ${pairs.length} calls for "${slug}" (${strategies.join(', ')})`);
     console.log(`  run ${runId}, running sequentially...\n`);
 
-    const limiter = getPsiRateLimiter();
+    const limiter = new PsiRateLimiter({
+      db: prisma,
+      max: Number(process.env.PSI_RATE_MAX ?? 3),
+      windowMs: Number(process.env.PSI_RATE_WINDOW_MS ?? 4000),
+    });
     for (const p of pairs) {
-      await auditPage({ prisma, limiter }, { runId, pageId: p.pageId, url: p.url, strategy: p.strategy });
+      await auditPage({ prisma, limiter, sharedLimiter: limiter, organizationId: site.organizationId }, { runId, pageId: p.pageId, url: p.url, strategy: p.strategy });
     }
 
-    const est = await estimateRun(pairs.length, site.id);
+    const est = await estimateRun(site.organizationId, pairs.length, site.id);
     console.log(`  done. ${formatDuration(est.seconds)}${est.measured ? ` based on ${est.sampleSize} measured audits` : ' (estimated)'}\n`);
   } finally {
     await prisma.$disconnect();

@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { prisma } from '../db.ts';
+import { centralPrisma } from '../db/central.ts';
 
 /**
  * Agent authentication, scoped to one organisation.
@@ -30,7 +30,7 @@ export function generateToken(): string {
 
 export async function createMcpToken(organizationId: string, label: string, createdById: string) {
   const token = generateToken();
-  await prisma.mcpToken.create({
+  await centralPrisma.mcpToken.create({
     data: { organizationId, label: label.trim() || 'Agent', tokenHash: hash(token), createdById },
   });
   // Returned once and never recoverable -- only the hash is stored.
@@ -44,14 +44,14 @@ export async function createMcpToken(organizationId: string, label: string, crea
 export async function verifyMcpToken(_req: Request, bearerToken?: string): Promise<McpAuthInfo | undefined> {
   if (!bearerToken || !bearerToken.startsWith(PREFIX)) return undefined;
 
-  const row = await prisma.mcpToken.findUnique({
+  const row = await centralPrisma.mcpToken.findUnique({
     where: { tokenHash: hash(bearerToken) },
     select: { id: true, organizationId: true, revokedAt: true },
   });
   if (!row || row.revokedAt) return undefined;
 
   // Fire-and-forget: a failed timestamp write must not fail the request.
-  void prisma.mcpToken.update({ where: { id: row.id }, data: { lastUsedAt: new Date() } }).catch(() => {});
+  void centralPrisma.mcpToken.update({ where: { id: row.id }, data: { lastUsedAt: new Date() } }).catch(() => {});
 
   return {
     token: bearerToken,

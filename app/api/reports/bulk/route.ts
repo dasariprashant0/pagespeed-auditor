@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
 import { requireApiSession } from '@/lib/http/auth-guard';
-import { prisma } from '@/lib/db';
+import { getTenantPrisma } from '@/lib/db/tenant';
 import { defaultSite } from '@/lib/services/tenant.service';
 import { getPageReport } from '@/lib/services/report.service';
 import { buildAgentReport } from '@/lib/report/agentMarkdown';
 import type { PsiStrategy } from '@/lib/services/types';
+import { NotProvisionedError } from '@/lib/errors';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -29,7 +30,17 @@ export async function GET(req: Request) {
   // Capped: a whole-site export would be megabytes and blow any agent's context.
   const limit = Math.min(Number(url.searchParams.get('limit') ?? 25), 50);
 
-  const site = await defaultSite(session.organizationId);
+  let site: Awaited<ReturnType<typeof defaultSite>>;
+  let prisma: Awaited<ReturnType<typeof getTenantPrisma>>;
+  try {
+    site = await defaultSite(session.organizationId);
+    prisma = await getTenantPrisma(session.organizationId);
+  } catch (e) {
+    if (e instanceof NotProvisionedError) {
+      return NextResponse.json({ error: 'not_provisioned' }, { status: 409 });
+    }
+    throw e;
+  }
   if (!site) return new NextResponse('No site configured.', { status: 404 });
 
   const pages = await prisma.page.findMany({
@@ -54,7 +65,7 @@ export async function GET(req: Request) {
       const sections: string[] = [];
       for (const s of wanted) {
         try {
-          const report = await getPageReport(p.id, s);
+          const report = await getPageReport(session.organizationId, p.id, s);
           if (!report.result) continue;
           sections.push(
             wanted.length > 1

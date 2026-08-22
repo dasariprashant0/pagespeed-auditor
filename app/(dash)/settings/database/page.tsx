@@ -1,7 +1,8 @@
 import { can } from '@/lib/auth/roles';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { requireSession } from '@/lib/http/auth-guard';
-import { provisionRefFor } from '@/lib/services/org.service';
+import { provisionRefFor, databaseUsageFor } from '@/lib/services/org.service';
+import { formatBytes } from '@/lib/view/bytes';
 import { SettingsNav } from '@/components/settings/SettingsNav';
 import { DatabaseConnectionForm } from '@/components/settings/DatabaseConnectionForm';
 
@@ -18,6 +19,26 @@ function Panel({ title, hint, children }: { title: string; hint?: string; childr
   );
 }
 
+/** `null` (not connected) renders nothing; an error still gets its own stat tile rather than being swallowed. */
+function UsageStat({ label, usage, extra }: { label: string; usage: { bytes: number } | { error: string } | null; extra?: string }) {
+  if (!usage) return null;
+  return (
+    <div>
+      <dt className="eyebrow">{label}</dt>
+      {'error' in usage ? (
+        <dd className="mt-1 text-[12px]" style={{ color: 'var(--score-fail-text)' }}>
+          Couldn&rsquo;t read usage: {usage.error}
+        </dd>
+      ) : (
+        <dd className="metric mt-1 text-[18px]">
+          {formatBytes(usage.bytes)}
+          {extra && <span className="ml-1.5 text-[11px] font-normal text-[var(--muted)]">{extra}</span>}
+        </dd>
+      )}
+    </div>
+  );
+}
+
 /**
  * Every organisation brings and provisions its own Neon Postgres database
  * and its own Cloudflare D1 database instead of the app owner providing a
@@ -29,6 +50,10 @@ export default async function DatabaseSettingsPage() {
   const ctx = await requireSession();
   const canEdit = can(ctx.role, 'org:provision');
   const provision = await provisionRefFor(ctx.organizationId);
+  // Only worth asking Neon/Cloudflare for real numbers once there's
+  // something connected to ask about -- an unprovisioned org has nothing
+  // to read and no credentials to read it with.
+  const usage = provision.hasNeonUrl || provision.hasD1Credentials ? await databaseUsageFor(ctx.organizationId) : null;
 
   return (
     <>
@@ -46,6 +71,18 @@ export default async function DatabaseSettingsPage() {
         >
           <DatabaseConnectionForm provision={provision} canEdit={canEdit} />
         </Panel>
+
+        {usage && (usage.neon || usage.d1) && (
+          <Panel
+            title="Usage"
+            hint="Read directly from your own Neon and Cloudflare accounts, live, every time this page loads -- not stored or polled in the background. Check your Neon/Cloudflare dashboard for the exact free-tier limit; this just saves the trip for a quick look."
+          >
+            <dl className="grid grid-cols-2 gap-3 text-[12px]">
+              <UsageStat label="Neon (Postgres) database size" usage={usage.neon} />
+              <UsageStat label="Cloudflare D1 database size" usage={usage.d1} extra={usage.d1 && !('error' in usage.d1) ? `· ${usage.d1.numTables} table${usage.d1.numTables === 1 ? '' : 's'}` : undefined} />
+            </dl>
+          </Panel>
+        )}
       </div>
     </>
   );

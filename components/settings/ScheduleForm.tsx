@@ -106,7 +106,7 @@ export function ScheduleForm({
   }
 
   return (
-    <form action={action} className="space-y-4">
+    <form action={action} className="space-y-4" data-tour="schedule-form">
       <input type="hidden" name="cronExpr" value={cron} />
       <input type="hidden" name="timezone" value={timezone} />
 

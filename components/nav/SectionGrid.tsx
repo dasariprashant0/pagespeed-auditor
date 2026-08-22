@@ -24,7 +24,7 @@ export function SectionGrid({
   const [resetting, startReset] = useTransition();
 
   return (
-    <div>
+    <div data-tour="section-grid">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <h2 className="eyebrow">
           {canReorder ? 'Sections — drag to change the order they are checked in' : 'Sections'}

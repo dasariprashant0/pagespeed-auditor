@@ -98,7 +98,8 @@ throughput decision traces back to this:
 - `auditOnePageStep` (`'use step'`) — one (page, strategy) measurement, its
   own retry loop up to `PSI_MAX_ATTEMPTS`, records an error row (not a bare
   throw) on the last attempt **regardless of exception type** — a real bug
-  fixed 20 Aug 2026 (see `docs/BUILD_LOG.md`, same date): a generic
+  fixed 20 Aug 2026 (see `docs/archive/BUILD_LOG-2026-08-19-20.md`, same
+  date): a generic
   exception used to vanish silently via `Promise.allSettled` instead of
   showing up as a tracked failure.
 - Every step's start/ok/retry/error also writes a `RunLogEvent` row

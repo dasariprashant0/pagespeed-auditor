@@ -1,13 +1,16 @@
 import { PageHeader } from '@/components/ui/PageHeader';
 import { requireSession } from '@/lib/http/auth-guard';
 import { can } from '@/lib/auth/roles';
-import { prisma } from '@/lib/db';
 import { getEnv } from '@/lib/env';
-import { listSites, orgEmailRef } from '@/lib/services/tenant.service';
-import { listGroupsWithAggregates } from '@/lib/services/results.service';
-import { historyOverview } from '@/lib/services/retention.service';
-import { estimateRun } from '@/lib/services/estimate.service';
+import { orgEmailRef } from '@/lib/services/tenant.service';
+import {
+  demoAwareEstimateRun,
+  demoAwareHistoryOverview,
+  demoAwareListGroupsWithAggregates,
+  demoAwareListSites,
+} from '@/lib/onboarding/demoTenant';
 import { emailConfigProblem } from '@/lib/notify/email';
+import { formatBytes } from '@/lib/view/bytes';
 import { SettingsNav } from '@/components/settings/SettingsNav';
 import { AddSiteForm, EditSiteForm, PsiKeyForm } from '@/components/settings/SiteForms';
 import { IngestButton } from '@/components/settings/IngestButton';
@@ -25,29 +28,22 @@ function Panel({ title, hint, children }: { title: string; hint?: string; childr
   );
 }
 
-function bytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1048576) return `${Math.round(n / 1024)} KB`;
-  if (n < 1073741824) return `${(n / 1048576).toFixed(1)} MB`;
-  return `${(n / 1073741824).toFixed(2)} GB`;
-}
-
 export default async function SiteSettingsPage() {
   const env = getEnv();
   // Visible to every role -- only site:manage decides whether these forms
   // actually accept input. See docs/DECISIONS.md.
   const ctx = await requireSession();
+  const sites = await demoAwareListSites(ctx.organizationId);
   const canEdit = can(ctx.role, 'site:manage');
-  const sites = await listSites(ctx.organizationId);
   const site = sites[0] ?? null;
 
   const [groups, history, orgEmail] = await Promise.all([
-    site ? listGroupsWithAggregates(site.id, { strategy: 'mobile' }) : Promise.resolve([]),
-    site ? historyOverview(prisma, site.id) : Promise.resolve(null),
+    site ? demoAwareListGroupsWithAggregates(ctx.organizationId, site.id, { strategy: 'mobile' }) : Promise.resolve([]),
+    site ? demoAwareHistoryOverview(ctx.organizationId, site.id) : Promise.resolve(null),
     orgEmailRef(ctx.organizationId),
   ]);
   const pageCount = groups.reduce((n, g) => n + g.pageCount, 0);
-  const sweepEstimate = site ? await estimateRun(pageCount * 2, site.id) : null;
+  const sweepEstimate = site ? await demoAwareEstimateRun(ctx.organizationId, pageCount * 2, site.id) : null;
 
   // An organisation's own SMTP override (orgEmail.hasOverride) bypasses the
   // shared default entirely -- emailConfigProblem() only describes that
@@ -106,7 +102,7 @@ export default async function SiteSettingsPage() {
                     ['Results stored', history.totalResults.toLocaleString()],
                     ['Checks recorded', history.distinctRuns.toLocaleString()],
                     ['Oldest', history.oldest ? new Date(history.oldest).toLocaleDateString() : '—'],
-                    ['Storage used', bytes(history.storageBytes)],
+                    ['Storage used', formatBytes(history.storageBytes)],
                   ].map(([k, v]) => (
                     <div key={k}>
                       <dt className="eyebrow">{k}</dt>
@@ -142,9 +138,9 @@ export default async function SiteSettingsPage() {
                       ? `sending via your own mailbox (${orgEmail.host})`
                       : emailProblem
                         ? 'not sending — see Settings → Notifications'
-                        : process.env.EMAIL_TRANSPORT === 'resend'
-                          ? `sending as ${process.env.EMAIL_FROM} via Resend`
-                          : `sending via ${process.env.SMTP_HOST}`,
+                        : env.EMAIL_TRANSPORT === 'resend'
+                          ? `sending as ${env.EMAIL_FROM} via Resend`
+                          : `sending via ${env.SMTP_HOST}`,
                   ],
                 ] as Array<[string, string]>).map(([k, v]) => (
                   <div key={k} className="flex flex-wrap gap-x-4 py-1.5">

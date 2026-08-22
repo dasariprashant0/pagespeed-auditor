@@ -1,16 +1,38 @@
 'use server';
 
+import { revalidatePath } from 'next/cache';
 import { requireSession } from '@/lib/http/auth-guard';
-import { markRoleTourSeen } from '@/lib/services/account.service';
+import { centralPrisma } from '@/lib/db/central';
 
 /**
- * Dismisses the "here's what your role can do" banner for good.
- *
- * Fire-and-forget from the client's point of view: the banner already hides
- * itself locally the instant this is called, and a person seeing it once
- * more on a rare failure is not worth a revert path for.
+ * Every one of these requires only a session, not a specific capability --
+ * dismissing your own onboarding view is not an org-admin action, per
+ * docs/superpowers/specs/2026-08-22-onboarding-tour-design.md section B.
  */
-export async function dismissRoleTourAction(): Promise<void> {
+
+/** Idempotent: a duplicate id in the array changes nothing observable, since remainingTourSteps() dedupes via a Set. */
+export async function markTourStepSeenAction(stepId: string): Promise<void> {
   const ctx = await requireSession();
-  await markRoleTourSeen(ctx.userId);
+  await centralPrisma.membership.updateMany({
+    where: { userId: ctx.userId, organizationId: ctx.organizationId },
+    data: { tourStepsSeen: { push: stepId } },
+  });
+}
+
+export async function dismissChecklistAction(): Promise<void> {
+  const ctx = await requireSession();
+  await centralPrisma.membership.updateMany({
+    where: { userId: ctx.userId, organizationId: ctx.organizationId },
+    data: { checklistDismissedAt: new Date() },
+  });
+  revalidatePath('/', 'layout');
+}
+
+export async function reopenChecklistAction(): Promise<void> {
+  const ctx = await requireSession();
+  await centralPrisma.membership.updateMany({
+    where: { userId: ctx.userId, organizationId: ctx.organizationId },
+    data: { checklistDismissedAt: null },
+  });
+  revalidatePath('/', 'layout');
 }

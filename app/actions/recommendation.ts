@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { requireCapability } from '@/lib/http/auth-guard';
+import { friendlyErrorMessage } from '@/lib/http/actionError';
 import { requirePageAccess } from '@/lib/services/tenant.service';
 import {
   getOrCreateRecommendation,
@@ -25,7 +26,7 @@ export async function generateRecommendationAction(input: {
     // may generate, and this says the page belongs to their organisation.
     await requirePageAccess(ctx.organizationId, input.pageId);
 
-    const r = await getOrCreateRecommendation(input.pageId, input.strategy, { force: input.force });
+    const r = await getOrCreateRecommendation(ctx.organizationId, input.pageId, input.strategy, { force: input.force });
     revalidatePath(`/p/${input.pageId}`);
     return {
       ok: true,
@@ -36,7 +37,7 @@ export async function generateRecommendationAction(input: {
       generatedAt: r.generatedAt,
     };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Something went wrong.' };
+    return { ok: false, error: friendlyErrorMessage(e, 'Something went wrong.') };
   }
 }
 
@@ -48,8 +49,8 @@ export async function recommendationHistoryAction(input: {
   try {
     const ctx = await requireCapability('reports:read');
     await requirePageAccess(ctx.organizationId, input.pageId);
-    return { ok: true, versions: await listRecommendations(input.pageId, input.strategy) };
+    return { ok: true, versions: await listRecommendations(ctx.organizationId, input.pageId, input.strategy) };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not load earlier answers.' };
+    return { ok: false, error: friendlyErrorMessage(e, 'Could not load earlier answers.') };
   }
 }

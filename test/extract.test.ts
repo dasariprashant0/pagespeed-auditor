@@ -15,6 +15,12 @@ import type { PsiResponse } from '../lib/psi/types.ts';
 const DIR = 'test/fixtures/psi';
 const load = (n: string): PsiResponse => JSON.parse(readFileSync(`${DIR}/${n}.json`, 'utf8'));
 
+// mobile-origin-fallback is deliberately NOT in this list: it's a minimal
+// echo-page fixture, kept only to prove the field-data discriminator
+// against a real capture (see the origin_fallback test below) -- its low
+// bulk means it fails the generic "prunes more than 30%" assertion every
+// other fixture here satisfies, the same reason desktop-basic (a near-empty
+// page) already prunes the least of the three.
 const FIXTURES = ['mobile-field-full', 'desktop-basic', 'mobile-no-field'] as const;
 
 describe('scores', () => {
@@ -108,6 +114,17 @@ describe('field (CrUX) data', () => {
     const f = extractField(res);
     assert.equal(f.source, 'origin_fallback', 'must be labelled as origin data, not page data');
     assert.equal(f.metrics.lcp?.value, 1200);
+  });
+
+  test('mobile-origin-fallback: a real captured origin_fallback response is labelled correctly', () => {
+    // Every other case above is hand-built, per docs/RESUME_HERE.md's note
+    // that this shape had never actually been seen in the wild as of 20 Aug
+    // 2026 -- this fixture (test/fixtures/psi/mobile-origin-fallback.json,
+    // httpbin.org, captured 22 Aug 2026) is a real PSI response where this
+    // specific page has no CrUX entry of its own but its origin does.
+    const f = extractField(load('mobile-origin-fallback'));
+    assert.equal(f.source, 'origin_fallback');
+    assert.ok(Object.keys(f.metrics).length > 0, 'origin-level metrics should still populate');
   });
 });
 

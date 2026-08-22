@@ -1,4 +1,5 @@
-import type { PrismaClient } from '@prisma/client';
+import type { TenantPrismaClient } from '../db/tenant.ts';
+import type { D1Credentials } from '../blob.ts';
 import { logger } from '../logger.ts';
 import { deleteRawJsonBlobs } from '../blob.ts';
 
@@ -47,9 +48,10 @@ function keepRuns(): number {
  * collected, without attempting a real network call.
  */
 export async function pruneSiteHistory(
-  prisma: PrismaClient,
+  prisma: TenantPrismaClient,
   siteId: string,
-  deleteBlobs: (pathnames: string[]) => Promise<void> = deleteRawJsonBlobs,
+  d1?: D1Credentials,
+  deleteBlobs: (pathnames: string[], d1?: D1Credentials) => Promise<void> = deleteRawJsonBlobs,
 ): Promise<RetentionSummary> {
   const keep = keepRuns();
 
@@ -95,7 +97,7 @@ export async function pruneSiteHistory(
     const res = await prisma.auditResult.deleteMany({ where: { id: { in: chunk } } });
     deleted += res.count;
   }
-  await deleteBlobs(blobKeys);
+  await deleteBlobs(blobKeys, d1);
 
   const summary: RetentionSummary = {
     keepRuns: keep,
@@ -120,10 +122,11 @@ export async function pruneSiteHistory(
  * mid-flight, not just lose history.
  */
 export async function deleteRuns(
-  prisma: PrismaClient,
+  prisma: TenantPrismaClient,
   siteId: string,
   runIds: string[],
-  deleteBlobs: (pathnames: string[]) => Promise<void> = deleteRawJsonBlobs,
+  d1?: D1Credentials,
+  deleteBlobs: (pathnames: string[], d1?: D1Credentials) => Promise<void> = deleteRawJsonBlobs,
 ): Promise<{ runsDeleted: number; resultsDeleted: number }> {
   if (runIds.length === 0) return { runsDeleted: 0, resultsDeleted: 0 };
 
@@ -144,13 +147,13 @@ export async function deleteRuns(
   const blobKeys = results.map((r) => r.rawJsonBlobKey).filter((k): k is string => k !== null);
 
   const { count: runsDeleted } = await prisma.auditRun.deleteMany({ where: { id: { in: ids } } });
-  await deleteBlobs(blobKeys);
+  await deleteBlobs(blobKeys, d1);
   return { runsDeleted, resultsDeleted: results.length };
 }
 
 /** What history actually exists, for the Settings storage panel. */
 export async function historyOverview(
-  prisma: PrismaClient,
+  prisma: TenantPrismaClient,
   siteId: string,
 ): Promise<{
   keepRuns: number;

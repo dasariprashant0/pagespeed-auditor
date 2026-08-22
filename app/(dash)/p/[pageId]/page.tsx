@@ -1,8 +1,12 @@
 import { notFound } from 'next/navigation';
 import { requireSession } from '@/lib/http/auth-guard';
 import { can } from '@/lib/auth/roles';
-import { defaultSite, requirePageAccess } from '@/lib/services/tenant.service';
-import { getPageReport } from '@/lib/services/report.service';
+import {
+  demoAwareDefaultSite,
+  demoAwareGetPageReport,
+  demoAwareRegressionsForPage,
+  demoAwareRequirePageAccess,
+} from '@/lib/onboarding/demoTenant';
 import { DownloadMarkdown } from '@/components/report/DownloadMarkdown';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { StrategyTabs } from '@/components/ui/StrategyTabs';
@@ -17,7 +21,6 @@ import { RunConditions } from '@/components/report/RunConditions';
 import { Screenshot } from '@/components/report/Screenshot';
 import { RegressionBadge } from '@/components/report/RegressionBadge';
 import { RecommendationPanel } from '@/components/report/RecommendationPanel';
-import { regressionsForPage } from '@/lib/services/regression.service';
 import { explainRuntimeError, isPageContentFailure } from '@/lib/report/runtimeError';
 import type { PsiStrategy } from '@/lib/services/types';
 
@@ -42,8 +45,9 @@ export default async function PageReport({
   const strategy: PsiStrategy = raw === 'desktop' ? 'desktop' : 'mobile';
 
   const ctx = await requireSession();
-  const site = await defaultSite(ctx.organizationId);
+  const site = await demoAwareDefaultSite(ctx.organizationId);
   if (!site) notFound();
+  const isDemo = site.id === 'demo-site';
 
   // Page ids appear in URLs. Without this check, pasting another tenant's id
   // would render their report.
@@ -51,15 +55,15 @@ export default async function PageReport({
   // the same catch turned every transient DB error into a bare 404 claiming the
   // page does not exist -- including for pages linked from our own table. A
   // real failure belongs in error.tsx, where it can be retried.
-  const owned = await requirePageAccess(ctx.organizationId, pageId).then(
+  const owned = await demoAwareRequirePageAccess(ctx.organizationId, pageId).then(
     () => true,
     () => false,
   );
   if (!owned) notFound();
 
-  const report = await getPageReport(pageId, strategy);
+  const report = await demoAwareGetPageReport(ctx.organizationId, pageId, strategy);
 
-  const regressions = await regressionsForPage(pageId, strategy);
+  const regressions = await demoAwareRegressionsForPage(ctx.organizationId, pageId, strategy);
 
   const r = report.result;
 
@@ -88,7 +92,7 @@ export default async function PageReport({
         }
         actions={
           <>
-            {can(ctx.role, 'audits:run') && <RunAuditButton kind="page" target={pageId} label="Measure again" />}
+            {can(ctx.role, 'audits:run') && <RunAuditButton kind="page" target={pageId} label="Measure again" demoMode={isDemo} />}
             <DownloadMarkdown
               href={`/api/reports/${pageId}`}
               currentStrategy={strategy}
@@ -179,6 +183,7 @@ export default async function PageReport({
               strategy={strategy}
               initial={report.recommendation}
               canGenerate={can(ctx.role, 'recommendations:generate')}
+              demoMode={isDemo}
             />
           </section>
 

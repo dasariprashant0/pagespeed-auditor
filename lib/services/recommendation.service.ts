@@ -1,4 +1,4 @@
-import { prisma } from '../db.ts';
+import { getTenantPrisma } from '../db/tenant.ts';
 import { logger } from '../logger.ts';
 import { upsertAiSection } from '../report/aiSection.ts';
 import { buildRecommendationPrompt } from '../ai/prompt.ts';
@@ -42,8 +42,8 @@ export interface RecommendationVersion {
 
 const STALE_GENERATING_MS = 3 * 60 * 1000;
 
-async function resultIdFor(pageId: string, strategy: PsiStrategy) {
-  const report = await getPageReport(pageId, strategy);
+async function resultIdFor(organizationId: string, pageId: string, strategy: PsiStrategy) {
+  const report = await getPageReport(organizationId, pageId, strategy);
   const result = report.result;
   if (!result) throw new Error('This page has not been audited on this strategy yet.');
   if (result.status !== 'ok') throw new Error('The last audit failed, so there is nothing to analyse.');
@@ -52,9 +52,11 @@ async function resultIdFor(pageId: string, strategy: PsiStrategy) {
 
 /** Every saved answer for this page and strategy, newest first. */
 export async function listRecommendations(
+  organizationId: string,
   pageId: string,
   strategy: PsiStrategy,
 ): Promise<RecommendationVersion[]> {
+  const prisma = await getTenantPrisma(organizationId);
   const page = await prisma.page.findUnique({
     where: { id: pageId },
     select: { latestResultMobileId: true, latestResultDesktopId: true },
@@ -80,11 +82,13 @@ export async function listRecommendations(
 }
 
 export async function getOrCreateRecommendation(
+  organizationId: string,
   pageId: string,
   strategy: PsiStrategy,
   opts: { force?: boolean } = {},
 ): Promise<RecommendationResult> {
-  const { report, auditResultId } = await resultIdFor(pageId, strategy);
+  const prisma = await getTenantPrisma(organizationId);
+  const { report, auditResultId } = await resultIdFor(organizationId, pageId, strategy);
 
   const latest = await prisma.recommendation.findFirst({
     where: { auditResultId },

@@ -2,7 +2,8 @@
 
 import { revalidatePath } from 'next/cache';
 import { requireCapability } from '@/lib/http/auth-guard';
-import { prisma } from '@/lib/db';
+import { friendlyErrorMessage } from '@/lib/http/actionError';
+import { getTenantPrisma } from '@/lib/db/tenant';
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -17,6 +18,7 @@ export type ActionResult = { ok: true } | { ok: false; error: string };
 export async function reorderGroupsAction(slugsInOrder: string[]): Promise<ActionResult> {
   try {
     const ctx = await requireCapability('groups:manage');
+    const prisma = await getTenantPrisma(ctx.organizationId);
     await prisma.$transaction(async (tx) => {
       // Scoped to this organisation: an unscoped updateMany keyed on slug would
       // reorder another tenant's sections, since slugs are only unique per site.
@@ -34,7 +36,7 @@ export async function reorderGroupsAction(slugsInOrder: string[]): Promise<Actio
     revalidatePath('/', 'layout');
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not save the order.' };
+    return { ok: false, error: friendlyErrorMessage(e, 'Could not save the order.') };
   }
 }
 
@@ -42,6 +44,7 @@ export async function reorderGroupsAction(slugsInOrder: string[]): Promise<Actio
 export async function resetGroupOrderAction(): Promise<ActionResult> {
   try {
     const ctx = await requireCapability('groups:manage');
+    const prisma = await getTenantPrisma(ctx.organizationId);
     await prisma.group.updateMany({
       where: { site: { organizationId: ctx.organizationId } },
       data: { priority: null },
@@ -49,13 +52,14 @@ export async function resetGroupOrderAction(): Promise<ActionResult> {
     revalidatePath('/', 'layout');
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not reset the order.' };
+    return { ok: false, error: friendlyErrorMessage(e, 'Could not reset the order.') };
   }
 }
 
 export async function setGroupPriorityAction(slugsInOrder: string[]): Promise<ActionResult> {
   try {
-    await requireCapability('groups:manage');
+    const ctx = await requireCapability('groups:manage');
+    const prisma = await getTenantPrisma(ctx.organizationId);
     await prisma.$transaction(async (tx) => {
       // Clear first: a group dropped from the list must fall back to sitemap
       // order rather than keeping a stale number.
@@ -67,6 +71,6 @@ export async function setGroupPriorityAction(slugsInOrder: string[]): Promise<Ac
     revalidatePath('/', 'layout');
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not save the order.' };
+    return { ok: false, error: friendlyErrorMessage(e, 'Could not save the order.') };
   }
 }

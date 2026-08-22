@@ -84,7 +84,8 @@ and §11 for the reasoning:
 - A person can answer "did this page get faster after the fix" without
   leaving the dashboard.
 - Storage cost scales sub-linearly with sweep count (retention window +
-  Blob-backed raw JSON — see `docs/DECISIONS.md` §13), not linearly
+  raw JSON stored in Cloudflare D1, not Postgres — see `docs/DECISIONS.md`
+  §18, and now per-organisation rather than shared, §19), not linearly
   forever.
 - A new teammate understands what their role lets them do without asking
   someone else first.

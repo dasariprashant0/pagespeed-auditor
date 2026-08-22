@@ -1,8 +1,7 @@
 import { notFound } from 'next/navigation';
 import { requireSession } from '@/lib/http/auth-guard';
 import { can } from '@/lib/auth/roles';
-import { defaultSite, requireGroupAccess } from '@/lib/services/tenant.service';
-import { listPagesInGroup } from '@/lib/services/results.service';
+import { demoAwareDefaultSite, demoAwareListPagesInGroup, demoAwareRequireGroupAccess } from '@/lib/onboarding/demoTenant';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { StrategyTabs } from '@/components/ui/StrategyTabs';
 import { DownloadMarkdown } from '@/components/report/DownloadMarkdown';
@@ -27,14 +26,15 @@ export default async function GroupPage({
   const strategy: PsiStrategy = raw === 'desktop' ? 'desktop' : 'mobile';
 
   const ctx = await requireSession();
-  const site = await defaultSite(ctx.organizationId);
+  const site = await demoAwareDefaultSite(ctx.organizationId);
   if (!site) notFound();
+  const isDemo = site.id === 'demo-site';
 
   // Slugs appear in URLs, so ownership is checked rather than assumed.
-  const group = await requireGroupAccess(ctx.organizationId, slug).catch(() => null);
+  const group = await demoAwareRequireGroupAccess(ctx.organizationId, slug).catch(() => null);
   if (!group) notFound();
 
-  const pages = await listPagesInGroup(group.id, { strategy });
+  const pages = await demoAwareListPagesInGroup(ctx.organizationId, group.id, { strategy });
 
   // Tuples, not objects: on a 324-page section the repeated field names were
   // most of a 4.3 MB payload. The table expands them on the client.
@@ -81,6 +81,7 @@ export default async function GroupPage({
                 target={slug}
                 label={`Measure all ${pages.length}`}
                 hint={`Both mobile and desktop — about ${formatDuration(rerunSeconds)}.`}
+                demoMode={isDemo}
               />
             )}
             <DownloadMarkdown

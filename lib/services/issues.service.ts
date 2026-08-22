@@ -1,4 +1,4 @@
-import { prisma } from '../db.ts';
+import { getTenantPrisma } from '../db/tenant.ts';
 import type { IssueKind, PsiStrategy } from '../psi/types.ts';
 import type { TopIssueDTO } from './types.ts';
 
@@ -60,7 +60,8 @@ export interface SnapshotRun {
  * Falls back to the newest completed run of any type so a site that has only
  * ever run group audits still shows something.
  */
-export async function findSnapshotRun(siteId?: string): Promise<SnapshotRun | null> {
+export async function findSnapshotRun(organizationId: string, siteId?: string): Promise<SnapshotRun | null> {
+  const prisma = await getTenantPrisma(organizationId);
   const scope = siteId ? { siteId } : {};
   // nulls: 'last' matters -- a completed run without finishedAt is a bug, and
   // Postgres sorts NULLs first on DESC, so it would win the ordering.
@@ -81,10 +82,11 @@ export async function findSnapshotRun(siteId?: string): Promise<SnapshotRun | nu
   });
 }
 
-export async function getTopIssues(opts: TopIssueOptions): Promise<TopIssueDTO[]> {
+export async function getTopIssues(organizationId: string, opts: TopIssueOptions): Promise<TopIssueDTO[]> {
+  const prisma = await getTenantPrisma(organizationId);
   const limit = opts.limit ?? DEFAULT_LIMIT;
 
-  const run = await findSnapshotRun(opts.siteId);
+  const run = await findSnapshotRun(organizationId, opts.siteId);
   if (!run) return [];
 
   const where = { auditRunId: run.id, strategy: opts.strategy };

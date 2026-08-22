@@ -1,4 +1,4 @@
-import { prisma } from '../db.ts';
+import { getTenantPrisma } from '../db/tenant.ts';
 import { logger } from '../logger.ts';
 import {
   BOTH_STRATEGIES,
@@ -15,8 +15,13 @@ import { startAuditRun } from './auditRun.ts';
  * called now by the cron route instead. Only the scheduler calls this; there
  * is deliberately no on-demand path to a full sweep. See docs/DECISIONS.md 2.2.
  */
-export async function planAndStartSweep(siteId: string, triggeredBy: 'schedule' | 'manual'): Promise<void> {
+export async function planAndStartSweep(
+  organizationId: string,
+  siteId: string,
+  triggeredBy: 'schedule' | 'manual',
+): Promise<void> {
   const scope = { kind: 'site' as const, ref: null, strategies: BOTH_STRATEGIES };
+  const prisma = await getTenantPrisma(organizationId);
 
   // Overlap guard. A delayed sweep is worse than a skipped one: queueing this
   // behind a running sweep means two sweeps back to back, and the second
@@ -46,6 +51,6 @@ export async function planAndStartSweep(siteId: string, triggeredBy: 'schedule' 
     totalJobs: pairs.length,
   });
 
-  await startAuditRun(runId, pairs);
+  await startAuditRun(runId, pairs, organizationId);
   logger.info({ runId, queued: pairs.length }, 'sweep planned');
 }

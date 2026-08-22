@@ -1,6 +1,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { pruneSiteHistory, deleteRuns } from '../lib/services/retention.service.ts';
+import type { D1Credentials } from '../lib/blob.ts';
 
 /**
  * The JS-level orchestration, not the SQL. $queryRaw's actual windowing
@@ -41,7 +42,7 @@ describe('pruneSiteHistory', () => {
       { id: 'r2', pageId: 'p2', bytes: 50, rawJsonBlobKey: null },
     ]);
     const deletedBlobKeys: string[] = [];
-    const summary = await pruneSiteHistory(prisma, 'site1', async (keys) => {
+    const summary = await pruneSiteHistory(prisma, 'site1', undefined, async (keys) => {
       deletedBlobKeys.push(...keys);
     });
 
@@ -52,10 +53,23 @@ describe('pruneSiteHistory', () => {
     assert.deepEqual(prisma.deletedIds, ['r1', 'r2']);
   });
 
+  test('an org-specific d1 credential is passed through to deleteBlobs', async () => {
+    const prisma = fakePrismaForPrune([
+      { id: 'r1', pageId: 'p1', bytes: 100, rawJsonBlobKey: 'audit-raw-json/run1/p1-mobile.json' },
+    ]);
+    const orgD1: D1Credentials = { accountId: 'acct-org', databaseId: 'db-org', apiToken: 'token-org' };
+    let seenD1: D1Credentials | undefined;
+    await pruneSiteHistory(prisma, 'site1', orgD1, async (_keys, d1) => {
+      seenD1 = d1;
+    });
+
+    assert.deepEqual(seenD1, orgD1);
+  });
+
   test('nothing stale means no deletes and no attempt at blob cleanup', async () => {
     const prisma = fakePrismaForPrune([]);
     let blobCleanupCalled = false;
-    const summary = await pruneSiteHistory(prisma, 'site1', async () => {
+    const summary = await pruneSiteHistory(prisma, 'site1', undefined, async () => {
       blobCleanupCalled = true;
     });
 
@@ -85,7 +99,7 @@ describe('deleteRuns', () => {
       [{ rawJsonBlobKey: 'k1' }],
     );
     const deletedBlobKeys: string[] = [];
-    const { runsDeleted } = await deleteRuns(prisma, 'site1', ['running1', 'done1'], async (keys) => {
+    const { runsDeleted } = await deleteRuns(prisma, 'site1', ['running1', 'done1'], undefined, async (keys) => {
       deletedBlobKeys.push(...keys);
     });
 

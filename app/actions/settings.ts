@@ -2,7 +2,8 @@
 
 import { revalidatePath } from 'next/cache';
 import { requireCapability } from '@/lib/http/auth-guard';
-import { prisma } from '@/lib/db';
+import { friendlyErrorMessage } from '@/lib/http/actionError';
+import { getTenantPrisma } from '@/lib/db/tenant';
 import { defaultSite } from '@/lib/services/tenant.service';
 import { saveSchedule, validateCron } from '@/lib/services/schedule.service';
 import { dispatchSweepNotification } from '@/lib/notify';
@@ -20,7 +21,7 @@ export async function saveScheduleAction(_prev: unknown, form: FormData): Promis
     const cronExpr = String(form.get('cronExpr') ?? '').trim() || null;
     const timezone = String(form.get('timezone') ?? 'UTC').trim() || 'UTC';
 
-    const result = await saveSchedule(site.id, { cronExpr, timezone, enabled });
+    const result = await saveSchedule(ctx.organizationId, site.id, { cronExpr, timezone, enabled });
     if (!result.valid) return { ok: false, error: result.error ?? 'Invalid schedule.' };
 
     revalidatePath('/settings');
@@ -30,13 +31,14 @@ export async function saveScheduleAction(_prev: unknown, form: FormData): Promis
       next: result.next,
     };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not save the schedule.' };
+    return { ok: false, error: friendlyErrorMessage(e, 'Could not save the schedule.') };
   }
 }
 
 export async function saveNotificationsAction(_prev: unknown, form: FormData): Promise<SettingsResult> {
   try {
     const ctx = await requireCapability('automation:manage');
+    const prisma = await getTenantPrisma(ctx.organizationId);
     const site = await defaultSite(ctx.organizationId);
     if (!site) return { ok: false, error: 'No site configured.' };
 
@@ -62,7 +64,7 @@ export async function saveNotificationsAction(_prev: unknown, form: FormData): P
     revalidatePath('/settings');
     return { ok: true, message: 'Notification settings saved.' };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not save notification settings.' };
+    return { ok: false, error: friendlyErrorMessage(e, 'Could not save notification settings.') };
   }
 }
 
@@ -70,6 +72,7 @@ export async function saveNotificationsAction(_prev: unknown, form: FormData): P
 export async function sendTestNotificationAction(): Promise<SettingsResult> {
   try {
     const ctx = await requireCapability('automation:manage');
+    const prisma = await getTenantPrisma(ctx.organizationId);
     const site = await defaultSite(ctx.organizationId);
     if (!site) return { ok: false, error: 'No site configured.' };
 
@@ -85,7 +88,7 @@ export async function sendTestNotificationAction(): Promise<SettingsResult> {
       select: { performanceScore: true, page: { select: { url: true } } },
     });
 
-    const outcome = await dispatchSweepNotification(site.id, {
+    const outcome = await dispatchSweepNotification(ctx.organizationId, site.id, {
       runId: 'test',
       siteName: site.name,
       event: 'sweep.completed',
@@ -107,7 +110,7 @@ export async function sendTestNotificationAction(): Promise<SettingsResult> {
     }
     return { ok: true, message: `Delivered via ${outcome.attempted.join(' and ')}.` };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not send the test notification.' };
+    return { ok: false, error: friendlyErrorMessage(e, 'Could not send the test notification.') };
   }
 }
 

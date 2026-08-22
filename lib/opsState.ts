@@ -1,4 +1,5 @@
-import { prisma } from './db.ts';
+import { getTenantPrisma } from './db/tenant.ts';
+import { centralPrisma } from './db/central.ts';
 import { getEnv } from './env.ts';
 import { PsiRateLimiter } from './psi/rateLimiter.ts';
 
@@ -11,16 +12,48 @@ import { PsiRateLimiter } from './psi/rateLimiter.ts';
  * Redis's blocking commands -- was removed.
  */
 
-let limiter: PsiRateLimiter | undefined;
+const limiters = new Map<string, PsiRateLimiter>();
 
-export function getPsiRateLimiter(): PsiRateLimiter {
+/**
+ * Paces an organisation's OWN Google quota -- `RateLimitBucket` lives in
+ * that org's own tenant database (docs/DECISIONS.md §19), so this is
+ * naturally per-organisation already. Correct when the org supplies its
+ * own `Site.psiApiKey`; see getSharedPsiRateLimiter for the other case.
+ */
+export async function getPsiRateLimiter(organizationId: string): Promise<PsiRateLimiter> {
+  const cached = limiters.get(organizationId);
+  if (cached) return cached;
   const env = getEnv();
-  limiter ??= new PsiRateLimiter({
-    db: prisma,
+  const db = await getTenantPrisma(organizationId);
+  const limiter = new PsiRateLimiter({ db, max: env.PSI_RATE_MAX, windowMs: env.PSI_RATE_WINDOW_MS });
+  limiters.set(organizationId, limiter);
+  return limiter;
+}
+
+/**
+ * Paces the shared deployment-level `PSI_API_KEY` fallback -- the ONE
+ * bucket every organisation without its own site key competes for,
+ * backed by the central database (genuinely shared across every org,
+ * unlike a tenant database). Fixes the gap noted at the Phase 5 cutover's
+ * final review (docs/DECISIONS.md §19): moving RateLimitBucket into each
+ * org's own tenant database made per-org pacing correct for a BYO key,
+ * but left every org still using the shared fallback pacing itself as if
+ * it had the whole quota, rather than sharing one real limit. A distinct
+ * key (not the tenant limiter's default 'psi') keeps this table, still
+ * physically present in the central schema from before the Phase 5
+ * split, from ever colliding with something else that might use it.
+ */
+let sharedLimiter: PsiRateLimiter | undefined;
+
+export function getSharedPsiRateLimiter(): PsiRateLimiter {
+  const env = getEnv();
+  sharedLimiter ??= new PsiRateLimiter({
+    db: centralPrisma,
     max: env.PSI_RATE_MAX,
     windowMs: env.PSI_RATE_WINDOW_MS,
+    key: 'psi:shared-fallback',
   });
-  return limiter;
+  return sharedLimiter;
 }
 
 // --- scheduler heartbeat ----------------------------------------------------
@@ -37,14 +70,17 @@ const HEARTBEAT_KEY = 'scheduler:heartbeat';
 const CRON_INTERVAL_MS = 15 * 60_000;
 const STALE_AFTER_MS = CRON_INTERVAL_MS * 2 + 60_000;
 
-export async function stampSchedulerHeartbeat(): Promise<void> {
-  await prisma.keyValue
-    .upsert({
+export async function stampSchedulerHeartbeat(organizationId: string): Promise<void> {
+  try {
+    const prisma = await getTenantPrisma(organizationId);
+    await prisma.keyValue.upsert({
       where: { key: HEARTBEAT_KEY },
       update: { value: String(Date.now()) },
       create: { key: HEARTBEAT_KEY, value: String(Date.now()) },
-    })
-    .catch(() => {});
+    });
+  } catch {
+    /* a heartbeat failure must not break the real cron run */
+  }
 }
 
 export interface SchedulerHealth {
@@ -52,8 +88,9 @@ export interface SchedulerHealth {
   lastTickSecondsAgo: number | null;
 }
 
-export async function schedulerHealth(): Promise<SchedulerHealth> {
+export async function schedulerHealth(organizationId: string): Promise<SchedulerHealth> {
   try {
+    const prisma = await getTenantPrisma(organizationId);
     const row = await prisma.keyValue.findUnique({ where: { key: HEARTBEAT_KEY } });
     if (!row) return { alive: false, lastTickSecondsAgo: null };
     const ageMs = Date.now() - Number(row.value);
@@ -87,8 +124,13 @@ export interface RunLogEvent {
 const RUN_LOG_MAX_LINES = 300;
 
 /** Never lets a logging failure break the actual audit -- swallows its own errors. */
-export async function pushRunLogEvent(runId: string, event: RunLogEvent): Promise<void> {
+export async function pushRunLogEvent(
+  organizationId: string,
+  runId: string,
+  event: RunLogEvent,
+): Promise<void> {
   try {
+    const prisma = await getTenantPrisma(organizationId);
     await prisma.runLogEvent.create({
       data: {
         runId,
@@ -120,8 +162,13 @@ export async function pushRunLogEvent(runId: string, event: RunLogEvent): Promis
 }
 
 /** Oldest first, so new lines append at the bottom like a real terminal. */
-export async function readRunLog(runId: string, limit = 150): Promise<RunLogEvent[]> {
+export async function readRunLog(
+  organizationId: string,
+  runId: string,
+  limit = 150,
+): Promise<RunLogEvent[]> {
   try {
+    const prisma = await getTenantPrisma(organizationId);
     const rows = await prisma.runLogEvent.findMany({
       where: { runId },
       orderBy: { createdAt: 'desc' },
@@ -143,6 +190,11 @@ export async function readRunLog(runId: string, limit = 150): Promise<RunLogEven
 }
 
 /** Called once a run is terminal -- the live log has nothing left to show. */
-export async function clearRunLog(runId: string): Promise<void> {
-  await prisma.runLogEvent.deleteMany({ where: { runId } }).catch(() => {});
+export async function clearRunLog(organizationId: string, runId: string): Promise<void> {
+  try {
+    const prisma = await getTenantPrisma(organizationId);
+    await prisma.runLogEvent.deleteMany({ where: { runId } });
+  } catch {
+    /* a log-clear failure must not break the real audit run */
+  }
 }

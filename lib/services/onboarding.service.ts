@@ -1,4 +1,4 @@
-import { prisma } from '../db.ts';
+import { getTenantPrisma } from '../db/tenant.ts';
 import { defaultSite } from './tenant.service.ts';
 
 /**
@@ -30,6 +30,7 @@ export interface OnboardingState {
 
 export async function onboardingState(organizationId: string): Promise<OnboardingState> {
   const site = await defaultSite(organizationId);
+  const prisma = await getTenantPrisma(organizationId);
 
   const [pageCount, resultCount, schedule] = site
     ? await Promise.all([

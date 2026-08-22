@@ -1,8 +1,19 @@
+// getEnv() caches on first call, so the test env vars it reads must be set
+// before anything in this file (transitively) calls it -- same convention
+// as test/blob.test.ts. DATABASE_URL has no schema default; PSI_API_KEY
+// needs a real-looking value so the "falls back to the shared key" case
+// below reaches the rate-limiter acquire() instead of failing earlier on
+// "no key configured at all."
+process.env.DATABASE_URL ??= 'postgresql://test:test@localhost:5432/test';
+process.env.PSI_API_KEY ??= 'shared-env-key';
+
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { recordAuditResult } from '../lib/services/audit.service.ts';
+import { recordAuditResult, auditPage, type AuditPageDeps } from '../lib/services/audit.service.ts';
 import { PermanentError, RetryableError } from '../lib/errors.ts';
 import type { ExtractedResult } from '../lib/psi/types.ts';
+import type { D1Credentials } from '../lib/blob.ts';
+import type { PsiRateLimiter } from '../lib/psi/rateLimiter.ts';
 
 /**
  * A real, successful measurement -- the scenario that matters here is
@@ -62,6 +73,7 @@ describe('recordAuditResult — raw JSON storage failure handling', () => {
     const outcome = await recordAuditResult(
       prisma,
       { ...BASE_ARGS, extracted: OK_RESULT, rawJson: { some: 'payload' }, fieldJson: null },
+      undefined,
       storeRawJsonFn,
     );
 
@@ -85,11 +97,33 @@ describe('recordAuditResult — raw JSON storage failure handling', () => {
         recordAuditResult(
           prisma,
           { ...BASE_ARGS, extracted: OK_RESULT, rawJson: { some: 'payload' }, fieldJson: null },
+          undefined,
           storeRawJsonFn,
         ),
       RetryableError,
     );
     assert.equal(created.length, 0);
+  });
+
+  test('an org-specific d1 credential is passed through to storage, not the env fallback', async () => {
+    const { prisma } = fakePrisma();
+    const orgD1: D1Credentials = { accountId: 'acct-org', databaseId: 'db-org', apiToken: 'token-org' };
+    let seenD1: D1Credentials | undefined;
+    const storeRawJsonFn = async (
+      _runId: string, _pageId: string, _strategy: string, _rawJson: unknown, d1?: D1Credentials,
+    ): Promise<string> => {
+      seenD1 = d1;
+      return 'blob-key';
+    };
+
+    await recordAuditResult(
+      prisma,
+      { ...BASE_ARGS, extracted: OK_RESULT, rawJson: { some: 'payload' }, fieldJson: null },
+      orgD1,
+      storeRawJsonFn,
+    );
+
+    assert.deepEqual(seenD1, orgD1);
   });
 
   test('an error row (args.rawJson null) never calls storage at all', async () => {
@@ -104,11 +138,80 @@ describe('recordAuditResult — raw JSON storage failure handling', () => {
     const outcome = await recordAuditResult(
       prisma,
       { ...BASE_ARGS, extracted: errorResult, rawJson: null, fieldJson: null, isFailure: true },
+      undefined,
       storeRawJsonFn,
     );
 
     assert.equal(calls, 0);
     assert.equal(outcome.status, 'error');
     assert.equal(created[0].rawJsonBlobKey, null);
+  });
+});
+
+/**
+ * A spy that records how many times acquire() ran, then throws a
+ * recognizable sentinel -- auditPage's very next line after acquiring is a
+ * real network call (runPagespeed), which this deliberately never reaches.
+ * All that matters here is WHICH limiter got asked, not what a PSI call
+ * would do with it.
+ */
+function spyLimiter(): PsiRateLimiter & { calls: number } {
+  const spy = {
+    calls: 0,
+    async acquire() {
+      spy.calls++;
+      throw new Error('stop-here-before-the-real-psi-call');
+    },
+  };
+  return spy as unknown as PsiRateLimiter & { calls: number };
+}
+
+function fakeDeps(overrides: Partial<AuditPageDeps>): AuditPageDeps {
+  return {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    prisma: { page: { findUnique: async () => ({ siteId: 'site1' }) } } as any,
+    limiter: spyLimiter(),
+    sharedLimiter: spyLimiter(),
+    organizationId: 'org1',
+    ...overrides,
+  };
+}
+
+describe('auditPage — which quota a call is paced against', () => {
+  test('a site with its own PSI key paces against the org-scoped limiter, not the shared one', async () => {
+    const limiter = spyLimiter();
+    const sharedLimiter = spyLimiter();
+
+    await assert.rejects(
+      () =>
+        auditPage(
+          fakeDeps({ limiter, sharedLimiter, resolveSiteKey: async () => 'org-own-key' }),
+          { runId: 'r', pageId: 'p', url: 'https://example.com/', strategy: 'mobile' },
+        ),
+      /stop-here-before-the-real-psi-call/,
+    );
+
+    assert.equal(limiter.calls, 1);
+    assert.equal(sharedLimiter.calls, 0);
+  });
+
+  test('a site with no key of its own falls back to PSI_API_KEY and paces against the SHARED limiter, not its own', async () => {
+    const limiter = spyLimiter();
+    const sharedLimiter = spyLimiter();
+
+    await assert.rejects(
+      () =>
+        auditPage(
+          fakeDeps({ limiter, sharedLimiter, resolveSiteKey: async () => null }),
+          { runId: 'r', pageId: 'p', url: 'https://example.com/', strategy: 'mobile' },
+        ),
+      /stop-here-before-the-real-psi-call/,
+    );
+
+    // This is the actual fix: before it, this org's own tenant-scoped
+    // limiter would have been asked instead, letting every org sharing the
+    // fallback key pace itself as if it alone had the whole quota.
+    assert.equal(limiter.calls, 0);
+    assert.equal(sharedLimiter.calls, 1);
   });
 });

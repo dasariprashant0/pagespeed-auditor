@@ -7,7 +7,7 @@
  * Makes ONE real PSI call against one page of the configured site.
  */
 import 'dotenv/config';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '../lib/generated/tenant/index.js';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { auditPage } from '../lib/services/audit.service.ts';
 import { createRun, finalizeRun } from '../lib/services/run.service.ts';
@@ -20,7 +20,7 @@ const check = (label: string, ok: boolean, detail = '') => {
 };
 
 async function main() {
-  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
+  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.TENANT_DEV_DATABASE_URL! }) });
   // A distinct key, not the real "psi" bucket, so this verification run
   // never contends with (or is throttled by) whatever a real sweep is doing.
   const limiter = new PsiRateLimiter({
@@ -46,7 +46,7 @@ async function main() {
 
     console.log(`\n  auditing ${page.url} (mobile) — one real PSI call, ~15-25s\n`);
     const t0 = Date.now();
-    const outcome = await auditPage({ prisma, limiter }, {
+    const outcome = await auditPage({ prisma, limiter, sharedLimiter: limiter, organizationId: site.organizationId }, {
       runId, pageId: page.id, url: page.url, strategy: 'mobile',
     });
     console.log(`  completed in ${((Date.now() - t0) / 1000).toFixed(1)}s\n`);
@@ -91,7 +91,7 @@ async function main() {
 
     // Replay: the same job delivered twice must NOT double-count.
     const before = await prisma.auditRun.findUniqueOrThrow({ where: { id: runId }, select: { completedJobs: true } });
-    const replay = await auditPage({ prisma, limiter }, {
+    const replay = await auditPage({ prisma, limiter, sharedLimiter: limiter, organizationId: site.organizationId }, {
       runId, pageId: page.id, url: page.url, strategy: 'mobile',
     });
     const after = await prisma.auditRun.findUniqueOrThrow({ where: { id: runId }, select: { completedJobs: true } });

@@ -16,16 +16,16 @@
  *   npm run canary -- 20
  */
 import 'dotenv/config';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '../lib/generated/tenant/index.js';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { BOTH_STRATEGIES, createRun, findActiveRun } from '../lib/services/run.service.ts';
 import { auditPage } from '../lib/services/audit.service.ts';
-import { getPsiRateLimiter } from '../lib/opsState.ts';
+import { PsiRateLimiter } from '../lib/psi/rateLimiter.ts';
 import { estimateRun, formatDuration } from '../lib/services/estimate.service.ts';
 
 async function main() {
   const limit = Number(process.argv[2] ?? 50);
-  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
+  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.TENANT_DEV_DATABASE_URL! }) });
 
   try {
     const site = await prisma.site.findFirstOrThrow();
@@ -65,12 +65,16 @@ async function main() {
     console.log(`  sampled every ${step} pages across the sitemap`);
     console.log(`  run ${runId}, running sequentially...\n`);
 
-    const limiter = getPsiRateLimiter();
+    const limiter = new PsiRateLimiter({
+      db: prisma,
+      max: Number(process.env.PSI_RATE_MAX ?? 3),
+      windowMs: Number(process.env.PSI_RATE_WINDOW_MS ?? 4000),
+    });
     for (const p of pairs) {
-      await auditPage({ prisma, limiter }, { runId, pageId: p.pageId, url: p.url, strategy: p.strategy });
+      await auditPage({ prisma, limiter, sharedLimiter: limiter, organizationId: site.organizationId }, { runId, pageId: p.pageId, url: p.url, strategy: p.strategy });
     }
 
-    const est = await estimateRun(pairs.length, site.id);
+    const est = await estimateRun(site.organizationId, pairs.length, site.id);
     console.log(`  done. ${formatDuration(est.seconds)}${est.measured ? ` (median ${Math.round(est.medianCallMs / 1000)}s/call, ${est.sampleSize} samples)` : ''}\n`);
   } finally {
     await prisma.$disconnect();

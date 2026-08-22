@@ -1,4 +1,4 @@
-import type { PrismaClient } from '@prisma/client';
+import type { TenantPrismaClient } from '../db/tenant.ts';
 import { crawlSitemap, type CrawlOptions } from '../sitemap/fetch.ts';
 import { normalizeAndDedupe, type RejectReason } from '../sitemap/normalize.ts';
 import { deriveGroup } from '../sitemap/group.ts';
@@ -41,7 +41,7 @@ export interface IngestOptions {
 }
 
 export async function ingestSitemap(
-  prisma: PrismaClient,
+  prisma: TenantPrismaClient,
   siteId: string,
   opts: IngestOptions = {},
 ): Promise<IngestSummary> {

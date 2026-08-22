@@ -1,10 +1,11 @@
-import { prisma } from '../db.ts';
+import { getTenantPrisma } from '../db/tenant.ts';
 import { NotFoundError } from '../errors.ts';
 import { bucketOf } from '../psi/buckets.ts';
 import type { Bucket, MetricId, PsiStrategy } from '../psi/types.ts';
 import { issueKindFromGroup } from './issues.service.ts';
 import { getPageScoreHistory } from './results.service.ts';
 import { fetchRawJson } from '../blob.ts';
+import { d1CredentialsForOrg } from './org.service.ts';
 import type {
   AuditDetailTable,
   AuditItemDTO,
@@ -190,10 +191,12 @@ export interface PageReportOptions {
 }
 
 export async function getPageReport(
+  organizationId: string,
   pageId: string,
   strategy: PsiStrategy,
   opts: PageReportOptions = {},
 ): Promise<PageReportDTO> {
+  const prisma = await getTenantPrisma(organizationId);
   const page = await prisma.page.findUnique({
     where: { id: pageId },
     select: {
@@ -282,7 +285,7 @@ export async function getPageReport(
       // diagnostic in LH13 and is useless as a sort key.
       orderBy: [{ savingsMs: 'desc' }, { score: 'asc' }],
     }),
-    getPageScoreHistory(pageId, strategy, opts.historyLimit),
+    getPageScoreHistory(organizationId, pageId, strategy, opts.historyLimit),
     // Always fetched now: the report view needs both descriptions and the
     // evidence tables, and this is a single row rather than a list query.
     prisma.auditResult.findUnique({ where: { id: latest.id }, select: { rawJson: true, rawJsonBlobKey: true } }),
@@ -292,7 +295,7 @@ export async function getPageReport(
   // the inline column for rows written before the move -- see
   // docs/DECISIONS.md §13. Never both: recordAuditResult never sets both.
   const rawJson = rawRow?.rawJsonBlobKey
-    ? await fetchRawJson(rawRow.rawJsonBlobKey)
+    ? await fetchRawJson(rawRow.rawJsonBlobKey, (await d1CredentialsForOrg(organizationId)) ?? undefined)
     : rawRow?.rawJson ?? null;
 
   const descriptions = descriptionsFromRawJson(rawJson);

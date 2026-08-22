@@ -1,4 +1,4 @@
-import { prisma } from '../db.ts';
+import { getTenantPrisma } from '../db/tenant.ts';
 import { scoreBand } from '../psi/buckets.ts';
 import type { PsiStrategy } from '../psi/types.ts';
 import {
@@ -179,9 +179,11 @@ const PAGE_ROW_SELECT = {
  * descending because that is the order the home screen collapses from.
  */
 export async function listGroupsWithAggregates(
+  organizationId: string,
   siteId: string,
   opts: StrategyOptions,
 ): Promise<GroupSummaryDTO[]> {
+  const prisma = await getTenantPrisma(organizationId);
   const [groups, pages] = await Promise.all([
     prisma.group.findMany({
       where: { siteId },
@@ -286,9 +288,11 @@ export async function listGroupsWithAggregates(
  * Two queries at any group size -- `blog` alone holds 324 pages.
  */
 export async function listPagesInGroup(
+  organizationId: string,
   groupId: string,
   opts: StrategyOptions,
 ): Promise<PageListItemDTO[]> {
+  const prisma = await getTenantPrisma(organizationId);
   const group = await prisma.group.findUnique({
     where: { id: groupId },
     select: { slug: true, name: true },
@@ -378,10 +382,12 @@ export type HistorySeries = Record<'performance' | 'accessibility' | 'bestPracti
  * scans of the same index range ([pageId, strategy, createdAt]).
  */
 export async function getPageScoreHistory(
+  organizationId: string,
   pageId: string,
   strategy: PsiStrategy,
   limit = DEFAULT_HISTORY_LIMIT,
 ): Promise<HistorySeries> {
+  const prisma = await getTenantPrisma(organizationId);
   const rows = await prisma.auditResult.findMany({
     // Error rows carry null scores. Plotting them would draw a gap that reads
     // as "the site got worse" rather than "the audit failed".
@@ -416,13 +422,15 @@ export async function getPageScoreHistory(
  * group card rather than being a different statistic on the same screen.
  */
 export async function getScoreHistory(
+  organizationId: string,
   scope: HistoryScope,
   opts: HistoryOptions,
 ): Promise<SparkPoint[]> {
+  const prisma = await getTenantPrisma(organizationId);
   const limit = opts.limit ?? DEFAULT_HISTORY_LIMIT;
 
   if (scope.pageId) {
-    const series = await getPageScoreHistory(scope.pageId, opts.strategy, limit);
+    const series = await getPageScoreHistory(organizationId, scope.pageId, opts.strategy, limit);
     return series.performance;
   }
 
@@ -483,10 +491,12 @@ export interface PageRunHistoryEntry {
  * a phantom recovery.
  */
 export async function getPageRunHistory(
+  organizationId: string,
   pageId: string,
   strategy: PsiStrategy,
   limit = 20,
 ): Promise<PageRunHistoryEntry[]> {
+  const prisma = await getTenantPrisma(organizationId);
   const rows = await prisma.auditResult.findMany({
     where: { pageId, strategy },
     orderBy: { createdAt: 'desc' },

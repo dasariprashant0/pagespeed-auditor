@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
-import { getEnv } from './env.ts';
+import { getEnv } from '../env.ts';
 
 /**
  * Prisma 7 takes the connection through a driver adapter rather than a `url`
@@ -33,7 +33,7 @@ function resolve(): PrismaClient {
   return globalForPrisma.__psaPrisma;
 }
 
-export const prisma: PrismaClient = new Proxy({} as PrismaClient, {
+export const centralPrisma: PrismaClient = new Proxy({} as PrismaClient, {
   get(_t, prop) {
     const client = resolve();
     const v = Reflect.get(client, prop);

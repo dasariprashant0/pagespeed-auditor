@@ -102,7 +102,7 @@ One focus ring everywhere, including inside SVG (`:focus-visible`) — a
 tool that reports accessibility scores has to pass its own audit. Verified
 across desktop (1440), tablet (834), and mobile (390) breakpoints for
 horizontal overflow, runtime errors, and missing headings as of the last
-full UI pass (`docs/BUILD_LOG.md`, "the interface rebuild").
+full UI pass (`docs/archive/BUILD_LOG-2026-08-19-20.md`, "the interface rebuild").
 
 ## 8. Optimistic UI — where it's used, and where it deliberately isn't
 

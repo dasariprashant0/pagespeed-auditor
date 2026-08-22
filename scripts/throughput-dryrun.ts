@@ -14,7 +14,7 @@
  * estimates and the schedule-only design both need revisiting.
  */
 import 'dotenv/config';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '../lib/generated/tenant/index.js';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PsiRateLimiter } from '../lib/psi/rateLimiter.ts';
 
@@ -31,7 +31,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const fakeLatency = () => LATENCY_MIN + Math.random() * (LATENCY_MAX - LATENCY_MIN);
 
 async function main() {
-  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
+  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.TENANT_DEV_DATABASE_URL! }) });
   // A unique key so a previous run's bucket row can't skew this one.
   const key = `dryrun:${process.pid}`;
   const limiter = new PsiRateLimiter({ db: prisma, max: MAX, windowMs: WINDOW, key });

@@ -1,13 +1,15 @@
+import Link from 'next/link';
 import { requireSession } from '@/lib/http/auth-guard';
-import { defaultSite } from '@/lib/services/tenant.service';
-import { onboardingState } from '@/lib/services/onboarding.service';
-import { SetupChecklist } from '@/components/onboarding/SetupChecklist';
-import { RoleTourBanner } from '@/components/onboarding/RoleTourBanner';
+import {
+  demoAwareDefaultSite,
+  demoAwareGetSiteSummary,
+  demoAwareGetTopIssues,
+  demoAwareListGroupsWithAggregates,
+  demoAwareListPagesInGroup,
+  demoAwareOnboardingState,
+} from '@/lib/onboarding/demoTenant';
 import { WaitingOnAdmin } from '@/components/onboarding/WaitingOnAdmin';
 import { can } from '@/lib/auth/roles';
-import { listGroupsWithAggregates } from '@/lib/services/results.service';
-import { getTopIssues } from '@/lib/services/issues.service';
-import { getSiteSummary } from '@/lib/services/site.service';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { StrategyTabs } from '@/components/ui/StrategyTabs';
 import { ScoreTiles } from '@/components/score/ScoreTiles';
@@ -15,7 +17,6 @@ import { SectionGrid } from '@/components/nav/SectionGrid';
 import { TopIssuesWidget } from '@/components/nav/TopIssuesWidget';
 import { EmptyState } from '@/components/nav/EmptyState';
 import { OverviewCharts, type ChartData } from '@/components/charts/OverviewCharts';
-import { listPagesInGroup } from '@/lib/services/results.service';
 import type { PsiStrategy } from '@/lib/services/types';
 
 export const dynamic = 'force-dynamic';
@@ -31,8 +32,8 @@ export default async function HomePage({
   // Scoped to the caller's organisation. findFirst() with no filter would show
   // whichever site happens to be first in the table -- another tenant's.
   const ctx = await requireSession();
-  const site = await defaultSite(ctx.organizationId);
-  const setup = await onboardingState(ctx.organizationId);
+  const site = await demoAwareDefaultSite(ctx.organizationId);
+  const setup = await demoAwareOnboardingState(ctx.organizationId);
   const canManage = can(ctx.role, 'site:manage');
   const canReorderGroups = can(ctx.role, 'groups:manage');
 
@@ -44,17 +45,31 @@ export default async function HomePage({
           subtitle="Point this at a sitemap and it will check every page on it — on mobile and desktop — and keep the results so you can see what improves and what slips."
         />
         <div className="max-w-2xl space-y-3">
-          {!ctx.hasSeenRoleTour && <RoleTourBanner role={ctx.role} />}
-          {canManage ? <SetupChecklist state={setup} canManage={canManage} /> : <WaitingOnAdmin role={ctx.role} />}
+          {canManage ? (
+            // Setup steps live in the floating checklist (bottom-left, every
+            // dash page) now -- it already shows this same list with ticks
+            // for what's done, so this page doesn't need its own copy of it.
+            <EmptyState
+              title="Add your website to get started"
+              body="Point it at a site and its sitemap under Settings — the checklist in the corner tracks the rest of setup from there."
+              action={
+                <Link href="/settings/site" className="rounded-[6px] bg-[var(--foreground)] px-3 py-1.5 text-[12px] font-medium text-[var(--background)]">
+                  Add your website
+                </Link>
+              }
+            />
+          ) : (
+            <WaitingOnAdmin role={ctx.role} />
+          )}
         </div>
       </>
     );
   }
 
   const [summary, groups, topIssues] = await Promise.all([
-    getSiteSummary(site.id, strategy),
-    listGroupsWithAggregates(site.id, { strategy }),
-    getTopIssues({ siteId: site.id, strategy, limit: 8 }),
+    demoAwareGetSiteSummary(ctx.organizationId, site.id, strategy),
+    demoAwareListGroupsWithAggregates(ctx.organizationId, site.id, { strategy }),
+    demoAwareGetTopIssues(ctx.organizationId, { siteId: site.id, strategy, limit: 8 }),
   ]);
 
   // Every measured page, with its section, so the charts can group, filter and
@@ -65,7 +80,7 @@ export default async function HomePage({
     pages: (
       await Promise.all(
         charted.map(async (g, gi) => {
-          const pages = await listPagesInGroup(g.id, { strategy });
+          const pages = await demoAwareListPagesInGroup(ctx.organizationId, g.id, { strategy });
           return pages.map(
             (p) =>
               [p.id, p.path, gi, p.scores.performance, p.scores.accessibility, p.scores.bestPractices, p.scores.seo, p.lcp] as ChartData['pages'][number],
@@ -110,17 +125,16 @@ export default async function HomePage({
         )}
       </PageHeader>
 
-      {!ctx.hasSeenRoleTour && <RoleTourBanner role={ctx.role} />}
-      {canManage ? (
-        <SetupChecklist state={setup} canManage={canManage} />
-      ) : (
-        // Setup steps an admin hasn't finished aren't this role's to act on --
-        // showing them a checklist full of "an admin needs to do this" is
-        // worse guidance than one honest line, and only while there is
-        // nothing real to look at yet. Once there is data, the dashboard
-        // below speaks for itself.
-        !setup.complete && summary.auditedCount === 0 && <WaitingOnAdmin role={ctx.role} />
-      )}
+      {
+        // An admin sees the same remaining-steps list in the floating
+        // checklist already (bottom-left, every dash page), so this content
+        // area doesn't repeat it. Setup steps an admin hasn't finished
+        // aren't a non-admin's to act on, though -- showing them a checklist
+        // full of "an admin needs to do this" is worse guidance than one
+        // honest line, and only while there is nothing real to look at yet.
+        // Once there is data, the dashboard below speaks for itself.
+        !canManage && !setup.complete && summary.auditedCount === 0 && <WaitingOnAdmin role={ctx.role} />
+      }
 
       {summary.auditedCount === 0 ? (
         <EmptyState
