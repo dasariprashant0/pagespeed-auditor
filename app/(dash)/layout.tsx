@@ -4,6 +4,7 @@ import { listGroupsWithAggregates } from '@/lib/services/results.service';
 import { can } from '@/lib/auth/roles';
 import { toRailGroups } from '@/lib/view/rail';
 import { AppShell } from '@/components/shell/AppShell';
+import { NotProvisionedError } from '@/lib/errors';
 
 /**
  * The frame every signed-in screen shares.
@@ -28,11 +29,22 @@ import { AppShell } from '@/components/shell/AppShell';
  */
 export default async function DashLayout({ children }: { children: React.ReactNode }) {
   const ctx = await requireSession();
-  const site = await defaultSite(ctx.organizationId);
 
-  // The one place the section list is loaded. Everything else reads it from
-  // the rendered rail rather than querying again.
-  const groups = site ? await listGroupsWithAggregates(ctx.organizationId, site.id, { strategy: 'mobile' }) : [];
+  // An org that hasn't finished provisioning its own database yet has no
+  // site to show here. This layout wraps every (dash) page -- including
+  // /settings/database, the only page that can fix that -- so it must
+  // degrade to the existing "no site configured yet" shape rather than
+  // redirect (redirecting from here would loop) or crash.
+  let site: Awaited<ReturnType<typeof defaultSite>> = null;
+  let groups: Awaited<ReturnType<typeof listGroupsWithAggregates>> = [];
+  try {
+    site = await defaultSite(ctx.organizationId);
+    // The one place the section list is loaded. Everything else reads it from
+    // the rendered rail rather than querying again.
+    groups = site ? await listGroupsWithAggregates(ctx.organizationId, site.id, { strategy: 'mobile' }) : [];
+  } catch (e) {
+    if (!(e instanceof NotProvisionedError)) throw e;
+  }
 
   return (
     <AppShell
