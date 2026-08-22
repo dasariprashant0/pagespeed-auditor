@@ -1,10 +1,29 @@
 import { requireSession } from '@/lib/http/auth-guard';
 import { defaultSite } from '@/lib/services/tenant.service';
 import { listGroupsWithAggregates } from '@/lib/services/results.service';
+import { onboardingState, type OnboardingState } from '@/lib/services/onboarding.service';
 import { can } from '@/lib/auth/roles';
 import { toRailGroups } from '@/lib/view/rail';
 import { AppShell } from '@/components/shell/AppShell';
 import { NotProvisionedError } from '@/lib/errors';
+import { centralPrisma } from '@/lib/db/central';
+import { remainingTourSteps } from '@/lib/onboarding/tourProgress';
+import { TourProvider } from '@/components/onboarding/TourProvider';
+import { TourEngine } from '@/components/onboarding/TourEngine';
+import { FloatingChecklist } from '@/components/onboarding/FloatingChecklist';
+
+const EMPTY_ONBOARDING_STATE: OnboardingState = {
+  complete: false,
+  completedCount: 0,
+  siteId: null,
+  steps: [
+    { id: 'site', title: 'Add your website', detail: 'The address of the site and its sitemap.', done: false, href: '/settings/database', cta: 'Connect your database first' },
+    { id: 'key', title: 'Connect a Google API key', detail: 'Google does the measuring. The key is free and takes a minute to create.', done: false, href: '/settings/site', cta: 'Add key' },
+    { id: 'pages', title: 'Read the sitemap', detail: 'Finds every page and sorts them into sections automatically.', done: false, href: '/settings/site', cta: 'Read sitemap' },
+    { id: 'firstAudit', title: 'Measure something', detail: 'Test one section to see real scores before committing to the whole site.', done: false, href: '/', cta: 'Choose a section' },
+    { id: 'schedule', title: 'Set it to run on its own', detail: 'A weekly check is what turns scores into a trend.', done: false, href: '/settings', cta: 'Set a schedule' },
+  ],
+};
 
 /**
  * The frame every signed-in screen shares.
@@ -37,24 +56,47 @@ export default async function DashLayout({ children }: { children: React.ReactNo
   // redirect (redirecting from here would loop) or crash.
   let site: Awaited<ReturnType<typeof defaultSite>> = null;
   let groups: Awaited<ReturnType<typeof listGroupsWithAggregates>> = [];
+  let setup: OnboardingState = EMPTY_ONBOARDING_STATE;
   try {
     site = await defaultSite(ctx.organizationId);
     // The one place the section list is loaded. Everything else reads it from
     // the rendered rail rather than querying again.
     groups = site ? await listGroupsWithAggregates(ctx.organizationId, site.id, { strategy: 'mobile' }) : [];
+    // TODO(onboarding Task 7): replace with demoAwareOnboardingState once the
+    // demo-data wrappers land -- for now an unprovisioned org falls through
+    // to EMPTY_ONBOARDING_STATE below rather than crashing.
+    setup = await onboardingState(ctx.organizationId);
   } catch (e) {
     if (!(e instanceof NotProvisionedError)) throw e;
   }
 
+  // Per-membership onboarding progress -- see
+  // docs/superpowers/specs/2026-08-22-onboarding-tour-design.md. Central-only
+  // lookup, so this never throws NotProvisionedError regardless of the
+  // organisation's database state above.
+  const membership = await centralPrisma.membership.findUnique({
+    where: { userId_organizationId: { userId: ctx.userId, organizationId: ctx.organizationId } },
+    select: { tourStepsSeen: true, checklistDismissedAt: true },
+  });
+  const remaining = remainingTourSteps(ctx.role, membership?.tourStepsSeen ?? []);
+
   return (
-    <AppShell
-      orgName={ctx.organizationName}
-      siteName={site?.name}
-      groups={toRailGroups(groups)}
-      canReorder={can(ctx.role, 'groups:manage')}
-      canRunAudits={can(ctx.role, 'audits:run')}
-    >
-      {children}
-    </AppShell>
+    <TourProvider steps={remaining}>
+      <AppShell
+        orgName={ctx.organizationName}
+        siteName={site?.name}
+        groups={toRailGroups(groups)}
+        canReorder={can(ctx.role, 'groups:manage')}
+        canRunAudits={can(ctx.role, 'audits:run')}
+      >
+        {children}
+      </AppShell>
+      <TourEngine />
+      <FloatingChecklist
+        orgSteps={setup}
+        tourAreaCount={remaining.length}
+        initiallyDismissed={membership?.checklistDismissedAt != null}
+      />
+    </TourProvider>
   );
 }

@@ -1,7 +1,9 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useActionState, useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 import { updateProfileAction, changePasswordAction } from '@/app/actions/members';
+import { reopenChecklistAction } from '@/app/actions/onboarding';
 import { InfoTooltip } from '@/components/ui/InfoTooltip';
 import { PasswordInput } from '@/components/ui/PasswordInput';
 import { ROLE_DESCRIPTION, ROLE_LABEL, type Role } from '@/lib/auth/roles';
@@ -39,6 +41,9 @@ export function ProfileForms({
 }) {
   const [profile, saveProfile, savingProfile] = useActionState<Result, FormData>(updateProfileAction, null);
   const [pw, savePw, savingPw] = useActionState<Result, FormData>(changePasswordAction, null);
+  const [reopening, startReopen] = useTransition();
+  const [reopened, setReopened] = useState(false);
+  const router = useRouter();
 
   return (
     <div className="max-w-2xl space-y-3">
@@ -97,6 +102,30 @@ export function ProfileForms({
         {role !== 'admin' && (
           <p className="mt-2 text-[11px] text-[var(--muted)]">Only an admin can change this.</p>
         )}
+      </section>
+
+      <section className="rounded-[8px] border border-[var(--border)] bg-[var(--surface)] p-4">
+        <h2 className="mb-2 font-[family-name:var(--font-display)] text-[13px] font-medium">Onboarding</h2>
+        <p className="text-[11px] text-[var(--muted)]">
+          Brings back the getting-started checklist if you hid it earlier.
+        </p>
+        <div className="mt-2 flex items-center gap-3">
+          <button
+            type="button"
+            disabled={reopening}
+            onClick={() =>
+              startReopen(async () => {
+                await reopenChecklistAction();
+                setReopened(true);
+                router.refresh();
+              })
+            }
+            className={button}
+          >
+            {reopening ? 'Bringing it back…' : 'Show onboarding again'}
+          </button>
+          {reopened && <span className="text-[11px]" style={{ color: 'var(--score-pass-text)' }}>Done — check the bottom-left corner.</span>}
+        </div>
       </section>
     </div>
   );
