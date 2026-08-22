@@ -19,8 +19,6 @@ export interface SessionContext {
   organizationId: string;
   organizationName: string;
   role: Role;
-  /** Whether the "here's what your role can do" banner has been dismissed. */
-  hasSeenRoleTour: boolean;
 }
 
 export function normalizeEmail(email: string): string {
@@ -133,7 +131,7 @@ export async function login(email: string, password: string): Promise<LoginOutco
   const normalized = normalizeEmail(email);
   const user = await centralPrisma.user.findUnique({
     where: { email: normalized },
-    select: { id: true, email: true, name: true, passwordHash: true, roleTourSeenAt: true },
+    select: { id: true, email: true, name: true, passwordHash: true },
   });
 
   // Always run a compare, even for an unknown address, so response time does
@@ -165,7 +163,6 @@ export async function login(email: string, password: string): Promise<LoginOutco
       organizationId: m.organizationId,
       organizationName: m.organizationName,
       role: m.role,
-      hasSeenRoleTour: user.roleTourSeenAt !== null,
     },
   };
 }
@@ -184,7 +181,7 @@ export async function loginWithGoogle(email: string): Promise<LoginOutcome> {
   const normalized = normalizeEmail(email);
   const user = await centralPrisma.user.findUnique({
     where: { email: normalized },
-    select: { id: true, email: true, name: true, roleTourSeenAt: true },
+    select: { id: true, email: true, name: true },
   });
   if (!user) {
     return { ok: false, error: 'No account uses that Google address yet. Ask an admin to invite you, or sign up.' };
@@ -212,7 +209,6 @@ export async function loginWithGoogle(email: string): Promise<LoginOutcome> {
       organizationId: m.organizationId,
       organizationName: m.organizationName,
       role: m.role,
-      hasSeenRoleTour: user.roleTourSeenAt !== null,
     },
   };
 }
@@ -304,7 +300,7 @@ export async function acceptInvitationWithGoogle(
 export async function contextFor(userId: string, organizationId?: string): Promise<SessionContext | null> {
   const user = await centralPrisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, email: true, name: true, roleTourSeenAt: true },
+    select: { id: true, email: true, name: true },
   });
   if (!user) return null;
 
@@ -322,13 +318,7 @@ export async function contextFor(userId: string, organizationId?: string): Promi
     organizationId: membership.organizationId,
     organizationName: membership.organization.name,
     role: isRole(membership.role) ? membership.role : 'viewer',
-    hasSeenRoleTour: user.roleTourSeenAt !== null,
   };
-}
-
-/** Dismissed for good, regardless of how many organisations the person is in. */
-export async function markRoleTourSeen(userId: string): Promise<void> {
-  await centralPrisma.user.update({ where: { id: userId }, data: { roleTourSeenAt: new Date() } });
 }
 
 // --- invitations -----------------------------------------------------------

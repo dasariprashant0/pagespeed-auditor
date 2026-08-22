@@ -22,10 +22,6 @@ model User {
   passwordHash String?
   createdAt    DateTime  @default(now())
   lastLoginAt  DateTime?
-  /// Null until dismissed. Per-user, not per-organisation: someone who
-  /// belongs to two tenants sees the "here's what your role can do" banner
-  /// once ever, not once per site they're a member of.
-  roleTourSeenAt DateTime?
 
   memberships Membership[]
   invitesSent Invitation[] @relation("InvitedBy")
@@ -129,6 +125,11 @@ model Membership {
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   role           String       @default("viewer")
   createdAt      DateTime     @default(now())
+  /// Per-membership onboarding progress -- see docs/superpowers/specs/2026-08-22-onboarding-tour-design.md.
+  /// Hard-deleted with the row on removal, so remove-then-re-add naturally
+  /// restarts onboarding with no special-case code.
+  tourStepsSeen        String[]  @default([])
+  checklistDismissedAt DateTime?
 
   @@unique([userId, organizationId])
   @@index([organizationId])
