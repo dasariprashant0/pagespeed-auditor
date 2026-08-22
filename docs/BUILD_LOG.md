@@ -2349,3 +2349,75 @@ anything above:**
   repo's Workflow SDK has a known-flaky local dev transport (steps queued
   but never executing), so `next dev` alone does not prove the Workflow
   changes in this migration actually work.
+
+## 22 Aug 2026 (later) -- Per-membership onboarding tour, all 7 tasks
+
+Live preview testing of Phase 5 surfaced that onboarding had quietly
+disappeared: the Phase 5 fix above (degrading `(dash)/layout.tsx` to
+"no site configured" for an unprovisioned org) meant a brand-new org saw
+an empty dashboard with nothing showing it around, and the redirect on
+the six gated pages meant `/settings/database` was the only reachable
+screen. Redesigned onboarding from scratch per
+`docs/superpowers/specs/2026-08-22-onboarding-tour-design.md`, executed
+as a 7-task plan
+(`docs/superpowers/plans/2026-08-22-onboarding-tour-implementation.md`),
+inline in this session:
+
+1. Schema: replaced `User.roleTourSeenAt` (one flag, whole app) with
+   `Membership.tourStepsSeen: String[]` and
+   `Membership.checklistDismissedAt` -- per-membership, not per-user, so
+   a removed-then-re-added teammate or a role change surfaces onboarding
+   correctly instead of it being permanently marked seen on the user row.
+2. `lib/onboarding/tourSteps.ts` / `tourProgress.ts`: a capability-gated
+   tour catalog (7 steps covering the whole app, not just database
+   setup) and `remainingTourSteps(role, seen)` -- a step reappears the
+   moment a role gains the capability it needs, without replaying steps
+   already seen at a lower role.
+3. Server Actions (`app/actions/onboarding.ts`): mark-step-seen,
+   skip-all, dismiss/reopen the checklist.
+4. `TourProvider`/`TourEngine`/`TourTooltip`: opportunistic client-side
+   tooltip rendering keyed off `data-tour="..."` attributes and route
+   matching, Next/Complete style.
+5. `data-tour` attributes added to the real target elements. Found and
+   removed one planned step (`report-raw-json`) that pointed at a
+   capability (`developer:access`) with no actual UI anywhere in the
+   app -- a real "don't tour a feature that doesn't exist" catch.
+6. `FloatingChecklist`: the bottom-left, dismissible widget replacing
+   the old dashboard-embedded `SetupChecklist` panel, reopenable from
+   Settings → Profile.
+7. **Demo-aware data for unprovisioned organizations.** The six pages
+   that used to redirect to `/settings/database` (dashboard, group,
+   page report, and the automation/site/notifications settings pages)
+   now render against realistic canned fixture data
+   (`lib/onboarding/demoData.ts`) via a generic
+   `demoAware<T>(real, demo)` wrapper (`lib/onboarding/demoTenant.ts`)
+   that catches `NotProvisionedError` and falls back transparently --
+   "we can't restrict the flow to /database unnecessarily" was the
+   explicit ask. Three of the six pages read tenant data through raw
+   `getTenantPrisma` queries rather than named service functions, which
+   the spec's rough sketch hadn't anticipated; handled with small
+   purpose-built bundled wrappers rather than a fake Prisma client.
+   `RunAuditButton` and `RecommendationPanel` take a `demoMode` prop
+   that disables the action with an explanatory tooltip -- a fully
+   interactive simulated audit pipeline was scoped out as materially
+   larger, separate work and confirmed with the user before building
+   the rest of this task on that assumption. Every other mutating form
+   (add/edit site, PSI key, schedule, ...) is left wired to its real
+   Server Action; submitting one against a demo org already surfaces
+   the friendly `NotProvisionedError` message from the earlier
+   `lib/http/actionError.ts` fix rather than a raw error, so no further
+   gating was needed there.
+
+Before writing the plan, walked the whole app as a PM/tester/customer
+per the user's explicit ask ("if I deploy in the real world I don't
+want to be embarrassed") and found two real issues, both fixed as part
+of this plan rather than filed for later.
+
+Verified per task and again at the end: `npx tsc --noEmit` clean,
+`npm run lint` 0 errors, `npm test` 189/189 passing, and a real `npm run
+build` against a disposable local Postgres applying all 12 central
+migrations cleanly. Not yet verified: a live Vercel preview walkthrough
+of the tour and demo-mode pages by an actual browser session -- the
+same `next dev` Workflow-transport caveat from the Phase 5 entry above
+applies, and demo mode in particular has never been clicked through by
+a human.
