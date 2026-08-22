@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { recordAuditResult } from '../lib/services/audit.service.ts';
 import { PermanentError, RetryableError } from '../lib/errors.ts';
 import type { ExtractedResult } from '../lib/psi/types.ts';
+import type { D1Credentials } from '../lib/blob.ts';
 
 /**
  * A real, successful measurement -- the scenario that matters here is
@@ -92,6 +93,27 @@ describe('recordAuditResult — raw JSON storage failure handling', () => {
       RetryableError,
     );
     assert.equal(created.length, 0);
+  });
+
+  test('an org-specific d1 credential is passed through to storage, not the env fallback', async () => {
+    const { prisma } = fakePrisma();
+    const orgD1: D1Credentials = { accountId: 'acct-org', databaseId: 'db-org', apiToken: 'token-org' };
+    let seenD1: D1Credentials | undefined;
+    const storeRawJsonFn = async (
+      _runId: string, _pageId: string, _strategy: string, _rawJson: unknown, d1?: D1Credentials,
+    ): Promise<string> => {
+      seenD1 = d1;
+      return 'blob-key';
+    };
+
+    await recordAuditResult(
+      prisma,
+      { ...BASE_ARGS, extracted: OK_RESULT, rawJson: { some: 'payload' }, fieldJson: null },
+      orgD1,
+      storeRawJsonFn,
+    );
+
+    assert.deepEqual(seenD1, orgD1);
   });
 
   test('an error row (args.rawJson null) never calls storage at all', async () => {

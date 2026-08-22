@@ -7,6 +7,7 @@ import { dueSchedules, advanceSchedule } from '@/lib/services/schedule.service';
 import { startAuditRun } from '@/lib/workflows/auditRun';
 import { planAndStartSweep } from '@/lib/workflows/planSweep';
 import { stampSchedulerHeartbeat } from '@/lib/opsState';
+import { forEachOrgIsolated } from '@/lib/cron/orgLoop';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -48,8 +49,9 @@ export async function GET(request: Request): Promise<Response> {
   let totalReconciled = { resumed: [] as string[], failed: [] as string[] };
   let sweepsStarted = 0;
 
-  for (const { id: organizationId } of readyOrgs) {
-    try {
+  await forEachOrgIsolated(
+    readyOrgs,
+    async ({ id: organizationId }) => {
       await stampSchedulerHeartbeat(organizationId);
 
       const reconciled = await withTenantPrisma(organizationId, (prisma) =>
@@ -73,12 +75,13 @@ export async function GET(request: Request): Promise<Response> {
         logger.info({ organizationId, siteId: s.siteId, cron: s.cronExpr }, 'scheduled sweep queued');
         sweepsStarted++;
       }
-    } catch (e) {
-      // One org's tenant database being unreachable (revoked credential,
-      // Neon outage) must not stop the tick for every other org.
+    },
+    // One org's tenant database being unreachable (revoked credential, Neon
+    // outage) must not stop the tick for every other org.
+    ({ id: organizationId }, e) => {
       logger.error({ organizationId, err: e instanceof Error ? e.message : String(e) }, 'cron tick failed for org');
-    }
-  }
+    },
+  );
 
   return NextResponse.json({ ok: true, reconciled: totalReconciled, sweepsStarted });
 }
