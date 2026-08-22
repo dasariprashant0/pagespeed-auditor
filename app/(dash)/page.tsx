@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { requireSession } from '@/lib/http/auth-guard';
 import {
   demoAwareDefaultSite,
@@ -7,7 +8,6 @@ import {
   demoAwareListPagesInGroup,
   demoAwareOnboardingState,
 } from '@/lib/onboarding/demoTenant';
-import { SetupChecklist } from '@/components/onboarding/SetupChecklist';
 import { WaitingOnAdmin } from '@/components/onboarding/WaitingOnAdmin';
 import { can } from '@/lib/auth/roles';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -45,7 +45,22 @@ export default async function HomePage({
           subtitle="Point this at a sitemap and it will check every page on it — on mobile and desktop — and keep the results so you can see what improves and what slips."
         />
         <div className="max-w-2xl space-y-3">
-          {canManage ? <SetupChecklist state={setup} canManage={canManage} /> : <WaitingOnAdmin role={ctx.role} />}
+          {canManage ? (
+            // Setup steps live in the floating checklist (bottom-left, every
+            // dash page) now -- it already shows this same list with ticks
+            // for what's done, so this page doesn't need its own copy of it.
+            <EmptyState
+              title="Add your website to get started"
+              body="Point it at a site and its sitemap under Settings — the checklist in the corner tracks the rest of setup from there."
+              action={
+                <Link href="/settings/site" className="rounded-[6px] bg-[var(--foreground)] px-3 py-1.5 text-[12px] font-medium text-[var(--background)]">
+                  Add your website
+                </Link>
+              }
+            />
+          ) : (
+            <WaitingOnAdmin role={ctx.role} />
+          )}
         </div>
       </>
     );
@@ -110,16 +125,16 @@ export default async function HomePage({
         )}
       </PageHeader>
 
-      {canManage ? (
-        <SetupChecklist state={setup} canManage={canManage} />
-      ) : (
-        // Setup steps an admin hasn't finished aren't this role's to act on --
-        // showing them a checklist full of "an admin needs to do this" is
-        // worse guidance than one honest line, and only while there is
-        // nothing real to look at yet. Once there is data, the dashboard
-        // below speaks for itself.
-        !setup.complete && summary.auditedCount === 0 && <WaitingOnAdmin role={ctx.role} />
-      )}
+      {
+        // An admin sees the same remaining-steps list in the floating
+        // checklist already (bottom-left, every dash page), so this content
+        // area doesn't repeat it. Setup steps an admin hasn't finished
+        // aren't a non-admin's to act on, though -- showing them a checklist
+        // full of "an admin needs to do this" is worse guidance than one
+        // honest line, and only while there is nothing real to look at yet.
+        // Once there is data, the dashboard below speaks for itself.
+        !canManage && !setup.complete && summary.auditedCount === 0 && <WaitingOnAdmin role={ctx.role} />
+      }
 
       {summary.auditedCount === 0 ? (
         <EmptyState

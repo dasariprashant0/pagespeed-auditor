@@ -16,7 +16,11 @@ export function remainingTourSteps(role: Role, seen: string[]): TourStep[] {
   );
 }
 
-/** Every step CURRENTLY applicable to this role, seen or not -- what "skip the whole tour" marks seen in one write. */
-export function applicableTourStepIds(role: Role): string[] {
-  return TOUR_STEPS.filter((step) => step.requiredCapability === null || can(role, step.requiredCapability)).map((s) => s.id);
+/**
+ * Every step this role can currently reach, seen or not -- what the
+ * checklist needs to show a tick next to what's already done instead of
+ * just quietly dropping it from the list.
+ */
+export function applicableTourSteps(role: Role): TourStep[] {
+  return TOUR_STEPS.filter((step) => step.requiredCapability === null || can(role, step.requiredCapability));
 }

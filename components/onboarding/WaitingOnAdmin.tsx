@@ -1,12 +1,13 @@
 import { ROLE_LABEL, type Role } from '@/lib/auth/roles';
 
 /**
- * Replaces SetupChecklist for anyone who cannot act on it.
+ * Shown in place of the setup checklist for anyone who cannot act on it.
  *
  * The checklist used to render for every role, showing "An admin needs to
  * do this" on every remaining step -- accurate, but a wall of things a
  * Viewer or Editor will never be the one to fix is worse guidance than one
- * honest line.
+ * honest line. (The checklist itself now only lives in the floating
+ * widget -- see FloatingChecklist -- not as a second copy on this page.)
  */
 export function WaitingOnAdmin({ role }: { role: Role }) {
   return (

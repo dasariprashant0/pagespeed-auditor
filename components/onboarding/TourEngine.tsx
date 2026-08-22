@@ -15,10 +15,14 @@ function routeMatches(pattern: string, pathname: string): boolean {
 }
 
 /**
- * Opportunistic, not a forced wizard: finds the first remaining step whose
- * target exists on the CURRENT route and renders its tooltip. Does not
- * navigate anywhere -- as the person naturally clicks around, whichever step
- * applies to what's on screen lights up.
+ * Opportunistic by default -- finds the first remaining step whose target
+ * exists on the CURRENT route and renders its tooltip, without navigating
+ * anywhere, as the person naturally clicks around. A checklist link can
+ * override that pick via `requestStep`: when the requested step's own route
+ * matches where we just navigated to, it wins over "whichever step for this
+ * route happens to be first," so clicking a specific item highlights THAT
+ * one rather than a different step that happens to share its route (`/`
+ * alone covers two: `overview-sections` and `overview-charts`).
  */
 export function TourEngine() {
   const tour = useTour();
@@ -27,20 +31,41 @@ export function TourEngine() {
 
   useEffect(() => {
     if (!tour) return;
-    const candidate = tour.remaining.find((s) => routeMatches(s.route, pathname));
-    // Deferred a tick rather than called synchronously in the effect body --
-    // this is a real DOM query (document.querySelector), not a mirror of
-    // existing state, but the setState call itself is pushed past the
-    // effect's own execution so it can never cascade into the same commit.
+    const requested = tour.requestedStepId ? tour.remaining.find((s) => s.id === tour.requestedStepId) : undefined;
+    const candidate = requested && routeMatches(requested.route, pathname) ? requested : tour.remaining.find((s) => routeMatches(s.route, pathname));
+
     if (!candidate) {
       queueMicrotask(() => setActive(null));
       return;
     }
-    const el = document.querySelector(`[data-tour="${candidate.id}"]`);
-    // A target that hasn't rendered yet (still streaming) simply shows
-    // nothing this pass -- the next navigation or remaining-list change
-    // re-runs this effect, rather than retrying aggressively or erroring.
-    queueMicrotask(() => setActive(el ? { step: candidate, el } : null));
+
+    // A target that hasn't rendered yet (still streaming in after a client
+    // navigation) doesn't mean "give up" the way it used to when this only
+    // ran opportunistically -- a checklist click just sent the person here
+    // ON PURPOSE, so it's worth a few retries across the next ~600ms before
+    // accepting there's genuinely nothing to anchor to yet.
+    let attempts = 0;
+    let timer: ReturnType<typeof setTimeout>;
+    function tryFind() {
+      const el = document.querySelector(`[data-tour="${candidate!.id}"]`);
+      if (el) {
+        setActive({ step: candidate!, el });
+        if (tour!.requestedStepId === candidate!.id) tour!.clearRequestedStep();
+        return;
+      }
+      attempts++;
+      if (attempts < 8) {
+        timer = setTimeout(tryFind, 80);
+      } else {
+        setActive(null);
+        if (tour!.requestedStepId === candidate!.id) tour!.clearRequestedStep();
+      }
+    }
+    // Deferred a tick rather than called synchronously in the effect body --
+    // this is a real DOM query (document.querySelector), not a mirror of
+    // existing state.
+    queueMicrotask(tryFind);
+    return () => clearTimeout(timer);
   }, [tour, pathname]);
 
   if (!tour || !active) return null;

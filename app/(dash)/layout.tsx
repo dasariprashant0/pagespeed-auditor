@@ -4,7 +4,7 @@ import { can } from '@/lib/auth/roles';
 import { toRailGroups } from '@/lib/view/rail';
 import { AppShell } from '@/components/shell/AppShell';
 import { centralPrisma } from '@/lib/db/central';
-import { remainingTourSteps } from '@/lib/onboarding/tourProgress';
+import { applicableTourSteps } from '@/lib/onboarding/tourProgress';
 import { demoAwareDefaultSite, demoAwareListGroupsWithAggregates, demoAwareOnboardingState } from '@/lib/onboarding/demoTenant';
 import { TourProvider } from '@/components/onboarding/TourProvider';
 import { TourEngine } from '@/components/onboarding/TourEngine';
@@ -54,10 +54,10 @@ export default async function DashLayout({ children }: { children: React.ReactNo
     where: { userId_organizationId: { userId: ctx.userId, organizationId: ctx.organizationId } },
     select: { tourStepsSeen: true, checklistDismissedAt: true },
   });
-  const remaining = remainingTourSteps(ctx.role, membership?.tourStepsSeen ?? []);
+  const allTourSteps = applicableTourSteps(ctx.role);
 
   return (
-    <TourProvider steps={remaining}>
+    <TourProvider steps={allTourSteps} seenIds={membership?.tourStepsSeen ?? []}>
       <AppShell
         orgName={ctx.organizationName}
         siteName={site?.name}
@@ -68,11 +68,7 @@ export default async function DashLayout({ children }: { children: React.ReactNo
         {children}
       </AppShell>
       <TourEngine />
-      <FloatingChecklist
-        orgSteps={setup}
-        tourAreaCount={remaining.length}
-        initiallyDismissed={membership?.checklistDismissedAt != null}
-      />
+      <FloatingChecklist orgSteps={setup} initiallyCollapsed={membership?.checklistDismissedAt != null} />
     </TourProvider>
   );
 }

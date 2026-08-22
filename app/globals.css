@@ -305,6 +305,40 @@ td, th, .tnum { font-variant-numeric: tabular-nums; }
 .animate-rise { animation: rise var(--t-slow) var(--ease) both; }
 .animate-fade { animation: fade var(--t-base) var(--ease) both; }
 
+/* One deliberate exception to "nothing loops" above: the onboarding
+   checklist, at the user's explicit request, gets a looping animated
+   gradient. Scoped to this one widget rather than the design system --
+   overriding the color tokens locally means every descendant (links, the
+   InfoTooltip "?" circles, their popovers) stays readable on top of it
+   without touching those shared components. */
+@keyframes onboarding-gradient-flow {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+.onboarding-gradient-panel {
+  --foreground: #ffffff;
+  --muted: rgb(255 255 255 / 0.82);
+  --faint: rgb(255 255 255 / 0.82);
+  --border: rgb(255 255 255 / 0.3);
+  --border-strong: rgb(255 255 255 / 0.75);
+  --surface: rgb(20 16 32 / 0.94);
+  /* Dark, not the hover token's normal near-white value -- the "?" trigger's
+     hover state (components/ui/InfoTooltip.tsx) sets both a --surface-subtle
+     background AND --foreground text on hover, and --foreground is white in
+     this scope, so the light-mode default of --surface-subtle would put
+     white-on-white behind the "?" the instant someone hovers it. */
+  --surface-subtle: rgb(0 0 0 / 0.4);
+  /* Darker stops than a typical decorative gradient so white text/icons stay
+     readable at every point in the loop, not just where it happens to be
+     dark when you glance at it. */
+  background: linear-gradient(120deg, #8f1d3a, #a85a0f, #0f7a52, #1e429e, #5b1f9e, #8f1d3a);
+  background-size: 300% 300%;
+  animation: onboarding-gradient-flow 8s var(--ease) infinite;
+  color: var(--foreground);
+  border: 1px solid rgb(255 255 255 / 0.35);
+}
+
 /* Skeletons shimmer rather than pulse: a pulse reads as "broken/retrying",
    a directional sweep reads as "loading". */
 .skeleton {

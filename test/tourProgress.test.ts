@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { remainingTourSteps, applicableTourStepIds } from '../lib/onboarding/tourProgress.ts';
+import { remainingTourSteps } from '../lib/onboarding/tourProgress.ts';
 import { TOUR_STEPS } from '../lib/onboarding/tourSteps.ts';
 
 describe('remainingTourSteps', () => {
@@ -25,17 +25,5 @@ describe('remainingTourSteps', () => {
   test('a demoted role does not re-show a step already seen under a higher role', () => {
     const remaining = remainingTourSteps('viewer', ['settings-database']);
     assert.ok(!remaining.some((s) => s.id === 'settings-database'));
-  });
-});
-
-describe('applicableTourStepIds', () => {
-  test('only returns ids this role can currently reach', () => {
-    const ids = applicableTourStepIds('viewer');
-    assert.ok(!ids.includes('settings-database'));
-  });
-
-  test('an admin gets every step id in the catalog', () => {
-    const ids = applicableTourStepIds('admin');
-    assert.equal(ids.length, TOUR_STEPS.length);
   });
 });
