@@ -2228,3 +2228,124 @@ outside the provisioning UI itself calls `getTenantPrisma`/
 `withTenantPrisma` yet -- every real audit, page, Server Action, and
 Workflow step still reads and writes the one shared database and shared
 D1. Not started this entry; see the plan for how it's being sequenced.
+
+## 22 Aug 2026 -- Per-tenant Neon + D1 Phase 5 cutover, plus the final whole-branch review's fixes
+
+The actual cutover: 11 tasks plus one supplemental (task 11b), per
+`docs/superpowers/plans/2026-08-21-per-tenant-phase5-cutover.md` --
+`lib/db/tenant.ts`'s `getTenantPrisma`/`withTenantPrisma` and
+`lib/http/auth-guard.ts`'s `requireTenantPrisma`, built in Phase 4 and
+unused until now, threaded through every remaining call site: every
+Server Action, every `(dash)` page, every API route, the MCP server's
+bearer-token resolution, the audit Workflow (`lib/workflows/auditRun.ts`),
+and the dev/ops scripts under `scripts/`. `tenant.service.ts`'s
+`defaultSite` and the `require*Access` functions now resolve each org's
+own tenant client internally and throw `NotProvisionedError` for any
+organisation whose `provisionStatus` isn't `'ready'` -- which, since
+every new signup defaults to `'unprovisioned'`, is the normal state for
+a brand new organisation, not an edge case.
+
+A final whole-branch review caught that this last point had not actually
+been handled end to end. Fixed in this same session, in order:
+
+1. **Critical**: `app/(dash)/layout.tsx` unconditionally called
+   `defaultSite`/`listGroupsWithAggregates`, which now throw for an
+   unprovisioned org. Since this layout wraps every `(dash)` page --
+   including `/settings/database`, the only page that can provision an
+   org -- every new signup was locked out of the one page that would fix
+   their situation, and `app/(dash)/error.tsx` cannot catch its own
+   segment's layout errors (Next.js semantics). Fixed by wrapping the
+   two calls in a `try`/`catch` for `NotProvisionedError` and degrading
+   to the existing "no site configured yet" shape (`site = null`,
+   `groups = []`) instead of crashing or redirecting -- redirecting from
+   this layout to `/settings/database` would loop, since that page is
+   also wrapped by it.
+2. Six pages (`app/(dash)/page.tsx`, `g/[slug]`, `p/[pageId]`, and the
+   automation/site/notifications settings pages) and four API routes
+   (`api/runs/active`, `api/reports/bulk`, `api/runs/[runId]/log`,
+   `api/runs/[runId]/progress`) called tenant-data functions directly
+   and had no handling for `NotProvisionedError`. Pages now catch it at
+   their first tenant-touching call and redirect to
+   `/settings/database`; the API routes return `{ error:
+   'not_provisioned' }` at HTTP 409, matching each route's existing
+   structured-JSON-error shape.
+3. Added `app/error.tsx` as a root-level error boundary backstop --
+   there was no `error.tsx`/`global-error.tsx` above `app/(dash)/`, so a
+   crash in that layout (or anything outside `(dash)`) fell through to a
+   blank framework error page.
+
+Two more Important findings, both in verification scripts:
+
+4. `scripts/verify-tenant-isolation.ts` -- the repo's only automated
+   cross-tenant isolation check -- created two fake organisations in the
+   single shared central database and asserted isolation via
+   `tenant.service.ts`'s `require*Access` functions. Post-cutover, both
+   fake orgs are unprovisioned, so every call throws
+   `NotProvisionedError`, and the script's own `mustRefuse()` helper
+   treats any thrown error as a PASS -- every cross-tenant assertion was
+   reporting PASS for a config error, not a real isolation result.
+   Rewritten to require two real, throwaway tenant database connection
+   strings (`TENANT_DEV_DATABASE_URL_A`/`_B`), run real tenant migrations
+   against each via `lib/tenantDb/provision.ts`'s `runTenantMigrations`,
+   and create two real central `Organization` rows whose
+   `tenantDbUrlEnc` (via `lib/crypto/secretBox.ts`'s envelope encryption,
+   same as production provisioning) actually points at those two
+   databases -- so `getTenantPrisma` resolves the two fake orgs to two
+   genuinely separate databases, and a direct query against org B's own
+   client for an id that only exists in org A's database proves the
+   isolation is structural, not a `WHERE` clause. Verified locally
+   end-to-end against two throwaway Postgres databases, including that
+   cleanup and re-runs work.
+5. `scripts/throughput-dryrun.ts` still constructed a `@prisma/client`
+   `PrismaClient` connected via `DATABASE_URL` to call
+   `prisma.rateLimitBucket.deleteMany(...)`, but `RateLimitBucket` lives
+   in the tenant schema now. Same mechanical fix already applied to 6
+   other scripts: import from `lib/generated/tenant/index.js`, connect
+   via `TENANT_DEV_DATABASE_URL`. Verified locally against a throwaway
+   tenant database.
+
+New tests proving the plumbing this migration depends on actually works,
+where nothing previously asserted it: `recordAuditResult`
+(`test/audit.service.test.ts`) and `pruneSiteHistory`
+(`test/retention.test.ts`) each get a test confirming a real `D1Credentials`
+argument is threaded through to the injected storage/delete callback
+rather than silently falling back to env-derived credentials. The cron
+route's per-org isolation (one org's tenant database being unreachable
+must not stop the tick from reaching the rest) wasn't practical to test
+against `app/api/cron/schedule-tick/route.ts` directly -- its imports go
+through the `@/` path alias that only Next's bundler and tsc resolve, and
+it pulls in `centralPrisma`/`withTenantPrisma`/several services with no
+injection points -- so the per-org `try`/`catch` loop was pulled out into
+`lib/cron/orgLoop.ts` (`forEachOrgIsolated`) as a small,
+behavior-preserving extraction, and `test/orgLoop.test.ts` exercises it
+directly.
+
+Also: three trivial cleanups (a dead `lib/db.ts` entry in
+`eslint.config.mjs`'s framework-free-zone file list -- verified the rule
+still fires by planting a deliberate bad import and reverting it; a stale
+comment on `app/api/cron/schedule-tick/route.ts` overclaiming that
+`withTenantPrisma` is used for the whole route when only
+`reconcileStaleRuns` actually goes through it; a comment on
+`lib/workflows/auditRun.ts` explaining why `organizationId` is the last
+parameter there against the rest of the file's convention; and a stale
+`lib/db.ts` reference in a `lib/db/tenant.ts` comment, updated to
+`lib/db/central.ts`).
+
+Verified: `npx tsc --noEmit` 0 errors, `npm run lint` 0 errors, `npm test`
+all 183 tests passing, including the new ones added in this pass. `npm
+run build` was not re-verified end-to-end in this pass (needs a real
+`DATABASE_URL` wired through Vercel's own build per the `vercel env pull`
+gotcha) -- `npx prisma generate` was confirmed clean for both schemas
+instead.
+
+**Still outstanding before this migration is fully done, independent of
+anything above:**
+
+- A manual production check that zero audit runs are in-flight before
+  this deploys. The Workflow signature change earlier in this migration
+  cannot resume old in-flight runs across the deploy boundary.
+- Real end-to-end verification against a provisioned organisation on an
+  actual Vercel **preview** deployment, not just `next dev` -- this
+  repo's Workflow SDK has a known-flaky local dev transport (steps queued
+  but never executing), so `next dev` alone does not prove the Workflow
+  changes in this migration actually work.

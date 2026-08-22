@@ -1086,3 +1086,19 @@ the tenant-client resolver's caching strategy, the exact call-site
 inventory, and the phase-by-phase sequencing) captured going into
 implementation; BUILD_LOG entries for each phase as they land are the
 current-state record from here.
+
+**Side effect noted at the Phase 5 cutover's final review: the PSI rate
+limiter is now per-organization, not global.** `RateLimitBucket` moved
+into each org's own tenant database along with everything else this
+decision covers, so `PsiRateLimiter` now paces each organization's PSI
+calls independently rather than sharing one global bucket. This is
+correct and intended for an organization that supplies its own PSI key
+(`Site.psiApiKey`) -- it should only ever be paced against its own quota.
+It's a minor, low-probability corner case for organizations that fall
+back to the shared `PSI_API_KEY` env var instead: they now compete for
+that one shared Google quota N-ways, each pacing itself as if it had the
+whole thing, rather than sharing one global rate limit that kept the
+combined call rate within it. Not treated as a defect worth blocking on --
+BYO-PSI-key is already the norm this app pushes every organization
+toward, and the failure mode of exceeding the shared key's quota is a 429
+from PSI, not data loss or cross-tenant leakage.

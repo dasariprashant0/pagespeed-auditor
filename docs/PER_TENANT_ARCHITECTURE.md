@@ -186,8 +186,8 @@ three cases `validateD1Credentials` already covered).
 | Encryption utility (`lib/crypto/secretBox.ts`) | ✅ Built, unit-tested |
 | Login org-picker | ✅ Built, verified against a real multi-membership account |
 | Tenant schema + migration (`prisma/tenant/`) | ✅ Built, verified against real throwaway databases |
-| Tenant-client resolver (`lib/db/tenant.ts`) | ✅ Built. Not called from anywhere yet |
+| Tenant-client resolver (`lib/db/tenant.ts`) | ✅ Built, and now called from everywhere — every page, Server Action, API route, MCP tool and workflow step that touches tenant data resolves its own org's client through it. Wired through as part of the Phase 5 cutover (see `docs/superpowers/plans/2026-08-21-per-tenant-phase5-cutover.md` and the Phase 5 entry in `docs/BUILD_LOG.md`) |
 | Settings → Database UI + provisioning action | ✅ Built, validation logic verified against real throwaway databases |
 | D1 table creation during provisioning | ✅ Fixed — see above |
-| Every other page/action/workflow using the org's own database | ❌ Not started — Phase 5 |
+| Every other page/action/workflow using the org's own database | ✅ Done — Phase 5 cutover. See `docs/superpowers/plans/2026-08-21-per-tenant-phase5-cutover.md` for the task-by-task plan and the Phase 5 entry in `docs/BUILD_LOG.md` for what shipped and what's still outstanding before it's fully done |
 | Dropping the old shared tables, removing `CLOUDFLARE_*` fallback | ❌ Not started — Phase 6, after Phase 5 is verified |
