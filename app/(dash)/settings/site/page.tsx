@@ -1,14 +1,14 @@
-import { redirect } from 'next/navigation';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { requireSession } from '@/lib/http/auth-guard';
 import { can } from '@/lib/auth/roles';
-import { getTenantPrisma } from '@/lib/db/tenant';
 import { getEnv } from '@/lib/env';
-import { NotProvisionedError } from '@/lib/errors';
-import { listSites, orgEmailRef } from '@/lib/services/tenant.service';
-import { listGroupsWithAggregates } from '@/lib/services/results.service';
-import { historyOverview } from '@/lib/services/retention.service';
-import { estimateRun } from '@/lib/services/estimate.service';
+import { orgEmailRef } from '@/lib/services/tenant.service';
+import {
+  demoAwareEstimateRun,
+  demoAwareHistoryOverview,
+  demoAwareListGroupsWithAggregates,
+  demoAwareListSites,
+} from '@/lib/onboarding/demoTenant';
 import { emailConfigProblem } from '@/lib/notify/email';
 import { SettingsNav } from '@/components/settings/SettingsNav';
 import { AddSiteForm, EditSiteForm, PsiKeyForm } from '@/components/settings/SiteForms';
@@ -39,25 +39,17 @@ export default async function SiteSettingsPage() {
   // Visible to every role -- only site:manage decides whether these forms
   // actually accept input. See docs/DECISIONS.md.
   const ctx = await requireSession();
-  let prisma: Awaited<ReturnType<typeof getTenantPrisma>>;
-  let sites: Awaited<ReturnType<typeof listSites>>;
-  try {
-    prisma = await getTenantPrisma(ctx.organizationId);
-    sites = await listSites(ctx.organizationId);
-  } catch (e) {
-    if (e instanceof NotProvisionedError) redirect('/settings/database');
-    throw e;
-  }
+  const sites = await demoAwareListSites(ctx.organizationId);
   const canEdit = can(ctx.role, 'site:manage');
   const site = sites[0] ?? null;
 
   const [groups, history, orgEmail] = await Promise.all([
-    site ? listGroupsWithAggregates(ctx.organizationId, site.id, { strategy: 'mobile' }) : Promise.resolve([]),
-    site ? historyOverview(prisma, site.id) : Promise.resolve(null),
+    site ? demoAwareListGroupsWithAggregates(ctx.organizationId, site.id, { strategy: 'mobile' }) : Promise.resolve([]),
+    site ? demoAwareHistoryOverview(ctx.organizationId, site.id) : Promise.resolve(null),
     orgEmailRef(ctx.organizationId),
   ]);
   const pageCount = groups.reduce((n, g) => n + g.pageCount, 0);
-  const sweepEstimate = site ? await estimateRun(ctx.organizationId, pageCount * 2, site.id) : null;
+  const sweepEstimate = site ? await demoAwareEstimateRun(ctx.organizationId, pageCount * 2, site.id) : null;
 
   // An organisation's own SMTP override (orgEmail.hasOverride) bypasses the
   // shared default entirely -- emailConfigProblem() only describes that

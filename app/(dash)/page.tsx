@@ -1,14 +1,15 @@
-import { redirect } from 'next/navigation';
 import { requireSession } from '@/lib/http/auth-guard';
-import { defaultSite } from '@/lib/services/tenant.service';
-import { onboardingState } from '@/lib/services/onboarding.service';
-import { NotProvisionedError } from '@/lib/errors';
+import {
+  demoAwareDefaultSite,
+  demoAwareGetSiteSummary,
+  demoAwareGetTopIssues,
+  demoAwareListGroupsWithAggregates,
+  demoAwareListPagesInGroup,
+  demoAwareOnboardingState,
+} from '@/lib/onboarding/demoTenant';
 import { SetupChecklist } from '@/components/onboarding/SetupChecklist';
 import { WaitingOnAdmin } from '@/components/onboarding/WaitingOnAdmin';
 import { can } from '@/lib/auth/roles';
-import { listGroupsWithAggregates } from '@/lib/services/results.service';
-import { getTopIssues } from '@/lib/services/issues.service';
-import { getSiteSummary } from '@/lib/services/site.service';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { StrategyTabs } from '@/components/ui/StrategyTabs';
 import { ScoreTiles } from '@/components/score/ScoreTiles';
@@ -16,7 +17,6 @@ import { SectionGrid } from '@/components/nav/SectionGrid';
 import { TopIssuesWidget } from '@/components/nav/TopIssuesWidget';
 import { EmptyState } from '@/components/nav/EmptyState';
 import { OverviewCharts, type ChartData } from '@/components/charts/OverviewCharts';
-import { listPagesInGroup } from '@/lib/services/results.service';
 import type { PsiStrategy } from '@/lib/services/types';
 
 export const dynamic = 'force-dynamic';
@@ -32,15 +32,8 @@ export default async function HomePage({
   // Scoped to the caller's organisation. findFirst() with no filter would show
   // whichever site happens to be first in the table -- another tenant's.
   const ctx = await requireSession();
-  let site: Awaited<ReturnType<typeof defaultSite>>;
-  let setup: Awaited<ReturnType<typeof onboardingState>>;
-  try {
-    site = await defaultSite(ctx.organizationId);
-    setup = await onboardingState(ctx.organizationId);
-  } catch (e) {
-    if (e instanceof NotProvisionedError) redirect('/settings/database');
-    throw e;
-  }
+  const site = await demoAwareDefaultSite(ctx.organizationId);
+  const setup = await demoAwareOnboardingState(ctx.organizationId);
   const canManage = can(ctx.role, 'site:manage');
   const canReorderGroups = can(ctx.role, 'groups:manage');
 
@@ -59,9 +52,9 @@ export default async function HomePage({
   }
 
   const [summary, groups, topIssues] = await Promise.all([
-    getSiteSummary(ctx.organizationId, site.id, strategy),
-    listGroupsWithAggregates(ctx.organizationId, site.id, { strategy }),
-    getTopIssues(ctx.organizationId, { siteId: site.id, strategy, limit: 8 }),
+    demoAwareGetSiteSummary(ctx.organizationId, site.id, strategy),
+    demoAwareListGroupsWithAggregates(ctx.organizationId, site.id, { strategy }),
+    demoAwareGetTopIssues(ctx.organizationId, { siteId: site.id, strategy, limit: 8 }),
   ]);
 
   // Every measured page, with its section, so the charts can group, filter and
@@ -72,7 +65,7 @@ export default async function HomePage({
     pages: (
       await Promise.all(
         charted.map(async (g, gi) => {
-          const pages = await listPagesInGroup(ctx.organizationId, g.id, { strategy });
+          const pages = await demoAwareListPagesInGroup(ctx.organizationId, g.id, { strategy });
           return pages.map(
             (p) =>
               [p.id, p.path, gi, p.scores.performance, p.scores.accessibility, p.scores.bestPractices, p.scores.seo, p.lcp] as ChartData['pages'][number],

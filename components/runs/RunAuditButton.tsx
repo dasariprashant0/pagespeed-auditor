@@ -21,6 +21,7 @@ export function RunAuditButton({
   strategies,
   hint,
   variant = 'secondary',
+  demoMode = false,
 }: {
   kind: 'page' | 'group';
   target: string;
@@ -29,6 +30,8 @@ export function RunAuditButton({
   /** Shown in the tooltip until the measured estimate arrives. */
   hint?: string;
   variant?: 'primary' | 'secondary';
+  /** Sample data has nothing to re-measure -- see docs/superpowers/specs/2026-08-22-onboarding-tour-design.md Global Constraints. */
+  demoMode?: boolean;
 }) {
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -38,7 +41,7 @@ export function RunAuditButton({
   // Fetched on hover/focus rather than on mount: it is a DB query per button,
   // and a table of them would fire one each on every page load.
   const loadPreview = () => {
-    if (preview) return;
+    if (preview || demoMode) return;
     previewEstimateAction({ kind, ref: target, strategyCount: strategies?.length ?? 2 })
       .then(setPreview)
       .catch(() => {});
@@ -49,17 +52,19 @@ export function RunAuditButton({
       <Button
         variant={variant}
         type="button"
-        disabled={pending}
+        disabled={pending || demoMode}
         aria-busy={pending}
         onMouseEnter={loadPreview}
         onFocus={loadPreview}
         title={
-          preview
-            ? `${preview.jobs} PSI calls, ${preview.eta}` +
-              (preview.measured
-                ? ` — based on your last ${preview.sampleSize} audits (median ${preview.medianSeconds}s each)`
-                : ' — estimate, no measured history yet')
-            : hint
+          demoMode
+            ? 'This is sample data — connect your database in Settings to measure a real site.'
+            : preview
+              ? `${preview.jobs} PSI calls, ${preview.eta}` +
+                (preview.measured
+                  ? ` — based on your last ${preview.sampleSize} audits (median ${preview.medianSeconds}s each)`
+                  : ' — estimate, no measured history yet')
+              : hint
         }
         onClick={() =>
           start(async () => {

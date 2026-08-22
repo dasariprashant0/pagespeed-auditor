@@ -21,6 +21,7 @@ export function RecommendationPanel({
   strategy,
   initial,
   canGenerate = true,
+  demoMode = false,
 }: {
   pageId: string;
   strategy: PsiStrategy;
@@ -32,6 +33,8 @@ export function RecommendationPanel({
    * button that spends money on a new generation is gated.
    */
   canGenerate?: boolean;
+  /** Sample data has no real page to analyze -- see docs/superpowers/specs/2026-08-22-onboarding-tour-design.md Global Constraints. */
+  demoMode?: boolean;
 }) {
   const [content, setContent] = useState(initial?.content ?? null);
   const [meta, setMeta] = useState(
@@ -90,7 +93,8 @@ export function RecommendationPanel({
             <button
               type="button"
               onClick={() => run(Boolean(content))}
-              disabled={pending}
+              disabled={pending || demoMode}
+              title={demoMode ? 'This is sample data — connect your database in Settings to analyze a real page.' : undefined}
               className="rounded-[5px] border border-[var(--border-strong)] px-2.5 py-1 text-[12px] font-medium hover:bg-[var(--surface-subtle)] disabled:opacity-50"
             >
               {pending ? 'Thinking…' : content ? 'Regenerate' : 'Generate'}
@@ -166,9 +170,11 @@ export function RecommendationPanel({
 
       {!content && !pending && !error && (
         <p className="border-t border-[var(--border)] px-3.5 py-3 text-[12px] text-[var(--muted)]">
-          {canGenerate
-            ? 'Not generated yet. This reads the findings above and returns a prioritised fix list.'
-            : 'Not generated yet.'}
+          {demoMode
+            ? 'This is sample data — connect your database in Settings to generate real advice.'
+            : canGenerate
+              ? 'Not generated yet. This reads the findings above and returns a prioritised fix list.'
+              : 'Not generated yet.'}
         </p>
       )}
     </section>

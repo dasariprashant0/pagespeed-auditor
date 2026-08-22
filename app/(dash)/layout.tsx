@@ -1,29 +1,14 @@
 import { requireSession } from '@/lib/http/auth-guard';
-import { defaultSite } from '@/lib/services/tenant.service';
-import { listGroupsWithAggregates } from '@/lib/services/results.service';
-import { onboardingState, type OnboardingState } from '@/lib/services/onboarding.service';
+import { type OnboardingState } from '@/lib/services/onboarding.service';
 import { can } from '@/lib/auth/roles';
 import { toRailGroups } from '@/lib/view/rail';
 import { AppShell } from '@/components/shell/AppShell';
-import { NotProvisionedError } from '@/lib/errors';
 import { centralPrisma } from '@/lib/db/central';
 import { remainingTourSteps } from '@/lib/onboarding/tourProgress';
+import { demoAwareDefaultSite, demoAwareListGroupsWithAggregates, demoAwareOnboardingState } from '@/lib/onboarding/demoTenant';
 import { TourProvider } from '@/components/onboarding/TourProvider';
 import { TourEngine } from '@/components/onboarding/TourEngine';
 import { FloatingChecklist } from '@/components/onboarding/FloatingChecklist';
-
-const EMPTY_ONBOARDING_STATE: OnboardingState = {
-  complete: false,
-  completedCount: 0,
-  siteId: null,
-  steps: [
-    { id: 'site', title: 'Add your website', detail: 'The address of the site and its sitemap.', done: false, href: '/settings/database', cta: 'Connect your database first' },
-    { id: 'key', title: 'Connect a Google API key', detail: 'Google does the measuring. The key is free and takes a minute to create.', done: false, href: '/settings/site', cta: 'Add key' },
-    { id: 'pages', title: 'Read the sitemap', detail: 'Finds every page and sorts them into sections automatically.', done: false, href: '/settings/site', cta: 'Read sitemap' },
-    { id: 'firstAudit', title: 'Measure something', detail: 'Test one section to see real scores before committing to the whole site.', done: false, href: '/', cta: 'Choose a section' },
-    { id: 'schedule', title: 'Set it to run on its own', detail: 'A weekly check is what turns scores into a trend.', done: false, href: '/settings', cta: 'Set a schedule' },
-  ],
-};
 
 /**
  * The frame every signed-in screen shares.
@@ -49,26 +34,17 @@ const EMPTY_ONBOARDING_STATE: OnboardingState = {
 export default async function DashLayout({ children }: { children: React.ReactNode }) {
   const ctx = await requireSession();
 
-  // An org that hasn't finished provisioning its own database yet has no
-  // site to show here. This layout wraps every (dash) page -- including
-  // /settings/database, the only page that can fix that -- so it must
-  // degrade to the existing "no site configured yet" shape rather than
-  // redirect (redirecting from here would loop) or crash.
-  let site: Awaited<ReturnType<typeof defaultSite>> = null;
-  let groups: Awaited<ReturnType<typeof listGroupsWithAggregates>> = [];
-  let setup: OnboardingState = EMPTY_ONBOARDING_STATE;
-  try {
-    site = await defaultSite(ctx.organizationId);
-    // The one place the section list is loaded. Everything else reads it from
-    // the rendered rail rather than querying again.
-    groups = site ? await listGroupsWithAggregates(ctx.organizationId, site.id, { strategy: 'mobile' }) : [];
-    // TODO(onboarding Task 7): replace with demoAwareOnboardingState once the
-    // demo-data wrappers land -- for now an unprovisioned org falls through
-    // to EMPTY_ONBOARDING_STATE below rather than crashing.
-    setup = await onboardingState(ctx.organizationId);
-  } catch (e) {
-    if (!(e instanceof NotProvisionedError)) throw e;
-  }
+  // An org that hasn't finished provisioning its own database yet sees
+  // realistic canned data instead -- see
+  // docs/superpowers/specs/2026-08-22-onboarding-tour-design.md section D.
+  // This layout wraps every (dash) page -- including /settings/database,
+  // the only page that can fix that -- so it must never redirect (a
+  // redirect from here would loop) or crash.
+  const site = await demoAwareDefaultSite(ctx.organizationId);
+  // The one place the section list is loaded. Everything else reads it from
+  // the rendered rail rather than querying again.
+  const groups = site ? await demoAwareListGroupsWithAggregates(ctx.organizationId, site.id, { strategy: 'mobile' }) : [];
+  const setup: OnboardingState = await demoAwareOnboardingState(ctx.organizationId);
 
   // Per-membership onboarding progress -- see
   // docs/superpowers/specs/2026-08-22-onboarding-tour-design.md. Central-only
