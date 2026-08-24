@@ -11,10 +11,18 @@ name: Schedule tick
 # GitHub's schedule trigger is best-effort and can slip by several minutes
 # under load; that's fine here since the route itself is idempotent per tick
 # and schedule.service.ts refuses schedules closer than an hour apart.
-
+#
+# Deliberately NOT on the exact quarter-hour (:00/:15/:30/:45) -- GitHub's own
+# docs call the start of every hour (and, in practice, every popular cron
+# boundary) the highest-load time for the schedule trigger, and this is
+# exactly where every other repo's `*/15 * * * *` piles up too. Observed
+# 20-90 minute gaps between ticks on 24 Aug 2026 (should have been ~15) with
+# the on-the-mark schedule, which let a real production sweep sit overdue for
+# over 20 minutes before anything checked again. Offsetting to :07/:22/:37/:52
+# dodges that specific pile-up.
 on:
   schedule:
-    - cron: '*/15 * * * *'
+    - cron: '7,22,37,52 * * * *'
   workflow_dispatch: {}
 
 jobs:
