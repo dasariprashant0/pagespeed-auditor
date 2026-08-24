@@ -1,10 +1,19 @@
 /**
  * Development seed.
  *
- * Since accounts became real, the first admin is created by signing up through
- * the UI, not from environment variables -- so this no longer invents a user.
- * It only makes sure a development install has an organisation and a site to
- * work with, and it never overwrites anything that already exists.
+ * Since accounts became real, the first admin is created by signing up
+ * through the UI, not from environment variables -- so this no longer
+ * invents a user. It only makes sure a development install has an
+ * organisation to work with, and it never overwrites anything that
+ * already exists.
+ *
+ * Used to also seed a Site, Schedule, and NotificationSetting here --
+ * removed as dead/wrong after the Phase 5 per-tenant cutover
+ * (docs/PER_TENANT_ARCHITECTURE.md): those models don't exist in the
+ * central schema anymore, and creating them requires a real, provisioned
+ * tenant database this script has no way to know or reach. A site is
+ * added through the app's own UI, by an admin, after the organisation's
+ * tenant database is provisioned under Settings -> Database.
  *
  *   npm run db:seed
  */
@@ -22,42 +31,6 @@ async function main() {
     (await prisma.organization.findFirst({ orderBy: { createdAt: 'asc' } })) ??
     (await prisma.organization.create({ data: { name: 'Default', slug: 'default' } }));
   console.log(`  organisation  ${org.name}`);
-
-  const sitemapUrl = process.env.SITE_SITEMAP_URL;
-  const baseUrl = process.env.SITE_BASE_URL;
-
-  const existingSite = await prisma.site.findFirst({ where: { organizationId: org.id } });
-  if (existingSite) {
-    console.log(`  site          ${existingSite.name} (${existingSite.baseUrl}) — left as is`);
-  } else if (sitemapUrl && baseUrl) {
-    // Only used to bootstrap a fresh dev database; sites are added in the UI.
-    const site = await prisma.site.create({
-      data: {
-        organizationId: org.id,
-        name: process.env.SITE_NAME || 'My site',
-        sitemapUrl,
-        baseUrl,
-        psiApiKey: process.env.PSI_API_KEY || null,
-      },
-    });
-    console.log(`  site          ${site.name} (${site.baseUrl}) — created`);
-  } else {
-    console.log('  site          none (add one in the app, or set SITE_BASE_URL and SITE_SITEMAP_URL)');
-  }
-
-  const site = await prisma.site.findFirst({ where: { organizationId: org.id } });
-  if (site) {
-    await prisma.schedule.upsert({
-      where: { siteId: site.id },
-      update: {},
-      create: { siteId: site.id, enabled: false },
-    });
-    await prisma.notificationSetting.upsert({
-      where: { siteId: site.id },
-      update: {},
-      create: { siteId: site.id },
-    });
-  }
 
   const users = await prisma.user.count();
   console.log(

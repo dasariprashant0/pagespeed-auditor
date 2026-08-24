@@ -45,7 +45,11 @@ model PasswordReset {
   @@index([userId])
 }
 
-/// A tenant. Every Site, Page and AuditResult belongs to exactly one.
+/// A tenant. Every Site, Page and AuditResult belongs to exactly one --
+/// but lives in THAT organisation's own tenant database (prisma/tenant/schema.prisma),
+/// not here. This row only carries identity/membership data plus the
+/// encrypted pointer to where the real data actually lives -- see
+/// docs/PER_TENANT_ARCHITECTURE.md.
 model Organization {
   id        String   @id @default(cuid())
   name      String
@@ -86,7 +90,6 @@ model Organization {
   provisionedAt   DateTime?
 
   members     Membership[]
-  sites       Site[]
   invitations Invitation[]
   mcpTokens   McpToken[]
 }
@@ -153,334 +156,28 @@ model Invitation {
   @@index([organizationId, email])
 }
 
-model Site {
-  id             String       @id @default(cuid())
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-
-  name       String
-  sitemapUrl String
-  baseUrl    String // normalization rejects cross-domain <loc> entries
-  createdAt  DateTime @default(now())
-
-  /// Per-site PSI key, so each tenant uses its own Google quota rather than
-  /// sharing one and starving each other. Admin-editable; never sent to the
-  /// browser unmasked.
-  psiApiKey String?
-
-  schedule Schedule?
-  notif    NotificationSetting?
-  groups   Group[]
-  pages    Page[]
-  runs     AuditRun[]
-}
-
-model Group {
-  id     String @id @default(cuid())
-  siteId String
-  site   Site   @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  name   String
-  slug   String
-
-  // The group's IDENTITY is user-owned: never auto-renamed or auto-deleted.
-  // Distinct from Page.isManuallyGrouped, which pins one page's assignment.
-  isManual Boolean @default(false)
-
-  // SPEC+: manual sweep ordering. Null means "use sitemap position"; a number
-  // pulls the group forward. A sweep takes ~35 minutes, so which groups get
-  // measured first genuinely matters when one is watching a specific fix.
-  priority Int?
-
-  pages   Page[]
-  aliases GroupAlias[]
-
-  @@unique([siteId, slug])
-}
-
-// SPEC+: without this, merging /blog and /blogs into "Blog" loses the `blogs`
-// slug, and the next ingest recreates it and pulls the pages back out.
-// Rename and merge must both leave an alias behind.
-model GroupAlias {
-  id      String @id @default(cuid())
-  slug    String @unique
-  groupId String
-  group   Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
-}
-
-model Page {
-  id      String  @id @default(cuid())
-  siteId  String
-  site    Site    @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  groupId String?
-  group   Group?  @relation(fields: [groupId], references: [id], onDelete: SetNull)
-  url     String  @unique
-  path    String
-  title   String?
-
-  // SPEC+: URLs dropped from the sitemap are deactivated, never deleted --
-  // the audit history is the product.
-  isActive Boolean @default(true)
-
-  // SPEC+: pins THIS page's group assignment against re-ingest.
-  isManuallyGrouped Boolean @default(false)
-
-  lastmod       DateTime?
-  lastAuditedAt DateTime?
-
-  // SPEC+: position in the sitemap, 0-based, assigned at ingest.
-  // The sitemap's own order is the site owner's stated priority, so groups and
-  // pages are listed that way rather than by page count -- which is an artefact
-  // of URL structure, not an editorial signal.
-  sitemapIndex Int?
-
-  // SPEC+: denormalized pointers. Turn "1000 pages with current scores" from a
-  // correlated subquery per row into two plain joins.
-  latestResultMobileId  String?
-  latestResultDesktopId String?
-
-  results AuditResult[]
-  issues  AuditIssue[]
-
-  @@index([siteId, isActive])
-  @@index([siteId, sitemapIndex])
-  @@index([groupId, isActive])
-}
-
-model AuditRun {
-  id          String @id @default(cuid())
-  siteId      String
-  site        Site   @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  type        String // "full_sweep" | "group" | "page"
-  triggeredBy String // "schedule" | "manual"
-
-  // SPEC+: "skipped" added -- the overlap guard refuses to start a sweep while
-  // another is running rather than queueing it behind.
-  status String // "queued" | "running" | "completed" | "failed" | "skipped"
-
-  scopeLabel String? // "group:blog (mobile)" | "scheduled sweep"
-  skipReason String?
-
-  startedAt     DateTime  @default(now())
-  finishedAt    DateTime?
-  completedAt   DateTime?
-  totalJobs     Int
-  completedJobs Int       @default(0)
-  failedJobs    Int       @default(0) // SPEC+: lets a run finalize despite failures
-  error         String?
-  updatedAt     DateTime  @updatedAt
-
-  results AuditResult[]
-  issues  AuditIssue[]
-
-  @@index([siteId, type, status, finishedAt])
-  @@index([status])
-}
-
-model AuditResult {
-  id         String   @id @default(cuid())
-  pageId     String
-  page       Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
-  auditRunId String
-  auditRun   AuditRun @relation(fields: [auditRunId], references: [id], onDelete: Cascade)
-  strategy   String // "mobile" | "desktop"
-
-  // SPEC+: error rows carry status="error" with null scores, so completedJobs
-  // can reach totalJobs and the run can finalize.
-  // CONSEQUENCE: every average / trend / top-issues query MUST filter status="ok".
-  status       String  @default("ok") // "ok" | "error"
-  runtimeError String?
-
-  // Nullable throughout: a category can fail to run, and null != 0 on a trend chart.
-  performanceScore   Int?
-  accessibilityScore Int?
-  bestPracticesScore Int?
-  seoScore           Int?
-
-  // --- Lab metrics (Lighthouse) ---
-  lcp  Float?
-  cls  Float?
-  fcp  Float?
-  ttfb Float?
-
-  // SPEC+: INP is a FIELD-ONLY metric. Lab runs do not produce it, so this is
-  // nullable and populated only from CrUX. NEVER write TBT here -- it silently
-  // poisons every trend and regression comparison.
-  inp Float?
-
-  // SPEC+: the lab proxy for responsiveness, always labelled as such in the UI.
-  tbt        Float?
-  speedIndex Float?
-
-  // --- Field data (CrUX) ---
-  // SPEC+: real columns, not derived from rawJson at read time -- a 90-day group
-  // trend pulls thousands of rows and JSON path extraction can't use an index.
-  fieldSource  String? // "page" | "origin_fallback" | "none"
-  fieldOverall String? // normalized "good" | "ni" | "poor"
-  fieldLcp     Float?
-  fieldInp     Float?
-  fieldCls     Float? // ALREADY divided by 100 (CrUX reports CLS x 100)
-  fieldFcp     Float?
-  fieldTtfb    Float?
-  fieldJson    Json? // trimmed loadingExperience blob (~2 KB), not the full response
-
-  finalUrl          String?
-  lighthouseVersion String?
-
-  // SPEC+: wall-clock milliseconds the PSI call actually took. Recorded so run
-  // estimates come from this site's own measured latency rather than a
-  // hardcoded guess -- pages here average ~60s, while light pages are 11-24s,
-  // so a constant would be wrong by 3x in either direction.
-  durationMs Int?
-
-  // Pruned before storage (screenshots/treemap/i18n/timing stripped).
-  // Never SELECT * on this table -- use the shared summary select.
-  //
-  // Legacy inline storage. New rows write null here and put the JSON in
-  // Vercel Blob instead (rawJsonBlobKey) -- see docs/DECISIONS.md §13. Kept,
-  // not backfilled: existing rows still have their data here, and the
-  // 10-per-page retention window ages them out naturally within weeks.
-  rawJson        Json?
-  /// Pathname in Vercel Blob holding the pruned JSON, when it isn't inline
-  /// in rawJson above. Null for legacy rows and for error rows (nothing to store).
-  rawJsonBlobKey String?
-  markdownReport String
-
-  createdAt DateTime @default(now())
-
-  /// Newest first at read time; a regeneration appends rather than replaces.
-  recommendations Recommendation[]
-  issues         AuditIssue[]
-
-  // SPEC+ and load-bearing: the durable idempotency guarantee. BullMQ's jobId
-  // dedupe only holds while the job exists in Redis; this survives eviction.
-  @@unique([auditRunId, pageId, strategy])
-  @@index([pageId, strategy, createdAt])
-  @@index([auditRunId, status])
-}
-
-// SPEC+: one row per failing audit per result.
-// The "Top issues" widget groups the latest result of every page by audit id.
-// Doing that over rawJson means detoasting ~240 MB and running jsonb_each over
-// ~180 audit objects per row on every dashboard load, and no index helps (GIN
-// accelerates containment, not grouped aggregation over dynamic keys).
-// With this table it is one indexed GROUP BY. Target < 50 ms over 60k rows.
-model AuditIssue {
-  id            String      @id @default(cuid())
-  auditResultId String
-  auditResult   AuditResult @relation(fields: [auditResultId], references: [id], onDelete: Cascade)
-  auditRunId    String
-  auditRun      AuditRun    @relation(fields: [auditRunId], references: [id], onDelete: Cascade)
-  pageId        String
-  page          Page        @relation(fields: [pageId], references: [id], onDelete: Cascade)
-  strategy      String
-
-  auditId  String // "render-blocking-resources"
-  category String // "performance" | "accessibility" | "best-practices" | "seo"
-  group    String // "load-opportunities" | "diagnostics" | "other"
-  title    String
-
-  score        Float?
-  displayValue String?
-  savingsMs    Float?
-  savingsBytes Float?
-  weight       Float   @default(0)
-
-  createdAt DateTime @default(now())
-
-  // Makes "row count == distinct page count" a real invariant, which is what
-  // lets groupBy._count be correct without COUNT(DISTINCT) (Prisma can't express it).
-  @@unique([auditResultId, auditId])
-  @@index([auditRunId, strategy, auditId])
-  @@index([auditRunId, strategy, savingsMs])
-  @@index([pageId, strategy, auditId])
-}
-
-model Recommendation {
-  id            String      @id @default(cuid())
-  auditResultId String
-  auditResult   AuditResult @relation(fields: [auditResultId], references: [id], onDelete: Cascade)
-
-  // SPEC+: regenerating keeps the old answer instead of overwriting it. A
-  // person regenerates precisely when they disagree with what they got, and
-  // losing the previous take means they cannot compare the two. Capped at
-  // RECOMMENDATION_KEEP_VERSIONS (10) per result -- see retention.service.ts.
-  version Int
-
-  content String @default("")
-  model   String @default("")
-
-  // The unique pair below is what makes the create an atomic claim: two tabs
-  // both computing version N+1 will race on the same insert, and Postgres lets
-  // exactly one win (ON CONFLICT DO NOTHING). No advisory lock needed.
-  status    String   @default("generating") // "generating" | "complete" | "failed"
-  error     String?
-  startedAt DateTime @default(now())
-  /** Measured, not estimated: how long the model actually took. */
-  durationMs Int?
-
-  generatedAt DateTime @default(now())
-
-  @@unique([auditResultId, version])
-  @@index([auditResultId, version(sort: Desc)])
-}
-
-model Schedule {
-  id       String  @id @default(cuid())
-  siteId   String  @unique
-  site     Site    @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  cronExpr String? // null = disabled
-  // Team-local, not UTC: "3am" should mean 3am where the people are.
-  timezone String  @default("Asia/Kolkata")
-  enabled  Boolean @default(false)
-
-  lastRunAt DateTime?
-  nextRunAt DateTime?
-}
-
-model NotificationSetting {
-  id              String  @id @default(cuid())
-  siteId          String  @unique
-  site            Site    @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  emailEnabled    Boolean @default(false)
-  emailTo         String?
-  slackEnabled    Boolean @default(false)
-  slackWebhookUrl String?
-}
-
-/// Replaces Redis entirely (see docs/DECISIONS.md #16) for three small,
-/// infrequent, latency-insensitive jobs that never needed a separate
+/// Replaces Redis entirely (see docs/DECISIONS.md #16) for a small,
+/// infrequent, latency-insensitive job that never needed a separate
 /// request-metered service once BullMQ -- the thing that originally
 /// justified Redis -- was removed. One fixed-window token bucket, keyed by
-/// name ("psi" today; nothing else needs one yet). windowStart is the
-/// window's own start time in epoch ms, not a TTL -- computed once from
-/// wall-clock time, the same value every caller in that window agrees on
-/// without needing to ask Redis what it is.
+/// name. windowStart is the window's own start time in epoch ms, not a
+/// TTL -- computed once from wall-clock time, the same value every caller
+/// in that window agrees on without needing to ask Redis what it is.
+///
+/// This table exists in BOTH the central and tenant schemas, for two
+/// different buckets -- see docs/DECISIONS.md §19's "side effect" note.
+/// An organisation with its own PSI key paces against the "psi" key in
+/// ITS OWN tenant database (lib/opsState.ts's getPsiRateLimiter); every
+/// organisation still falling back to the shared PSI_API_KEY env var
+/// paces against the "psi:shared-fallback" key HERE, in the central
+/// database, since that's the one place genuinely shared across all of
+/// them. KeyValue (the scheduler heartbeat) and RunLogEvent (the live run
+/// terminal) used to also live centrally for the same original reason
+/// this comment describes, but both are purely per-organisation state now
+/// and only exist in the tenant schema -- removed from here as dead
+/// leftovers from before the Phase 5 cutover (docs/PER_TENANT_ARCHITECTURE.md).
 model RateLimitBucket {
   key         String @id
   windowStart BigInt
   count       Int
-}
-
-/// A tiny generic key/value store for operational state that doesn't merit
-/// its own table -- today, only the scheduler heartbeat.
-model KeyValue {
-  key       String   @id
-  value     String
-  updatedAt DateTime @updatedAt
-}
-
-/// "What is actually happening right now" for a run in flight -- the live
-/// terminal view. Deliberately not durable history (AuditResult already is
-/// that); rows are deleted once their run finalizes, in finalizeAndNotify.
-model RunLogEvent {
-  id        String   @id @default(cuid())
-  runId     String
-  kind      String // 'start' | 'ok' | 'retry' | 'error'
-  pageId    String
-  url       String
-  strategy  String
-  message   String?
-  createdAt DateTime @default(now())
-
-  @@index([runId, createdAt])
 }
