@@ -27,16 +27,18 @@ export function NavLink({
   children,
   className,
   'aria-current': ariaCurrent,
+  'aria-label': ariaLabel,
   prefetch,
 }: {
   href: string;
   children: React.ReactNode;
   className?: string;
   'aria-current'?: React.AriaAttributes['aria-current'];
+  'aria-label'?: string;
   prefetch?: boolean;
 }) {
   return (
-    <Link href={href} className={className} aria-current={ariaCurrent} prefetch={prefetch}>
+    <Link href={href} className={className} aria-current={ariaCurrent} aria-label={ariaLabel} prefetch={prefetch}>
       {children}
       <Pending />
     </Link>

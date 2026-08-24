@@ -6,6 +6,7 @@ import { NavLink } from '@/components/shell/NavLink';
 import { useReorder } from '@/components/nav/useReorder';
 import { reorderGroupsAction } from '@/app/actions/groups';
 import { BAND_ARC, scoreBand } from '@/components/score/scoreBucket';
+import { Tooltip } from '@/components/ui/Tooltip';
 
 export interface RailGroup {
   slug: string;
@@ -37,10 +38,13 @@ export function GroupRail({
   groups,
   canReorder,
   variant = 'rail',
+  collapsed = false,
 }: {
   groups: RailGroup[];
   canReorder: boolean;
   variant?: 'rail' | 'compact';
+  /** Icon-only mode for the desktop rail when the person has collapsed it. */
+  collapsed?: boolean;
 }) {
   // Read from the URL rather than a prop: the shell lives in the layout and
   // does not re-render on navigation, which is exactly why the rail keeps its
@@ -76,6 +80,39 @@ export function GroupRail({
 
   // Dragging is meaningless while a sort or a filter is hiding the real order.
   const draggable = canReorder && sort === 'custom' && q.trim() === '';
+
+  // Search/sort/drag-reorder don't fit in an icon-only rail -- collapsed just
+  // needs "which section is this and can I get to it," which the always-on
+  // score dot already carries. `items`, not `shown`, so collapsing never
+  // hides a section a filter or sort would have.
+  if (collapsed) {
+    return (
+      <ul className="thin-scroll -mr-1 min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">
+        {items.map((g) => (
+          <li key={g.slug}>
+            <Tooltip content={`${g.name}${g.score === null ? ' — not measured yet' : ` — ${g.score} average on mobile`}`}>
+              <NavLink
+                href={`/g/${g.slug}`}
+                aria-current={g.slug === activeSlug ? 'page' : undefined}
+                aria-label={g.name}
+                className={`flex h-8 w-8 items-center justify-center rounded-[var(--radius)] transition-colors ${
+                  g.slug === activeSlug ? 'bg-[var(--surface-sunken)]' : 'hover:bg-[var(--surface-sunken)]'
+                }`}
+              >
+                <span
+                  className="h-1.5 w-1.5 shrink-0 rounded-full"
+                  aria-hidden="true"
+                  style={{
+                    background: g.score === null ? 'var(--score-none)' : BAND_ARC[scoreBand(g.score)!],
+                  }}
+                />
+              </NavLink>
+            </Tooltip>
+          </li>
+        ))}
+      </ul>
+    );
+  }
 
   return (
     <div

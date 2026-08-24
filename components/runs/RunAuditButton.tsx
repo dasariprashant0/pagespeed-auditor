@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { queueAuditAction } from '@/app/actions/audits';
 import { previewEstimateAction, type EstimatePreview } from '@/app/actions/estimate';
 import { Button } from '@/components/ui/Button';
+import { Tooltip } from '@/components/ui/Tooltip';
 import type { PsiStrategy } from '@/lib/services/types';
 
 /**
@@ -47,43 +48,38 @@ export function RunAuditButton({
       .catch(() => {});
   };
 
+  const tooltipText = demoMode
+    ? 'This is sample data — connect your database in Settings to measure a real site.'
+    : preview
+      ? `${preview.jobs} PSI calls, ${preview.eta}` +
+        (preview.measured
+          ? ` — based on your last ${preview.sampleSize} audits (median ${preview.medianSeconds}s each)`
+          : ' — estimate, no measured history yet')
+      : hint;
+
   return (
     <div className="flex items-center gap-2" data-tour="run-audit-button">
-      <Button
-        variant={variant}
-        type="button"
-        disabled={pending || demoMode}
-        aria-busy={pending}
-        onMouseEnter={loadPreview}
-        onFocus={loadPreview}
-        title={
-          demoMode
-            ? 'This is sample data — connect your database in Settings to measure a real site.'
-            : preview
-              ? `${preview.jobs} PSI calls, ${preview.eta}` +
-                (preview.measured
-                  ? ` — based on your last ${preview.sampleSize} audits (median ${preview.medianSeconds}s each)`
-                  : ' — estimate, no measured history yet')
-              : hint
-        }
-        onClick={() =>
-          start(async () => {
-            setError(null);
-            const r = await queueAuditAction({ kind, ref: target, strategies });
-            if (!r.ok) setError(r.error);
-            else router.refresh();
-          })
-        }
-      >
-        {pending ? 'Starting…' : (label ?? 'Measure again')}
-      </Button>
+      <Tooltip content={pending ? undefined : tooltipText}>
+        <Button
+          variant={variant}
+          type="button"
+          disabled={pending || demoMode}
+          aria-busy={pending}
+          onMouseEnter={loadPreview}
+          onFocus={loadPreview}
+          onClick={() =>
+            start(async () => {
+              setError(null);
+              const r = await queueAuditAction({ kind, ref: target, strategies });
+              if (!r.ok) setError(r.error);
+              else router.refresh();
+            })
+          }
+        >
+          {pending ? 'Starting…' : (label ?? 'Measure again')}
+        </Button>
+      </Tooltip>
 
-      {preview && !pending && (
-        <span className="text-[11px] text-[var(--muted)]">
-          {preview.jobs} calls · {preview.eta}
-          {!preview.measured && ' (estimated)'}
-        </span>
-      )}
       {error && (
         <span role="alert" className="text-[11px]" style={{ color: 'var(--score-fail-text)' }}>
           {error}

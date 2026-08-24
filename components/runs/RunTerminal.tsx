@@ -51,9 +51,14 @@ function clock(ts: number): string {
  * Collapsed by default and only polls while expanded, so a run nobody is
  * watching doesn't cost extra requests on every screen it happens to render on.
  */
+
+/** How close to the bottom still counts as "at the bottom" for auto-scroll purposes. */
+const BOTTOM_THRESHOLD_PX = 24;
+
 export function RunTerminal({ runId, active }: { runId: string; active: boolean }) {
   const [open, setOpen] = useState(false);
   const [events, setEvents] = useState<RunLogEvent[]>([]);
+  const [pinnedToBottom, setPinnedToBottom] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -82,9 +87,20 @@ export function RunTerminal({ runId, active }: { runId: string; active: boolean 
     };
   }, [open, active, runId]);
 
+  // Only follow new lines while the person is already at the bottom -- a poll
+  // arriving every 2s while they've scrolled up to read history must not
+  // yank them back down.
   useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [events]);
+    const el = scrollRef.current;
+    if (el && pinnedToBottom) el.scrollTop = el.scrollHeight;
+  }, [events, pinnedToBottom]);
+
+  function handleScroll() {
+    const el = scrollRef.current;
+    if (!el) return;
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < BOTTOM_THRESHOLD_PX;
+    setPinnedToBottom(atBottom);
+  }
 
   return (
     <div className="mt-1">
@@ -97,22 +113,34 @@ export function RunTerminal({ runId, active }: { runId: string; active: boolean 
       </button>
 
       {open && (
-        <div
-          ref={scrollRef}
-          className="thin-scroll mt-1.5 h-40 overflow-y-auto rounded-[6px] border border-[var(--border)] bg-[var(--chrome)] p-2 font-mono text-[11px] leading-relaxed"
-        >
-          {events.length === 0 ? (
-            <p className="text-[var(--faint)]">Waiting for the first page to start…</p>
-          ) : (
-            events.map((e, i) => (
-              <div key={`${e.pageId}-${e.ts}-${i}`} className="whitespace-pre-wrap break-all">
-                <span className="text-[var(--faint)]">[{clock(e.ts)}]</span>{' '}
-                <span style={{ color: COLOR[e.kind] }}>{VERB[e.kind]}</span>{' '}
-                <span>{path(e.url)}</span>{' '}
-                <span className="text-[var(--faint)]">· {e.strategy}</span>
-                {e.message && <span className="text-[var(--faint)]"> — {e.message}</span>}
-              </div>
-            ))
+        <div className="relative">
+          <div
+            ref={scrollRef}
+            onScroll={handleScroll}
+            className="thin-scroll mt-1.5 h-40 overflow-y-auto rounded-[6px] border border-[var(--border)] bg-[var(--chrome)] p-2 font-mono text-[11px] leading-relaxed"
+          >
+            {events.length === 0 ? (
+              <p className="text-[var(--faint)]">Waiting for the first page to start…</p>
+            ) : (
+              events.map((e, i) => (
+                <div key={`${e.pageId}-${e.ts}-${i}`} className="whitespace-pre-wrap break-all">
+                  <span className="text-[var(--faint)]">[{clock(e.ts)}]</span>{' '}
+                  <span style={{ color: COLOR[e.kind] }}>{VERB[e.kind]}</span>{' '}
+                  <span>{path(e.url)}</span>{' '}
+                  <span className="text-[var(--faint)]">· {e.strategy}</span>
+                  {e.message && <span className="text-[var(--faint)]"> — {e.message}</span>}
+                </div>
+              ))
+            )}
+          </div>
+          {!pinnedToBottom && (
+            <button
+              type="button"
+              onClick={() => setPinnedToBottom(true)}
+              className="absolute bottom-2 right-2 rounded-full border border-[var(--border-strong)] bg-[var(--surface)] px-2 py-0.5 text-[10px] shadow-sm hover:bg-[var(--surface-subtle)]"
+            >
+              ↓ Jump to latest
+            </button>
           )}
         </div>
       )}

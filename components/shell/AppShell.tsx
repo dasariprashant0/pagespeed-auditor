@@ -1,11 +1,32 @@
+'use client';
+
 import Link from 'next/link';
-import { logoutAction } from '@/app/actions/auth';
+import { useState, useSyncExternalStore } from 'react';
 import { ActiveRunBar } from '@/components/runs/ActiveRunBar';
+import { Tooltip } from '@/components/ui/Tooltip';
 import { GroupRail, type RailGroup } from './GroupRail';
-import { RailActiveMark } from './RailActiveMark';
-import { ThemeToggle } from './ThemeToggle';
+import { AccountMenu } from './AccountMenu';
 
 export type { RailGroup };
+
+const COLLAPSE_KEY = 'rail-collapsed';
+
+// Same shape as ThemeToggle's stored-choice reader: nothing outside this
+// component's own toggleCollapsed() ever changes the value, so there is
+// nothing external to subscribe to, and useSyncExternalStore (rather than an
+// effect) is what keeps the server snapshot (expanded) and the first client
+// render in agreement.
+function subscribeCollapsed(): () => void {
+  return () => {};
+}
+
+function readStoredCollapsed(): boolean {
+  try {
+    return localStorage.getItem(COLLAPSE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
 
 /**
  * The persistent frame: a recessed left rail and a thin top bar.
@@ -37,6 +58,20 @@ export function AppShell({
   canRunAudits?: boolean;
   children: React.ReactNode;
 }) {
+  const stored = useSyncExternalStore(subscribeCollapsed, readStoredCollapsed, () => false);
+  const [override, setOverride] = useState<boolean | null>(null);
+  const collapsed = override ?? stored;
+
+  function toggleCollapsed() {
+    const next = !collapsed;
+    setOverride(next);
+    try {
+      localStorage.setItem(COLLAPSE_KEY, next ? '1' : '0');
+    } catch {
+      /* private browsing; the choice still holds for this session */
+    }
+  }
+
   return (
     <div className="min-h-dvh bg-[var(--background)]">
       <a
@@ -55,32 +90,42 @@ export function AppShell({
             list is the only thing that moves. */}
         <nav
           aria-label="Sections"
-          className="sticky top-0 hidden h-dvh w-[var(--rail-w)] shrink-0 flex-col overflow-hidden border-r border-[var(--border)] bg-[var(--chrome)] px-3 py-3.5 lg:flex"
+          className={`sticky top-0 hidden h-dvh shrink-0 flex-col overflow-hidden border-r border-[var(--border)] bg-[var(--chrome)] py-3.5 lg:flex ${
+            collapsed ? 'w-14 items-center px-2' : 'w-[var(--rail-w)] px-3'
+          }`}
         >
-          {/* Organisation above, site below. Passing one or the other made the
-              sidebar label change between screens for no reason the reader
-              could see. */}
-          <Link
-            href="/"
-            className="mb-4 block shrink-0 rounded-[var(--radius)] px-2 py-1.5 transition-colors hover:bg-[var(--surface-sunken)]"
-          >
-            <div className="eyebrow mb-0.5 truncate">{orgName}</div>
-            <div className="title-sm truncate">{siteName ?? 'No site yet'}</div>
-          </Link>
-
-          <GroupRail groups={groups} canReorder={canReorder} />
-
-          <div className="mt-3 shrink-0 space-y-px border-t border-[var(--border)] pt-3">
-            <RailActiveMark href="/settings/profile" match="/settings" label="Settings" />
-            <ThemeToggle />
-            <form action={logoutAction}>
-              <button
-                type="submit"
-                className="w-full rounded-[var(--radius)] px-2 py-[5px] text-left text-[12px] text-[var(--muted)] transition-colors hover:bg-[var(--surface-sunken)] hover:text-[var(--foreground)]"
+          <div className={`mb-4 flex shrink-0 items-center gap-1 ${collapsed ? 'flex-col' : ''}`}>
+            {/* Organisation above, site below. Passing one or the other made
+                the sidebar label change between screens for no reason the
+                reader could see. Hidden while collapsed -- there is no room
+                for two lines of text in a 56px rail. */}
+            {!collapsed && (
+              <Link
+                href="/"
+                className="block min-w-0 flex-1 rounded-[var(--radius)] px-2 py-1.5 transition-colors hover:bg-[var(--surface-sunken)]"
               >
-                Sign out
+                <div className="eyebrow mb-0.5 truncate">{orgName}</div>
+                <div className="title-sm truncate">{siteName ?? 'No site yet'}</div>
+              </Link>
+            )}
+            <Tooltip content={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
+              <button
+                type="button"
+                onClick={toggleCollapsed}
+                aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[var(--radius)] text-[var(--muted)] transition-colors hover:bg-[var(--surface-sunken)] hover:text-[var(--foreground)]"
+              >
+                <span aria-hidden="true" className={`inline-block transition-transform ${collapsed ? 'rotate-180' : ''}`}>
+                  «
+                </span>
               </button>
-            </form>
+            </Tooltip>
+          </div>
+
+          <GroupRail groups={groups} canReorder={canReorder} collapsed={collapsed} />
+
+          <div className={`mt-3 shrink-0 border-t border-[var(--border)] pt-3 ${collapsed ? '' : 'w-full'}`}>
+            <AccountMenu orgName={orgName} iconOnly={collapsed} />
           </div>
         </nav>
 
@@ -106,16 +151,8 @@ export function AppShell({
                   bottom half of it. */}
               <div className="max-h-[70dvh] overflow-y-auto border-t border-[var(--border)] bg-[var(--chrome)] px-3 py-3">
                 <GroupRail groups={groups} canReorder={canReorder} variant="compact" />
-                <div className="mt-3 flex items-center gap-3 border-t border-[var(--border)] pt-3 text-[12px]">
-                  <Link href="/settings/profile" className="text-[var(--muted)] hover:text-[var(--foreground)]">
-                    Settings
-                  </Link>
-                  <ThemeToggle compact />
-                  <form action={logoutAction}>
-                    <button type="submit" className="text-[var(--muted)] hover:text-[var(--foreground)]">
-                      Sign out
-                    </button>
-                  </form>
+                <div className="mt-3 border-t border-[var(--border)] pt-3">
+                  <AccountMenu orgName={orgName} />
                 </div>
               </div>
             </details>
