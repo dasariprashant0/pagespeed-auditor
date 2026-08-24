@@ -1026,3 +1026,26 @@ of the tour and demo-mode pages by an actual browser session -- the
 same `next dev` Workflow-transport caveat from the Phase 5 entry above
 applies, and demo mode in particular has never been clicked through by
 a human.
+
+## Session: onboarding tour disabled (not working properly)
+
+User reported the onboarding tour guide / floating checklist wasn't
+working properly and asked to disable it rather than debug it right
+now. Commented out (not deleted) in `app/(dash)/layout.tsx`: the
+`TourProvider`/`TourEngine`/`FloatingChecklist` wiring, the
+`applicableTourSteps` call, the `membership.tourStepsSeen` /
+`checklistDismissedAt` lookup, and `demoAwareOnboardingState`. Removed
+the "Show onboarding again" section (and its now-unused
+`reopenChecklistAction`/`useTransition`/`useRouter` wiring) from
+`components/settings/ProfileForms.tsx`. The underlying components
+(`TourProvider.tsx`, `TourEngine.tsx`, `FloatingChecklist.tsx`,
+`lib/onboarding/tourSteps.ts`, `lib/onboarding/tourProgress.ts`,
+`app/actions/onboarding.ts`) and their tests are untouched and still
+importable if re-enabled -- this is a wiring-level disable, not a
+removal of the feature. `data-tour="..."` attributes left in place on
+`ScheduleForm`, `TeamManager`, `DatabaseConnectionForm` are inert now
+(no `TourEngine` reads them) and harmless.
+
+Verified: `npm run typecheck` clean, `npm run lint` 0 errors (2
+pre-existing warnings on generated `.well-known/workflow` files,
+unrelated), `npm test` 190/190 passing.

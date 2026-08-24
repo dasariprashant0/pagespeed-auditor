@@ -1,14 +1,18 @@
 import { requireSession } from '@/lib/http/auth-guard';
-import { type OnboardingState } from '@/lib/services/onboarding.service';
 import { can } from '@/lib/auth/roles';
 import { toRailGroups } from '@/lib/view/rail';
 import { AppShell } from '@/components/shell/AppShell';
-import { centralPrisma } from '@/lib/db/central';
-import { applicableTourSteps } from '@/lib/onboarding/tourProgress';
-import { demoAwareDefaultSite, demoAwareListGroupsWithAggregates, demoAwareOnboardingState } from '@/lib/onboarding/demoTenant';
-import { TourProvider } from '@/components/onboarding/TourProvider';
-import { TourEngine } from '@/components/onboarding/TourEngine';
-import { FloatingChecklist } from '@/components/onboarding/FloatingChecklist';
+import { demoAwareDefaultSite, demoAwareListGroupsWithAggregates } from '@/lib/onboarding/demoTenant';
+// Onboarding tour guide, engine, and floating checklist are disabled for now --
+// not working properly. See app/(dash)/layout.tsx history for the wiring if
+// re-enabling.
+// import { type OnboardingState } from '@/lib/services/onboarding.service';
+// import { centralPrisma } from '@/lib/db/central';
+// import { applicableTourSteps } from '@/lib/onboarding/tourProgress';
+// import { demoAwareOnboardingState } from '@/lib/onboarding/demoTenant';
+// import { TourProvider } from '@/components/onboarding/TourProvider';
+// import { TourEngine } from '@/components/onboarding/TourEngine';
+// import { FloatingChecklist } from '@/components/onboarding/FloatingChecklist';
 
 /**
  * The frame every signed-in screen shares.
@@ -44,31 +48,29 @@ export default async function DashLayout({ children }: { children: React.ReactNo
   // The one place the section list is loaded. Everything else reads it from
   // the rendered rail rather than querying again.
   const groups = site ? await demoAwareListGroupsWithAggregates(ctx.organizationId, site.id, { strategy: 'mobile' }) : [];
-  const setup: OnboardingState = await demoAwareOnboardingState(ctx.organizationId);
 
-  // Per-membership onboarding progress -- see
-  // docs/superpowers/specs/2026-08-22-onboarding-tour-design.md. Central-only
-  // lookup, so this never throws NotProvisionedError regardless of the
-  // organisation's database state above.
-  const membership = await centralPrisma.membership.findUnique({
-    where: { userId_organizationId: { userId: ctx.userId, organizationId: ctx.organizationId } },
-    select: { tourStepsSeen: true, checklistDismissedAt: true },
-  });
-  const allTourSteps = applicableTourSteps(ctx.role);
+  // Onboarding tour guide, engine, and floating checklist are disabled for
+  // now -- not working properly.
+  // const setup: OnboardingState = await demoAwareOnboardingState(ctx.organizationId);
+  // const membership = await centralPrisma.membership.findUnique({
+  //   where: { userId_organizationId: { userId: ctx.userId, organizationId: ctx.organizationId } },
+  //   select: { tourStepsSeen: true, checklistDismissedAt: true },
+  // });
+  // const allTourSteps = applicableTourSteps(ctx.role);
 
   return (
-    <TourProvider steps={allTourSteps} seenIds={membership?.tourStepsSeen ?? []}>
-      <AppShell
-        orgName={ctx.organizationName}
-        siteName={site?.name}
-        groups={toRailGroups(groups)}
-        canReorder={can(ctx.role, 'groups:manage')}
-        canRunAudits={can(ctx.role, 'audits:run')}
-      >
-        {children}
-      </AppShell>
-      <TourEngine />
-      <FloatingChecklist orgSteps={setup} initiallyCollapsed={membership?.checklistDismissedAt != null} />
-    </TourProvider>
+    // <TourProvider steps={allTourSteps} seenIds={membership?.tourStepsSeen ?? []}>
+    <AppShell
+      orgName={ctx.organizationName}
+      siteName={site?.name}
+      groups={toRailGroups(groups)}
+      canReorder={can(ctx.role, 'groups:manage')}
+      canRunAudits={can(ctx.role, 'audits:run')}
+    >
+      {children}
+    </AppShell>
+    // <TourEngine />
+    // <FloatingChecklist orgSteps={setup} initiallyCollapsed={membership?.checklistDismissedAt != null} />
+    // </TourProvider>
   );
 }
