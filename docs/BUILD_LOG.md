@@ -1049,3 +1049,34 @@ removal of the feature. `data-tour="..."` attributes left in place on
 Verified: `npm run typecheck` clean, `npm run lint` 0 errors (2
 pre-existing warnings on generated `.well-known/workflow` files,
 unrelated), `npm test` 190/190 passing.
+
+## Session: production sweep sat overdue -- schedule-tick pinger drift
+
+User reported a schedule set to run Mon 24 Aug 15:00 IST never started
+("Last check: has not run yet" on Settings -> Automation, well past the
+scheduled time). Root-caused via `gh run list --workflow=schedule-tick.yml`
+rather than guessing: the app's own scheduling logic
+(`lib/services/schedule.service.ts`'s `nextRunAt`/`dueSchedules`,
+`lib/workflows/planSweep.ts`) was correct throughout -- the free GitHub
+Actions pinger (`.github/workflows/schedule-tick.yml`) that's supposed to
+hit `/api/cron/schedule-tick` every 15 minutes (because Vercel Cron on
+Hobby only fires once a day) was actually drifting 20-90+ minutes between
+runs that day. The tick immediately before the due time landed 5 minutes
+too early (09:24:57 UTC vs. 09:30 UTC due), and the next one hadn't landed
+28+ minutes later when the user looked. Fixed by manually dispatching the
+workflow (`gh workflow run schedule-tick.yml`) to unstick that specific
+overdue sweep -- confirmed started via production logs (a burst of
+`POST /.well-known/workflow/v1/flow` Workflow-step calls and
+`/api/runs/active` polling turning green).
+
+Hardening fix: moved the pinger's cron off the exact quarter-hour
+(`*/15 * * * *` -> `7,22,37,52 * * * *`) since GitHub's own docs flag
+round cron boundaries as the highest-contention time for the schedule
+trigger -- every other repo's `*/15` piles up on the same minute. Does
+not fix GitHub Actions' scheduling being best-effort in general, only
+avoids the specific, avoidable pile-up that made today's drift worse
+than the "several minutes" the route was designed to tolerate.
+
+Verified: `npm run typecheck` clean, `npm run lint` 0 errors, `npm test`
+190/190 passing (workflow YAML has no test surface; verified instead by
+manually dispatching the changed workflow file, which succeeded).
