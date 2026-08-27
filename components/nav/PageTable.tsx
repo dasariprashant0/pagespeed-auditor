@@ -183,7 +183,7 @@ export function PageTable({
             onChange={(e) => { setQ(e.target.value); setPage(0); }}
             placeholder="Search by path or URL"
             aria-label="Search pages by path or URL"
-            className="w-full flex-1 rounded-[var(--radius)] border border-[var(--border-strong)] bg-[var(--surface)] px-2.5 py-1.5 text-[12px] transition-[border-color,box-shadow] duration-[var(--t-fast)] placeholder:text-[var(--faint)] focus:border-[var(--info)] focus:shadow-[0_0_0_3px_var(--info-tint)] focus:outline-none max-w-[28rem]"
+            className="w-96 shrink-0 rounded-[var(--radius)] border border-[var(--border-strong)] bg-[var(--surface)] px-2.5 py-1.5 text-[12px] transition-[border-color,box-shadow] duration-[var(--t-fast)] placeholder:text-[var(--faint)] focus:border-[var(--info)] focus:shadow-[0_0_0_3px_var(--info-tint)] focus:outline-none"
           />
           <p className="shrink-0 text-[11px] text-[var(--muted)]" aria-live="polite">
             {filtered.length === rows.length
