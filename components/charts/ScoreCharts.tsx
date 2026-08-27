@@ -50,52 +50,76 @@ const METRICS: Array<{ value: MetricKey; label: string }> = [
   { value: 'seo', label: 'SEO' },
 ];
 
-const PREF_KEY = 'psa.overview.chart';
+const DEFAULT_PREF_KEY = 'psa.overview.chart';
 
 interface Prefs { kind: ChartKind; metric: MetricKey }
 
-/** Nothing else writes the key, so there is no change to subscribe to. */
+/** Nothing else writes these keys, so there is no change to subscribe to. */
 function subscribeToPrefs(): () => void {
   return () => {};
 }
 
-let cache: { raw: string | null; value: Prefs | null } = { raw: null, value: null };
-
 /**
+ * One cache entry per storage key, not one global -- the overview panel and a
+ * group panel are two independently-mounted instances with two different
+ * remembered choices, and sharing a single cache slot would make the second
+ * one to render clobber the first.
+ *
  * Must return a STABLE reference for an unchanged string, or React re-renders
- * forever. Hence the one-entry cache.
+ * forever. Hence the cache at all.
  */
-function readPrefs(): Prefs | null {
+const cache = new Map<string, { raw: string | null; value: Prefs | null }>();
+
+function readPrefs(storageKey: string, allowedKinds: readonly ChartKind[]): Prefs | null {
   let raw: string | null = null;
   try {
-    raw = localStorage.getItem(PREF_KEY);
+    raw = localStorage.getItem(storageKey);
   } catch {
     return null;
   }
-  if (raw === cache.raw) return cache.value;
+  const entry = cache.get(storageKey);
+  if (entry && raw === entry.raw) return entry.value;
 
   let value: Prefs | null = null;
   try {
     const parsed = JSON.parse(raw ?? 'null');
-    if (parsed && CHARTS.some((c) => c.value === parsed.kind) && METRICS.some((m) => m.value === parsed.metric)) {
+    if (
+      parsed &&
+      allowedKinds.includes(parsed.kind) &&
+      METRICS.some((m) => m.value === parsed.metric)
+    ) {
       value = { kind: parsed.kind, metric: parsed.metric };
     }
   } catch { /* a corrupt preference is not worth surfacing */ }
 
-  cache = { raw, value };
+  cache.set(storageKey, { raw, value });
   return value;
 }
 
 /**
- * The overview's chart panel.
+ * The interactive score chart panel -- one continuous trace plus a spread and
+ * a load-time-vs-score view, all clickable through to the page they describe.
  *
  * Hand-rolled SVG rather than a charting library: this tool reports page
  * weight, so shipping ~100 KB of Recharts to draw bars would be embarrassing on
- * its own audit. Four views over the same rows, and the choice is remembered
- * per browser -- the person who cares about the spread does not want the
- * spectrum every morning.
+ * its own audit. Shared between the overview (every page, every section) and a
+ * single group's page list -- `charts` drops "By section" there, since one
+ * section has nothing to break itself down by, and `storageKey` keeps each
+ * screen's remembered chart choice separate from the other's.
  */
-export function OverviewCharts({ data, strategy }: { data: ChartData; strategy: string }) {
+export function ScoreCharts({
+  data,
+  strategy,
+  charts = CHARTS.map((c) => c.value),
+  storageKey = DEFAULT_PREF_KEY,
+}: {
+  data: ChartData;
+  strategy: string;
+  /** Which chart types are offered here. Defaults to all four. */
+  charts?: ChartKind[];
+  /** localStorage key the last-chosen chart/metric is remembered under. */
+  storageKey?: string;
+}) {
   const pages = useMemo<ChartPage[]>(
     () =>
       data.pages.map(([id, path, g, performance, accessibility, bestPractices, seo, lcp]) => ({
@@ -113,10 +137,14 @@ export function OverviewCharts({ data, strategy }: { data: ChartData; strategy: 
   // server snapshot is null, so the first client render matches the HTML and
   // the saved choice is applied on the very next one -- no flash of the default
   // chart, and no setState during an effect.
-  const saved = useSyncExternalStore(subscribeToPrefs, readPrefs, () => null);
+  const saved = useSyncExternalStore(subscribeToPrefs, () => readPrefs(storageKey, charts), () => null);
   const [chosen, setChosen] = useState<Partial<Prefs> | null>(null);
 
-  const kind: ChartKind = chosen?.kind ?? saved?.kind ?? 'spectrum';
+  // A saved or chosen kind from BEFORE `charts` excluded it (e.g. "By section"
+  // picked on the overview, then this panel mounted scoped to one group) falls
+  // back to the first offered chart rather than rendering a tab that isn't there.
+  const wantedKind = chosen?.kind ?? saved?.kind ?? 'spectrum';
+  const kind: ChartKind = charts.includes(wantedKind) ? wantedKind : charts[0];
   const metric: MetricKey = chosen?.metric ?? saved?.metric ?? 'performance';
   const [section, setSection] = useState<string>('');
 
@@ -124,7 +152,7 @@ export function OverviewCharts({ data, strategy }: { data: ChartData; strategy: 
     const merged = { kind, metric, ...next };
     setChosen(merged);
     try {
-      localStorage.setItem(PREF_KEY, JSON.stringify(merged));
+      localStorage.setItem(storageKey, JSON.stringify(merged));
     } catch { /* private browsing; the choice still holds for this session */ }
   };
 
@@ -143,14 +171,15 @@ export function OverviewCharts({ data, strategy }: { data: ChartData; strategy: 
     [rows, metric],
   );
 
-  const active = CHARTS.find((c) => c.value === kind)!;
+  const offered = useMemo(() => CHARTS.filter((c) => charts.includes(c.value)), [charts]);
+  const active = offered.find((c) => c.value === kind) ?? offered[0];
 
   return (
     <div className="panel overflow-hidden" data-tour="overview-charts">
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-[var(--border)] px-3.5 py-2.5">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <div role="tablist" aria-label="Chart" className="flex rounded-[6px] border border-[var(--border)] p-0.5">
-            {CHARTS.map((c) => (
+            {offered.map((c) => (
               <button
                 key={c.value}
                 role="tab"

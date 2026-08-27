@@ -42,7 +42,7 @@ export default async function PageReport({
 }) {
   const { pageId } = await params;
   const { strategy: raw } = await searchParams;
-  const strategy: PsiStrategy = raw === 'desktop' ? 'desktop' : 'mobile';
+  const strategy: PsiStrategy = raw === 'mobile' ? 'mobile' : 'desktop';
 
   const ctx = await requireSession();
   const site = await demoAwareDefaultSite(ctx.organizationId);

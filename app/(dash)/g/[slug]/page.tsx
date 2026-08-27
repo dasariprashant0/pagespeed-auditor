@@ -1,4 +1,4 @@
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { requireSession } from '@/lib/http/auth-guard';
 import { can } from '@/lib/auth/roles';
 import { demoAwareDefaultSite, demoAwareListPagesInGroup, demoAwareRequireGroupAccess } from '@/lib/onboarding/demoTenant';
@@ -8,7 +8,7 @@ import { DownloadMarkdown } from '@/components/report/DownloadMarkdown';
 import { PageTable, type PageRow } from '@/components/nav/PageTable';
 import { EmptyState } from '@/components/nav/EmptyState';
 import { RunAuditButton } from '@/components/runs/RunAuditButton';
-import { SpectrumRibbon } from '@/components/score/SpectrumRibbon';
+import { ScoreCharts, type ChartData } from '@/components/charts/ScoreCharts';
 import { formatDuration } from '@/lib/services/estimate.service';
 import type { PsiStrategy } from '@/lib/services/types';
 
@@ -23,7 +23,7 @@ export default async function GroupPage({
 }) {
   const { slug } = await params;
   const { strategy: raw } = await searchParams;
-  const strategy: PsiStrategy = raw === 'desktop' ? 'desktop' : 'mobile';
+  const strategy: PsiStrategy = raw === 'mobile' ? 'mobile' : 'desktop';
 
   const ctx = await requireSession();
   const site = await demoAwareDefaultSite(ctx.organizationId);
@@ -35,6 +35,14 @@ export default async function GroupPage({
   if (!group) notFound();
 
   const pages = await demoAwareListPagesInGroup(ctx.organizationId, group.id, { strategy });
+
+  // A section with exactly one page has nothing a group view adds over the
+  // page report itself -- skip straight there rather than making every
+  // single-page section a click that only re-shows the one row you'd click
+  // next anyway.
+  if (pages.length === 1) {
+    redirect(`/p/${pages[0].id}${raw ? `?strategy=${raw}` : ''}`);
+  }
 
   // Tuples, not objects: on a 324-page section the repeated field names were
   // most of a 4.3 MB payload. The table expands them on the client.
@@ -60,6 +68,17 @@ export default async function GroupPage({
 
   // Both strategies, at the sustained PSI rate.
   const rerunSeconds = Math.ceil((pages.length * 2) / 0.75);
+
+  // One "section" (this group itself), so the shared chart panel's section
+  // filter/breakdown stays out of the way -- built from `pages`, already
+  // fetched above, not a second query.
+  const chartData: ChartData = {
+    sections: [[group.name, group.slug]],
+    pages: pages.map(
+      (p) =>
+        [p.id, p.path, 0, p.scores.performance, p.scores.accessibility, p.scores.bestPractices, p.scores.seo, p.lcp] as ChartData['pages'][number],
+    ),
+  };
 
   return (
     <>
@@ -92,29 +111,21 @@ export default async function GroupPage({
             <StrategyTabs active={strategy} basePath={`/g/${slug}`} />
           </>
         }
-      >
-        {measured.length > 3 && (
-          // The section's own distribution. On a 324-page section the average
-          // above says almost nothing; the shape says where the work is.
-          <div className="panel-flush relative mt-5">
-            {/* The 90 line, so a wall of orange is visibly a wall of orange
-                BELOW the passing mark rather than just a coloured stripe. */}
-            <span
-              aria-hidden="true"
-              className="pointer-events-none absolute left-0 right-0 z-10 flex items-center"
-              style={{ top: '10%' }}
-            >
-              <span className="tnum shrink-0 pl-2.5 pr-1.5 text-[9px] text-[var(--faint)]">90</span>
-              <span className="flex-1 border-t border-dashed border-[var(--border-strong)] opacity-60" />
-            </span>
-            <SpectrumRibbon
-              scores={measured}
-              height={52}
-              label={`Performance across ${measured.length} measured pages in ${group.name}, worst to best.`}
-            />
-          </div>
-        )}
-      </PageHeader>
+      />
+
+      {measured.length > 3 && (
+        // The section's own distribution, interactive: hover a bar for the
+        // page it is, click to open its report. On a 324-page section the
+        // average above says almost nothing; the shape says where the work is.
+        <section className="mb-7">
+          <ScoreCharts
+            data={chartData}
+            strategy={strategy}
+            charts={['spectrum', 'histogram', 'scatter']}
+            storageKey="psa.group.chart"
+          />
+        </section>
+      )}
 
       {pages.length === 0 ? (
         <EmptyState
@@ -122,7 +133,7 @@ export default async function GroupPage({
           body="Every page in this section has been dropped from the sitemap or moved elsewhere. Its history is kept — nothing was deleted."
         />
       ) : (
-        <PageTable rows={rows} strategy={strategy} />
+        <PageTable rows={rows} strategy={strategy} canSelect={can(ctx.role, 'audits:run')} demoMode={isDemo} />
       )}
     </>
   );
