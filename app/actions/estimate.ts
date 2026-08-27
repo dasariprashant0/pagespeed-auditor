@@ -19,7 +19,7 @@ export type EstimatePreview = {
  * shown on the button and the number shown after clicking it agree.
  */
 export async function previewEstimateAction(input: {
-  kind: 'page' | 'group';
+  kind: 'page' | 'group' | 'pages';
   ref: string;
   strategyCount?: number;
 }): Promise<EstimatePreview> {
@@ -30,7 +30,12 @@ export async function previewEstimateAction(input: {
   const pageCount =
     input.kind === 'page'
       ? 1
-      : await prisma.page.count({ where: { isActive: true, group: { slug: input.ref } } });
+      // `ref` is already the exact comma-joined selection -- counting it
+      // directly avoids a query for what's already known, and matches what
+      // expandScope will actually do with the same ids.
+      : input.kind === 'pages'
+        ? input.ref.split(',').filter(Boolean).length
+        : await prisma.page.count({ where: { isActive: true, group: { slug: input.ref } } });
 
   const est = await estimateRun(ctx.organizationId, pageCount * strategies);
   return {

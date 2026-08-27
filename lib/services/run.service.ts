@@ -56,9 +56,13 @@ export const BOTH_STRATEGIES: PsiStrategy[] = ['mobile', 'desktop'];
  * and are round-trip tested.
  */
 export interface RunScope {
-  /** `retry` re-measures exactly the pages another run recorded an error for. */
-  kind: 'site' | 'group' | 'page' | 'retry';
-  /** Group slug, page id, or -- for `retry` -- the run being retried. */
+  /**
+   * `retry` re-measures exactly the pages another run recorded an error for.
+   * `pages` is a hand-picked set from a group's page list -- distinct from
+   * `group` (that whole section) and `page` (exactly one).
+   */
+  kind: 'site' | 'group' | 'page' | 'pages' | 'retry';
+  /** Group slug, page id, comma-joined page ids (`pages`), or -- for `retry` -- the run being retried. */
   ref: string | null;
   strategies: PsiStrategy[];
 }
@@ -83,7 +87,7 @@ export function parseScopeLabel(label: string | null | undefined): RunScope {
   if (sep > 0) {
     const kind = head.slice(0, sep);
     const ref = head.slice(sep + 1).trim();
-    if ((kind === 'group' || kind === 'page') && ref) return { kind, ref, strategies };
+    if ((kind === 'group' || kind === 'page' || kind === 'pages') && ref) return { kind, ref, strategies };
   }
 
   // Anything unrecognised -- including a hand-written label on an older run --
@@ -322,9 +326,11 @@ export async function expandScope(
   const where =
     scope.kind === 'page'
       ? { id: scope.ref ?? '' }
-      : scope.kind === 'group'
-        ? { siteId, isActive: true, group: { slug: scope.ref ?? '', siteId } }
-        : { siteId, isActive: true };
+      : scope.kind === 'pages'
+        ? { id: { in: (scope.ref ?? '').split(',').filter(Boolean) } }
+        : scope.kind === 'group'
+          ? { siteId, isActive: true, group: { slug: scope.ref ?? '', siteId } }
+          : { siteId, isActive: true };
 
   // Sweep order matters: a full sweep is ~35 minutes, so whoever is watching a
   // specific fix wants those pages measured first. Manual group priority wins,
@@ -584,6 +590,10 @@ export function scopeLink(
   }
   if (scope.kind === 'page' && scope.ref) {
     return { scopeHref: `/p/${scope.ref}`, scopeName: 'one page' };
+  }
+  if (scope.kind === 'pages' && scope.ref) {
+    const n = scope.ref.split(',').filter(Boolean).length;
+    return { scopeHref: null, scopeName: `${n} selected ${n === 1 ? 'page' : 'pages'}` };
   }
   return { scopeHref: '/', scopeName: 'whole site' };
 }

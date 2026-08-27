@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { ScorePill } from '@/components/score/ScorePill';
 import { Button } from '@/components/ui/Button';
+import { RunAuditButton } from '@/components/runs/RunAuditButton';
 import type { PsiStrategy } from '@/lib/services/types';
 
 /**
@@ -71,15 +72,31 @@ function cwvColor(kind: 'lcp' | 'cls', v: number | null): string | undefined {
   return 'var(--score-fail-text)';
 }
 
-export function PageTable({ rows, strategy }: { rows: PageRow[]; strategy: PsiStrategy }) {
+export function PageTable({
+  rows,
+  strategy,
+  canSelect = false,
+  demoMode = false,
+}: {
+  rows: PageRow[];
+  strategy: PsiStrategy;
+  /** Adds select-all + per-row checkboxes and a "Measure selected" button. */
+  canSelect?: boolean;
+  demoMode?: boolean;
+}) {
   const [q, setQ] = useState('');
   const [sort, setSort] = useState<SortKey>('order');
   const [desc, setDesc] = useState(false);
   const [page, setPage] = useState(0);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const filtered = useMemo(() => {
+    // Substring, not exact -- and checked against the full URL too, not just
+    // the path, so pasting part of a URL (with domain) still finds the row.
     const needle = q.trim().toLowerCase();
-    const base = needle ? rows.filter((r) => r[1].toLowerCase().includes(needle)) : rows;
+    const base = needle
+      ? rows.filter((r) => r[1].toLowerCase().includes(needle) || r[2].toLowerCase().includes(needle))
+      : rows;
     if (sort === 'order') return base;
 
     const idx = sort === 'path' ? 1 : sort === 'lcp' ? 7 : sort === 'cls' ? 8
@@ -96,6 +113,24 @@ export function PageTable({ rows, strategy }: { rows: PageRow[]; strategy: PsiSt
       return desc ? -cmp : cmp;
     });
   }, [rows, q, sort, desc]);
+
+  // Selection is keyed by id, not by page, so it survives paging and search --
+  // checking a page on page 1, then filtering to check five more, keeps all six.
+  const filteredIds = useMemo(() => filtered.map((r) => r[0]), [filtered]);
+  const allSelected = filteredIds.length > 0 && filteredIds.every((id) => selected.has(id));
+
+  function toggleSelected(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAllSelected() {
+    setSelected(allSelected ? new Set() : new Set(filteredIds));
+  }
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PER_PAGE));
   const current = Math.min(page, pageCount - 1);
@@ -118,33 +153,67 @@ export function PageTable({ rows, strategy }: { rows: PageRow[]; strategy: PsiSt
 
   return (
     <div className="panel-flush">
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-3 py-2.5">
-        <input
-          type="search"
-          value={q}
-          onChange={(e) => { setQ(e.target.value); setPage(0); }}
-          placeholder="Filter these pages"
-          aria-label="Filter pages by path"
-          className="w-full max-w-[16rem] rounded-[var(--radius)] border border-[var(--border-strong)] bg-[var(--surface)] px-2.5 py-1.5 text-[12px] transition-[border-color,box-shadow] duration-[var(--t-fast)] placeholder:text-[var(--faint)] focus:border-[var(--info)] focus:shadow-[0_0_0_3px_var(--info-tint)] focus:outline-none"
-        />
-        <p className="text-[11px] text-[var(--muted)]" aria-live="polite">
-          {filtered.length === rows.length
-            ? `${rows.length} ${rows.length === 1 ? 'page' : 'pages'}`
-            : `${filtered.length} of ${rows.length}`}
-          {sort !== 'order' && <span className="text-[var(--faint)]"> · sorted</span>}
-        </p>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-3 py-2.5">
+        {canSelect && (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px]">
+            <span className="text-[var(--muted)]">{selected.size} selected</span>
+            {/* Remounts on every selection change: RunAuditButton caches its
+                hover-estimate preview for the lifetime of the component, and
+                that cache would otherwise show a stale job count once the
+                selection changes after the first hover. */}
+            <RunAuditButton
+              key={[...selected].join(',')}
+              kind="pages"
+              target={[...selected].join(',')}
+              label={selected.size > 0 ? `Measure ${selected.size} selected` : 'Measure selected'}
+              hint="Both mobile and desktop."
+              demoMode={demoMode}
+              disabled={selected.size === 0}
+            />
+          </div>
+        )}
+
+        {/* Pushed to the right regardless of whether the selection controls
+            beside it are there -- ml-auto rather than justify-between so it
+            doesn't jump to the left edge when canSelect is off. */}
+        <div className="ml-auto flex items-center gap-x-4 gap-y-2">
+          <input
+            type="search"
+            value={q}
+            onChange={(e) => { setQ(e.target.value); setPage(0); }}
+            placeholder="Search by path or URL"
+            aria-label="Search pages by path or URL"
+            className="w-full flex-1 rounded-[var(--radius)] border border-[var(--border-strong)] bg-[var(--surface)] px-2.5 py-1.5 text-[12px] transition-[border-color,box-shadow] duration-[var(--t-fast)] placeholder:text-[var(--faint)] focus:border-[var(--info)] focus:shadow-[0_0_0_3px_var(--info-tint)] focus:outline-none max-w-[28rem]"
+          />
+          <p className="shrink-0 text-[11px] text-[var(--muted)]" aria-live="polite">
+            {filtered.length === rows.length
+              ? `${rows.length} ${rows.length === 1 ? 'page' : 'pages'}`
+              : `${filtered.length} of ${rows.length}`}
+            {sort !== 'order' && <span className="text-[var(--faint)]"> · sorted</span>}
+          </p>
+        </div>
       </div>
 
       {/* The table keeps a real minimum width and scrolls sideways on a narrow
           screen. Letting it squeeze instead left the Page column a few
           characters wide, which is the one column you actually read. */}
-      <div className="thin-scroll overflow-x-auto border-t border-[var(--border)]">
+      <div className="thin-scroll overflow-x-auto border-t border-[var(--border)] pr-2">
         <table className="w-full min-w-[46rem] border-collapse bg-[var(--surface)] text-[12px]">
           <caption className="sr-only">
             Pages in this section with their latest {strategy} scores. Column headings sort.
           </caption>
           <thead>
             <tr className="border-b border-[var(--border)] text-left">
+              {canSelect && (
+                <th scope="col" className="w-8 px-2 py-2 pl-3">
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    onChange={toggleAllSelected}
+                    aria-label="Select all"
+                  />
+                </th>
+              )}
               <th scope="col" aria-sort={ariaSort('path')} className="min-w-[17rem] px-3 py-2">
                 <SortButton active={sort === 'path'} desc={desc} onClick={() => toggle('path')}>
                   Page
@@ -175,6 +244,16 @@ export function PageTable({ rows, strategy }: { rows: PageRow[]; strategy: PsiSt
               const { parent, leaf } = splitPath(path);
               return (
                 <tr key={id} className="group transition-colors hover:bg-[var(--surface-subtle)]">
+                  {canSelect && (
+                    <td className="px-2 py-2 pl-3">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(id)}
+                        onChange={() => toggleSelected(id)}
+                        aria-label={`Select ${path}`}
+                      />
+                    </td>
+                  )}
                   <th scope="row" className="min-w-[17rem] max-w-[28rem] px-3 py-2 text-left font-normal">
                     <Link href={`/p/${id}?strategy=${strategy}`} className="block min-w-0" title={url}>
                       {parent && (
@@ -196,10 +275,10 @@ export function PageTable({ rows, strategy }: { rows: PageRow[]; strategy: PsiSt
                   <td className="px-2 py-2 text-right"><ScorePill score={a11y} title="Accessibility" /></td>
                   <td className="px-2 py-2 text-right"><ScorePill score={bp} title="Best practices" /></td>
                   <td className="px-2 py-2 text-right"><ScorePill score={seo} title="SEO" /></td>
-                  <td className="tnum px-2 py-2 text-right" style={{ color: cwvColor('lcp', lcp) ?? 'var(--muted)' }}>
+                  <td className="tnum px-2 py-2 text-right pr-5" style={{ color: cwvColor('lcp', lcp) ?? 'var(--muted)' }}>
                     {fmtMs(lcp)}
                   </td>
-                  <td className="tnum px-2 py-2 text-right" style={{ color: cwvColor('cls', cls) ?? 'var(--muted)' }}>
+                  <td className="tnum px-2 py-2 text-right pr-5" style={{ color: cwvColor('cls', cls) ?? 'var(--muted)' }}>
                     {cls === null ? '—' : cls.toFixed(2)}
                   </td>
                 </tr>

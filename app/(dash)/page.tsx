@@ -16,7 +16,7 @@ import { ScoreTiles } from '@/components/score/ScoreTiles';
 import { SectionGrid } from '@/components/nav/SectionGrid';
 import { TopIssuesWidget } from '@/components/nav/TopIssuesWidget';
 import { EmptyState } from '@/components/nav/EmptyState';
-import { OverviewCharts, type ChartData } from '@/components/charts/OverviewCharts';
+import { ScoreCharts, type ChartData } from '@/components/charts/ScoreCharts';
 import type { PsiStrategy } from '@/lib/services/types';
 
 export const dynamic = 'force-dynamic';
@@ -27,7 +27,7 @@ export default async function HomePage({
   searchParams: Promise<{ strategy?: string }>;
 }) {
   const { strategy: raw } = await searchParams;
-  const strategy: PsiStrategy = raw === 'desktop' ? 'desktop' : 'mobile';
+  const strategy: PsiStrategy = raw === 'mobile' ? 'mobile' : 'desktop';
 
   // Scoped to the caller's organisation. findFirst() with no filter would show
   // whichever site happens to be first in the table -- another tenant's.
@@ -144,7 +144,7 @@ export default async function HomePage({
       ) : (
         <>
           <section className="mb-7">
-            <OverviewCharts data={chartData} strategy={strategy} />
+            <ScoreCharts data={chartData} strategy={strategy} />
           </section>
 
           <section className="mb-7">

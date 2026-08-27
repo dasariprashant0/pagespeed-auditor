@@ -27,7 +27,8 @@ export type QueueResult =
  * See docs/DECISIONS.md 2.2.
  */
 export async function queueAuditAction(input: {
-  kind: 'page' | 'group';
+  /** `pages` is a hand-picked set from a group's list; `ref` is their ids, comma-joined. */
+  kind: 'page' | 'group' | 'pages';
   ref: string;
   strategies?: PsiStrategy[];
 }): Promise<QueueResult> {
@@ -60,7 +61,12 @@ export async function queueAuditAction(input: {
 
     const runId = await createRun(prisma, {
       siteId: site.id,
-      type: input.kind,
+      // A hand-picked page selection is recorded as a 'group' run -- the same
+      // trick the retry scope below already uses -- so nothing that switches
+      // on run.type (history labels, MCP tools, RUN_TYPES) needs a third
+      // value. The scope itself still says 'pages'; that's what
+      // expandScope/resume actually read.
+      type: input.kind === 'pages' ? 'group' : input.kind,
       triggeredBy: 'manual',
       scope,
       totalJobs: pairs.length,

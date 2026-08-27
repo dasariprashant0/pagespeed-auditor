@@ -17,7 +17,7 @@ export function StrategyTabs({ active, basePath }: { active: PsiStrategy; basePa
       aria-label="Measured as"
       className="flex rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] p-0.5 shadow-[var(--shadow-raised)]"
     >
-      {(['mobile', 'desktop'] as const).map((s) => (
+      {(['desktop', 'mobile'] as const).map((s) => (
         <Link
           key={s}
           role="tab"

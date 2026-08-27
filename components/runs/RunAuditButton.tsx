@@ -23,8 +23,10 @@ export function RunAuditButton({
   hint,
   variant = 'secondary',
   demoMode = false,
+  disabled = false,
 }: {
-  kind: 'page' | 'group';
+  /** `pages` is a hand-picked set from a group's list; `target` is their ids, comma-joined. */
+  kind: 'page' | 'group' | 'pages';
   target: string;
   label?: string;
   strategies?: PsiStrategy[];
@@ -33,6 +35,8 @@ export function RunAuditButton({
   variant?: 'primary' | 'secondary';
   /** Sample data has nothing to re-measure -- see docs/superpowers/specs/2026-08-22-onboarding-tour-design.md Global Constraints. */
   demoMode?: boolean;
+  /** e.g. a bulk selection with nothing checked yet. */
+  disabled?: boolean;
 }) {
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -63,7 +67,7 @@ export function RunAuditButton({
         <Button
           variant={variant}
           type="button"
-          disabled={pending || demoMode}
+          disabled={pending || demoMode || disabled}
           aria-busy={pending}
           onMouseEnter={loadPreview}
           onFocus={loadPreview}
