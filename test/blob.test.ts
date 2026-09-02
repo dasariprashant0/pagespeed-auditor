@@ -1,5 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
+import { PermanentError, RetryableError } from '../lib/errors.ts';
 
 // getEnv() caches on first call, so the test env vars it reads must be set
 // before anything in this file (or a module it imports) calls it -- doing
@@ -68,6 +69,31 @@ describe('storeRawJson', () => {
 
     assert.match(calls[0].url, /\/accounts\/org-account\/d1\/database\/org-db\/query$/);
     assert.equal(calls[0].auth, 'Bearer org-token');
+  });
+
+  test('D1 code 7500 (database full) is a PermanentError, not retryable -- retrying can never succeed', async () => {
+    const fetchImpl = (async () =>
+      new Response(
+        JSON.stringify({ success: false, errors: [{ code: 7500, message: 'Exceeded maximum DB size' }] }),
+        { status: 400 },
+      )) as unknown as typeof fetch;
+
+    await assert.rejects(
+      () => storeRawJson('run1', 'page1', 'mobile', { score: 1 }, undefined, fetchImpl),
+      (e: unknown) => e instanceof PermanentError && !(e instanceof RetryableError),
+    );
+  });
+
+  test('any other D1 failure stays RetryableError -- a real transient blip should still retry', async () => {
+    const fetchImpl = (async () =>
+      new Response(JSON.stringify({ success: false, errors: [{ code: 7000, message: 'internal error' }] }), {
+        status: 500,
+      })) as unknown as typeof fetch;
+
+    await assert.rejects(
+      () => storeRawJson('run1', 'page1', 'mobile', { score: 1 }, undefined, fetchImpl),
+      (e: unknown) => e instanceof RetryableError,
+    );
   });
 });
 

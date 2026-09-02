@@ -88,9 +88,25 @@ async function d1Query(
     body: JSON.stringify({ sql, params }),
   });
 
-  const body = (await res.json()) as { success: boolean; result?: D1QueryResult[]; errors?: unknown[] };
+  const body = (await res.json()) as {
+    success: boolean;
+    result?: D1QueryResult[];
+    errors?: Array<{ code?: number; message?: string }>;
+  };
   if (!res.ok || !body.success || !body.result?.[0]) {
-    throw new RetryableError(`D1 query failed (HTTP ${res.status}): ${JSON.stringify(body.errors ?? body)}`);
+    const message = `D1 query failed (HTTP ${res.status}): ${JSON.stringify(body.errors ?? body)}`;
+    // Cloudflare's own code 7500 is "Exceeded maximum DB size" -- this
+    // specific database has hit its real ceiling (500 MB per database on
+    // the free/standard plan, separate from and much smaller than the
+    // account-wide 5 GB total). No number of retries changes that until
+    // the database is pruned or the plan is upgraded. Observed live
+    // 2 Sep 2026: a run burned every retry attempt (real backoff delays,
+    // tens of seconds each) on a page that could never succeed -- the same
+    // failure shape the Blob-key-determinism bug already fixed once in
+    // this file's history, for a different trigger.
+    const isDbFull = (body.errors ?? []).some((e) => e?.code === 7500);
+    if (isDbFull) throw new PermanentError(message);
+    throw new RetryableError(message);
   }
   return body.result[0];
 }
