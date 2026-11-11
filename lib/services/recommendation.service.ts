@@ -2,7 +2,8 @@ import { getTenantPrisma } from '../db/tenant.ts';
 import { logger } from '../logger.ts';
 import { upsertAiSection } from '../report/aiSection.ts';
 import { buildRecommendationPrompt } from '../ai/prompt.ts';
-import { resolveProvider } from '../ai/provider.ts';
+import { anthropicProvider } from '../ai/provider.ts';
+import { aiKeyForOrg } from './org.service.ts';
 import { getPageReport } from './report.service.ts';
 import type { PsiStrategy } from '../psi/types.ts';
 
@@ -87,6 +88,12 @@ export async function getOrCreateRecommendation(
   strategy: PsiStrategy,
   opts: { force?: boolean } = {},
 ): Promise<RecommendationResult> {
+  // Checked first: claiming a version slot without a way to fill it would
+  // leave a 'generating' row behind.
+  const apiKey = await aiKeyForOrg(organizationId);
+  if (!apiKey) {
+    throw new Error('AI recommendations are off. An admin can turn them on by adding an Anthropic API key in Settings → Site.');
+  }
   const prisma = await getTenantPrisma(organizationId);
   const { report, auditResultId } = await resultIdFor(organizationId, pageId, strategy);
 
@@ -129,7 +136,7 @@ export async function getOrCreateRecommendation(
     throw new Error('Another tab just started this one. Give it a moment and reload.');
   }
 
-  const provider = resolveProvider();
+  const provider = anthropicProvider(apiKey);
   const previous = latest?.status === 'complete' ? latest.content : null;
   const prompt = buildRecommendationPrompt(report, { previous });
   const startedAt = Date.now();
@@ -172,7 +179,7 @@ export async function getOrCreateRecommendation(
       return rec;
     });
 
-    logger.info({ pageId, strategy, version, durationMs, provider: provider.name }, 'recommendation generated');
+    logger.info({ pageId, strategy, version, durationMs, model: provider.model }, 'recommendation generated');
     return {
       content: saved.content,
       model: saved.model,

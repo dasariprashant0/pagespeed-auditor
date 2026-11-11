@@ -1199,3 +1199,26 @@ Every reference doc re-checked against the code:
 - Also changed: the MCP `run_group_audit` description no longer says full
   sweeps are schedule-only, and the tenant schema's `AuditRun.status` /
   `scopeLabel` comments list the real values.
+
+### 11 Nov 2026 — AI recommendations are opt-in per organisation
+
+Problem: no AI is set up, but the "What to fix first" panel still showed on
+every page report.
+
+- New `Organization.anthropicApiKeyEnc` (central migration
+  `20261111120000_org_anthropic_key`, additive), encrypted with secretBox
+  (context `${orgId}:anthropicApiKey`).
+- Settings → Site has an "AI recommendations" panel. An admin saves a key,
+  which is checked with Anthropic (`models.list`, no tokens spent) before
+  it is stored. Saving an empty field turns AI off.
+- Without a key:
+  - the recommendation panel is not rendered at all;
+  - `getOrCreateRecommendation` refuses before claiming a version slot;
+  - MCP `get_recommendation` replies that AI is off.
+- `lib/ai/provider.ts` is now a single Anthropic path that uses the org's
+  key. The env `ANTHROPIC_API_KEY`, the Claude-CLI adapter and
+  `RECOMMENDATION_PROVIDER` were removed. `ANTHROPIC_MODEL` (default
+  `claude-sonnet-5`) stays deployment-wide.
+
+Verified: tsc clean, lint 0 errors, 220/220 tests. A local `next build`
+stalled in the sandbox; the Vercel preview build is the check.

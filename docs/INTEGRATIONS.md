@@ -38,7 +38,7 @@ settings or people, and it **cannot start a full sweep** — there is no
 | `get_report` | `url`, `strategy` | The stored markdown report for the page's latest result |
 | `get_trend` | `url` or `group`, `strategy`, `limit` (2–90, default 20) | Score history |
 | `top_issues` | `strategy`, `limit` (1–40, default 15) | Issues affecting the most pages in the latest complete run |
-| `get_recommendation` | `url`, `strategy`, `refresh` | AI recommendations; generated on first request |
+| `get_recommendation` | `url`, `strategy`, `refresh` | AI recommendations; generated on first request. Replies "not enabled" until an admin adds an Anthropic key in Settings → Site |
 | `run_page_audit` | `url`, `strategy` (`mobile`/`desktop`/`both`) | A run id to poll |
 | `run_group_audit` | `group`, `strategy` | A run id to poll |
 | `get_run_status` | `runId` | Progress, including `paused` and `cancelled` |

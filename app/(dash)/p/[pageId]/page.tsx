@@ -22,6 +22,7 @@ import { Screenshot } from '@/components/report/Screenshot';
 import { RegressionBadge } from '@/components/report/RegressionBadge';
 import { RecommendationPanel } from '@/components/report/RecommendationPanel';
 import { explainRuntimeError, isPageContentFailure } from '@/lib/report/runtimeError';
+import { aiEnabledForOrg } from '@/lib/services/org.service';
 import type { PsiStrategy } from '@/lib/services/types';
 
 export const dynamic = 'force-dynamic';
@@ -69,7 +70,11 @@ export default async function PageReport({
 
   const report = await demoAwareGetPageReport(ctx.organizationId, pageId, strategy);
 
-  const regressions = await demoAwareRegressionsForPage(ctx.organizationId, pageId, strategy);
+  const [regressions, aiOn] = await Promise.all([
+    demoAwareRegressionsForPage(ctx.organizationId, pageId, strategy),
+    // Hidden entirely, not disabled, until an admin adds an Anthropic key.
+    isDemo ? Promise.resolve(false) : aiEnabledForOrg(ctx.organizationId),
+  ]);
 
   const r = report.result;
 
@@ -202,15 +207,17 @@ export default async function PageReport({
             </div>
           </section>
 
-          <section className="mb-6">
-            <RecommendationPanel
-              pageId={pageId}
-              strategy={strategy}
-              initial={report.recommendation}
-              canGenerate={can(ctx.role, 'recommendations:generate')}
-              demoMode={isDemo}
-            />
-          </section>
+          {aiOn && (
+            <section className="mb-6">
+              <RecommendationPanel
+                pageId={pageId}
+                strategy={strategy}
+                initial={report.recommendation}
+                canGenerate={can(ctx.role, 'recommendations:generate')}
+                demoMode={isDemo}
+              />
+            </section>
+          )}
 
           <div className="space-y-2">
             <AuditSection title="Opportunities" items={r.opportunities} defaultOpen

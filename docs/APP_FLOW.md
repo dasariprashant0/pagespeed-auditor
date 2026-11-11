@@ -99,7 +99,7 @@ flowchart TD
   B --> C[Field data: Core Web Vitals Passed/Failed badge]
   C --> D[Lab metrics]
   D --> E[History: score trend, needs 2+ audits]
-  E --> F["What to fix first" -- AI recommendation, on demand]
+  E --> F["What to fix first" -- AI recommendation, on demand, only if the org has an Anthropic key]
   F --> G[Opportunities / Diagnostics / Informational / A11y / Best Practices / SEO / Manual checks / Passed / Not applicable]
   G --> H[Run conditions -- environment, collapsible]
 ```
@@ -120,6 +120,11 @@ flowchart LR
   D -->|yes| E[Appends version N+2 -- never overwrites]
   E --> F["Earlier answers" picker in the UI]
 ```
+
+**Off until an admin adds an Anthropic API key** in Settings → Site
+(checked against Anthropic on save, stored encrypted on `Organization`).
+Without one the panel isn't rendered at all, and MCP `get_recommendation`
+replies that AI is off. Clearing the key turns it off again.
 
 Capped at `RECOMMENDATION_KEEP_VERSIONS` (10) per result. The prompt is
 built from evidence tables (`AuditIssue`, up to 4 evidence rows each), never

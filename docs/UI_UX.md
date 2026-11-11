@@ -79,6 +79,8 @@ disclosure's content gives it an independent scroll region.
 | `RunTerminal` | Collapsed by default under `ActiveRunBar`; live per-page activity, monospace, colour-coded |
 | `FailedPages` | A run's unmeasurable pages, with a retry for exactly those |
 | `RunHistoryList` | The delete-checks picker — checkbox per row, "select all", two-step confirm |
+| `RecommendationPanel` | "What to fix first" on a page report. Rendered only when the organisation has an Anthropic key (`aiEnabledForOrg`); otherwise absent, not disabled |
+| `AiKeyForm` | Settings → Site: save, verify or clear the Anthropic key that turns AI on |
 | `McpTokenManager` | Settings → Agent access: create a token (shown once with a `claude mcp add` command), list and revoke |
 | `Button` (`buttonClass`) | The one button definition: primary / secondary / ghost / danger, two sizes |
 | `WaitingOnAdmin` | Role-aware onboarding (§5) |

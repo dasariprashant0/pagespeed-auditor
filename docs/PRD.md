@@ -53,7 +53,9 @@ there is one real org.
    from the Overview's "Measure whole site" button.
 6. **Generates AI recommendations** — a prioritised fix list per report,
    versioned (never overwritten, so a regeneration can be compared against
-   the last one).
+   the last one). **Opt-in per organisation**: hidden everywhere until an
+   admin saves an Anthropic API key in Settings → Site (verified on save,
+   stored encrypted).
 7. **Shows live activity** while a sweep runs — which page is being
    measured right now, not just a percentage bar (`RunTerminal`, added
    20 Aug 2026).

@@ -122,7 +122,6 @@ const schema = z.object({
   SMTP_FROM: z.string().default(''),
 
   /** Optional: unset and signed into Claude Code, the CLI adapter runs on the subscription instead -- see lib/ai/provider.ts. */
-  ANTHROPIC_API_KEY: z.string().default(''),
   ANTHROPIC_MODEL: z.string().default('claude-sonnet-5'),
 });
 

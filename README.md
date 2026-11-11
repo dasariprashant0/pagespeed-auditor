@@ -23,7 +23,8 @@ Log in `docs/BUILD_LOG.md` before assuming otherwise.
 
 **All six stages are built**: ingestion, PSI integration, durable audit
 execution (Vercel Workflow, not a queue worker), the dashboard, scheduling,
-notifications, regression detection, on-demand AI recommendations, and a
+notifications, regression detection, on-demand AI recommendations (opt-in:
+add an Anthropic key in Settings → Site), and a
 9-tool MCP server. Each organisation keeps its audit data in its own
 Neon + Cloudflare D1, connected from Settings → Database.
 

@@ -51,7 +51,9 @@ All of this is in the **central** database.
   shown anywhere.
 - **`Organization`** — the tenant. Besides the SMTP override below, it holds
   the encrypted connection details for that org's own databases
-  (`tenantDbUrlEnc`, `d1*Enc`) and `provisionStatus`/`provisionError`/
+  (`tenantDbUrlEnc`, `d1*Enc`), the optional encrypted Anthropic key
+  (`anthropicApiKeyEnc` — null means AI recommendations are off and
+  hidden), and `provisionStatus`/`provisionError`/
   `provisionedAt` — see `docs/PER_TENANT_ARCHITECTURE.md`.
 - **`Membership`** — the join table that actually grants authority. Role
   is a plain string (`viewer`/`editor`/`developer`/`admin`), not a Postgres

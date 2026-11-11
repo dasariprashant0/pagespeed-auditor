@@ -5,7 +5,8 @@ import { requireCapability } from '@/lib/http/auth-guard';
 import { friendlyErrorMessage } from '@/lib/http/actionError';
 import { getTenantPrisma } from '@/lib/db/tenant';
 import { centralPrisma } from '@/lib/db/central';
-import { d1CredentialsForOrg } from '@/lib/services/org.service';
+import { d1CredentialsForOrg, setAiKeyForOrg } from '@/lib/services/org.service';
+import { verifyAnthropicKey } from '@/lib/ai/provider';
 import { requireSiteAccess } from '@/lib/services/tenant.service';
 import { runPagespeed } from '@/lib/psi/client';
 import { verifySmtpConnection } from '@/lib/notify/email';
@@ -99,6 +100,30 @@ export async function updatePsiKeyAction(_prev: unknown, form: FormData): Promis
     await prisma.site.update({ where: { id: siteId }, data: { psiApiKey: raw || null } });
     revalidatePath('/settings/site');
     return { ok: true, message: raw ? 'API key saved and verified against Google.' : 'API key cleared.' };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/**
+ * The organisation's Anthropic key. Saving one turns AI recommendations on;
+ * clearing it hides them everywhere. Same write-only shape as the PSI key:
+ * verified before it is stored, never sent back to the browser.
+ */
+export async function updateAiKeyAction(_prev: unknown, form: FormData): Promise<SiteResult> {
+  try {
+    const ctx = await requireCapability('site:manage');
+    const raw = String(form.get('anthropicApiKey') ?? '').trim();
+    if (raw.includes('•')) return { ok: true, message: 'Key unchanged.' };
+
+    if (raw) {
+      const check = await verifyAnthropicKey(raw);
+      if (!check.ok) return { ok: false, error: check.message };
+    }
+
+    await setAiKeyForOrg(ctx.organizationId, raw || null);
+    revalidatePath('/', 'layout');
+    return { ok: true, message: raw ? 'Key verified and saved — AI recommendations are on.' : 'Key removed — AI recommendations are off.' };
   } catch (e) {
     return fail(e);
   }

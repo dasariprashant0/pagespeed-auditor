@@ -19,7 +19,7 @@
 | Auth | Session cookie (JWT via `jose`), bcrypt password hashes, optional Google sign-in | `proxy.ts` is a UX layer only; `requireSession()`/`requireCapability()` in every Server Action is the real boundary. MCP uses per-org bearer tokens instead — §9 |
 | Email | `EMAIL_TRANSPORT`: `none` (log only, default), `smtp` (nodemailer) or `resend` | A per-org SMTP override (`Organization.smtp*`) wins over both. Resend was wired but never called until 11 Nov 2026 |
 | Styling | Tailwind v4, CSS-first (`@theme inline` in `globals.css`) | No `tailwind.config.js` |
-| AI | `@anthropic-ai/sdk` | Recommendations generation, versioned per audit result |
+| AI | `@anthropic-ai/sdk` | Recommendations, versioned per audit result. Opt-in per organisation: the key is saved in Settings → Site (`Organization.anthropicApiKeyEnc`, encrypted, verified with `models.list` on save). Model is deployment-wide (`ANTHROPIC_MODEL`, default `claude-sonnet-5`). No env key and no Claude-CLI fallback since 11 Nov 2026 |
 | Testing | `node --test --experimental-strip-types` | No jest, no vitest |
 
 ## 2. Deployment topology
