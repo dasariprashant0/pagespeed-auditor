@@ -2,7 +2,8 @@
 
 > Companion to `docs/APP_FLOW.md` (where things are) and `app/globals.css`
 > (the actual tokens — this document explains them, it doesn't replace them
-> as the source of truth). Written 20 Aug 2026.
+> as the source of truth). Written 20 Aug 2026; component inventory and
+> onboarding updated 11 Nov 2026.
 
 ## 1. Design principle
 
@@ -62,31 +63,41 @@ disclosure's content gives it an independent scroll region.
 |---|---|
 | `ScoreGauge` / `ScoreTiles` | PSI's own arc gauges, the signature visual |
 | `ScorePill` | Compact score chip for table rows — a gauge is too heavy there |
-| `SpectrumRibbon` | The whole site's score distribution — interactive on Overview, a strip with the 90-line drawn on a section |
+| `ScoreCharts` | The interactive distribution panel: every page as a bar, histogram, by-section, and scatter, by metric. Hover for the page, click to open it. Used on the Overview and on each group page |
+| `SectionGrid` | Drag-to-reorder sections; `useReorder` seeds state from props once, which is why a `key={strategy}` remount was needed to fix stale mobile/desktop tiles |
+| `PageTable` | A group's pages, with search, sort and bulk-select to measure a hand-picked set |
+| `TopIssuesWidget` | Issues across the latest sweep, ranked by saving per page; each title links to its drill-down (`/issues/[auditId]`) |
 | `StrategyTabs` | Mobile/Desktop — links, not buttons, so the choice lives in the URL |
-| `FieldDataPanel` | Real-user metrics, plus the Core Web Vitals Passed/Failed badge (added 20 Aug 2026, sourced from PSI's own `overall_category` — the same rule pagespeed.web.dev's own assessment uses, not a new metric) |
+| `FieldDataPanel` | Real-user metrics with good/NI/poor distribution bars, the Core Web Vitals Passed/Failed badge (LCP, INP and CLS only — FCP/TTFB are labelled diagnostic), and a collapsible whole-site (origin) comparison |
+| `CWVGrid` | Lab metrics, including Speed Index rated on Lighthouse's mobile/desktop curve |
+| `AuditSection` | One collapsible section of audits; each audit expands to its description, stack-specific tips and evidence tables. Metric chips (LCP, TBT…) mark what each audit affects |
+| `RunConditions` | Device, network, CPU, browser, user agent and Lighthouse version for the run. A redirect or Lighthouse warning shows as a banner above the report |
+| `RunAuditButton` | Queues a page, group, selection, changed-pages or whole-site run. Its tooltip shows the measured estimate, fetched on hover |
+| `DownloadMarkdown` | The agent `.md` export, with a mobile/desktop/both choice. CSV export is a plain link styled with `buttonClass('ghost')` |
 | `ActiveRunBar` | Persistent, every screen — whatever's running, with a link to where |
 | `RunControls` | Hold/Continue/Stop — optimistic (`useOptimistic`), flips instantly, reverts on failure without a hand-rolled rollback path |
 | `RunTerminal` | Collapsed by default under `ActiveRunBar`; live per-page activity, monospace, colour-coded |
+| `FailedPages` | A run's unmeasurable pages, with a retry for exactly those |
 | `RunHistoryList` | The delete-checks picker — checkbox per row, "select all", two-step confirm |
-| `SetupChecklist` / `WaitingOnAdmin` / `RoleTourBanner` | Role-aware onboarding (§ below) |
-| `SectionGrid` | Drag-to-reorder sections; `useReorder` seeds state from props once, which is why a `key={strategy}` remount was needed to fix stale mobile/desktop tiles |
+| `McpTokenManager` | Settings → Agent access: create a token (shown once with a `claude mcp add` command), list and revoke |
+| `Button` (`buttonClass`) | The one button definition: primary / secondary / ghost / danger, two sizes |
+| `WaitingOnAdmin` | Role-aware onboarding (§5) |
 
-## 5. Onboarding UI (role-aware, added 20 Aug 2026)
+## 5. Onboarding UI
 
-Replaces a single admin-only checklist that used to render for every role:
+- **No site yet / no data yet, you're not an admin** → `WaitingOnAdmin`:
+  one honest line naming your role, not a wall of steps you can't act on.
+- **Unprovisioned organisation** → the dashboard renders demo data
+  (`lib/onboarding/demoTenant.ts`) so there is something real-looking to
+  explore; run buttons are disabled with a tooltip saying why.
+- **The guided tour** (`TourProvider`/`TourEngine`/`FloatingChecklist`,
+  per-membership progress in `Membership.tourStepsSeen`) is built but
+  **switched off** at the wiring level in `app/(dash)/layout.tsx` — see
+  `docs/BUILD_LOG.md`, "onboarding tour disabled". The components and
+  tests are intact for re-enabling.
 
-- **No site yet, you're an admin** → `SetupChecklist` (unchanged): five
-  steps, only the next incomplete one gets a button, everything else is
-  quiet.
-- **No site yet, you're not an admin** → `WaitingOnAdmin`: one honest line
-  naming your role, not a wall of steps you can't act on.
-- **Site exists, setup incomplete, no data yet, not an admin** → same
-  `WaitingOnAdmin`.
-- **Site exists and there's real data, any role, first time ever** →
-  `RoleTourBanner`: 2–3 bullets naming what your specific role can do,
-  dismissible, gone for good (`User.roleTourSeenAt`, not localStorage —
-  it needs to survive across devices).
+The earlier `SetupChecklist` and `RoleTourBanner` (20 Aug 2026) no longer
+exist; the tour replaced them.
 
 ## 6. Motion
 
@@ -116,10 +127,6 @@ failure:
   itself in the background, separate from the frequency/day/time picker,
   which still needs the explicit Save button — deliberate configuration,
   not a low-stakes flip)
-- `RoleTourBanner`'s dismiss is **not** `useOptimistic` — local state hides
-  it immediately, then persists in the background with no revert path.
-  Seeing the banner once more on a rare failure is harmless; the added
-  ceremony wasn't worth it there.
 
 ## Related documents
 

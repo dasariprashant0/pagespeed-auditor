@@ -1177,3 +1177,25 @@ RESUME_HERE updated (they still said "no manual button" / Vercel Blob).
 Known and left alone: the stored `markdownReport` on rows written before
 today (what MCP `get_report` returns) still says "Overall" from PSI's
 `overall_category`; new rows say the LCP/INP/CLS assessment.
+
+### 11 Nov 2026 — Documentation brought up to date
+
+Every reference doc re-checked against the code:
+- BACKEND_SCHEMA and TRD now describe the central + per-tenant databases
+  (they still described one shared schema).
+- UI_UX's component table matches what exists. `SetupChecklist`,
+  `RoleTourBanner` and `SpectrumRibbon` were gone; the tour is marked as
+  switched off.
+- IMPLEMENTATION_PLAN status and open items refreshed.
+- PRD features and roles updated; its "known drift" section is resolved.
+- README dropped the removed `MCP_BEARER_TOKEN` setup in favour of the
+  Agent access page, added the tenant commands, and links the
+  PER_TENANT local-migration warning.
+- RESUME_HERE and APP_FLOW updated.
+- PLAN amended where §2.2 and §20 changed it.
+- New `docs/INTEGRATIONS.md`: MCP setup and tools, `.md`/CSV exports, HTTP
+  routes. New DECISIONS §20: the CWV rule, and why "changed pages" is a
+  frozen selection.
+- Also changed: the MCP `run_group_audit` description no longer says full
+  sweeps are schedule-only, and the tenant schema's `AuditRun.status` /
+  `scopeLabel` comments list the real values.

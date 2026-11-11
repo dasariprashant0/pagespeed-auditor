@@ -5,6 +5,7 @@
 > this document, **they win** — this file describes the product in PRD shape for
 > onboarding and planning, not a new source of truth. Written 20 Aug 2026,
 > reflecting the app as it actually runs today, not the original stage plan.
+> Updated 11 Nov 2026.
 
 ## 1. Problem
 
@@ -25,7 +26,7 @@ practice today. Four roles, least to most privileged — see
 |---|---|
 | **Viewer** | Read every report, section, and page. Download the `.md` report. |
 | **Editor** | Everything a Viewer can, plus run audits on demand and reorganise sections. |
-| **Developer** | Everything an Editor can, plus the MCP token and the raw PSI JSON behind a report. |
+| **Developer** | Everything an Editor can, plus creating and revoking MCP tokens (Settings → Agent access) and the raw PSI JSON behind a report. |
 | **Admin** | Everything a Developer can, plus teammates, the PSI API key, site config, and the schedule. |
 
 A person's role is per-organisation (`Membership`), not global — the same
@@ -48,7 +49,8 @@ there is one real org.
    passed/not-applicable audits, score history), and a Top Issues
    drill-down listing every affected page. Exports: agent `.md` and CSV.
 5. **Schedules** a whole-site sweep (weekly by default), with email/Slack
-   notification on completion or failure.
+   notification on completion or failure. A sweep can also be started
+   from the Overview's "Measure whole site" button.
 6. **Generates AI recommendations** — a prioritised fix list per report,
    versioned (never overwritten, so a regeneration can be compared against
    the last one).
@@ -59,11 +61,15 @@ there is one real org.
    reports, trends, and top issues, and trigger a page/group audit — never
    a full sweep (see §4). Tokens are created and revoked in Settings →
    Agent access.
+9. **Onboards a teammate by role** — a role-aware waiting state
+   (`WaitingOnAdmin`) instead of an admin-only checklist when there's
+   nothing to look at yet. The guided tour and floating checklist are
+   built but **switched off** (see `docs/BUILD_LOG.md`, "onboarding tour
+   disabled").
 10. **Re-measures only what changed** — "Measure changed pages" audits
    pages whose sitemap `lastmod` is newer than their last audit.
-9. **Onboards a teammate by role** — a dismissible "here's what your role
-   can do" banner once per person, and a role-aware waiting state instead
-   of an admin-only checklist when there's nothing to look at yet.
+11. **Exports** — an agent-ready `.md` per page or group, and a CSV of
+   latest scores and metrics (`docs/INTEGRATIONS.md`).
 
 ## 4. Deliberately out of scope / refused by design
 
@@ -98,23 +104,17 @@ and §11 for the reasoning:
 - A new teammate understands what their role lets them do without asking
   someone else first.
 
-## 6. Known documentation drift (flagged, not silently carried forward)
+## 6. Known documentation drift
 
-`CLAUDE.md`'s "What this is" section still says *"Current scope: stages
-1–2... scheduling, notifications, trends, AI recommendations, and MCP are
-deliberately out of scope."* That is stale. `docs/RESUME_HERE.md` (the more
-recently written of the two) already says stages 1–6 plus MCP are done, and
-this session directly exercised scheduling, notifications, AI
-recommendations, and the MCP tool list — all real, all working. Left
-uncorrected in `CLAUDE.md` itself rather than edited as a side effect of
-writing this document; whoever next touches that file's scope section
-should reconcile it against reality.
+None open as of 11 Nov 2026. (The earlier entry, about `CLAUDE.md`'s stale
+"current scope" note, was resolved when that section was rewritten.)
 
 ## Related documents
 
 - `docs/SPEC.md` — the original brief
 - `docs/PLAN.md` — the approved stage 1–2 build plan
-- `docs/DECISIONS.md` — why things are the way they are, numbered §1–§13
+- `docs/DECISIONS.md` — why things are the way they are, numbered §1–§20
 - `docs/BUILD_LOG.md` — chronological session log
 - `docs/TRD.md`, `docs/BACKEND_SCHEMA.md`, `docs/APP_FLOW.md`, `docs/UI_UX.md`,
-  `docs/IMPLEMENTATION_PLAN.md` — the rest of this document suite
+  `docs/IMPLEMENTATION_PLAN.md`, `docs/INTEGRATIONS.md` — the rest of this
+  document suite

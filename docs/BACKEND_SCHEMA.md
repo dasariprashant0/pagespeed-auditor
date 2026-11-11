@@ -1,20 +1,34 @@
 # Backend Schema — Internal PageSpeed Auditor
 
-> `prisma/schema.prisma` is the source of truth; this document explains it.
-> If the two disagree, the schema file is right and this needs updating.
-> Written 20 Aug 2026, against the schema as of migration
-> `20260820132653_rawjson_blob_key`.
+> There are **two** Prisma schemas, and they are the source of truth; this
+> document explains them. If they disagree with it, the schema files are right.
+>
+> - `prisma/central/schema.prisma` — the app's own identity database: users,
+>   organisations, memberships, invitations, MCP tokens.
+> - `prisma/tenant/schema.prisma` — one database **per organisation** (its own
+>   Neon Postgres + Cloudflare D1), holding that org's sites, pages and audits.
+>
+> See `docs/PER_TENANT_ARCHITECTURE.md` for the split. Written 20 Aug 2026;
+> updated 11 Nov 2026 for the central/tenant split (Phase 5, 22 Aug 2026).
 
 ## 1. Entity relationship overview
+
+Central database:
 
 ```mermaid
 erDiagram
   Organization ||--o{ Membership : has
   Organization ||--o{ Invitation : has
-  Organization ||--o{ Site : owns
   Organization ||--o{ McpToken : issues
   User ||--o{ Membership : holds
   User ||--o{ PasswordReset : requests
+```
+
+Each tenant database (`Site.organizationId` is a plain string, not a foreign
+key — the organisation lives in the central database):
+
+```mermaid
+erDiagram
   Site ||--o{ Group : has
   Site ||--o{ Page : has
   Site ||--o| Schedule : configures
@@ -30,19 +44,29 @@ erDiagram
 
 ## 2. Identity and tenancy
 
-- **`User`** — global identity. `roleTourSeenAt` (added 20 Aug 2026) gates
-  the one-time role-tour banner; per-person, not per-organisation.
-- **`Organization`** — the tenant. Everything else hangs off one.
+All of this is in the **central** database.
+
+- **`User`** — global identity. `passwordHash` is nullable (Google-only
+  accounts never set one). `lastLoginAt` is written on sign-in but not yet
+  shown anywhere.
+- **`Organization`** — the tenant. Besides the SMTP override below, it holds
+  the encrypted connection details for that org's own databases
+  (`tenantDbUrlEnc`, `d1*Enc`) and `provisionStatus`/`provisionError`/
+  `provisionedAt` — see `docs/PER_TENANT_ARCHITECTURE.md`.
 - **`Membership`** — the join table that actually grants authority. Role
   is a plain string (`viewer`/`editor`/`developer`/`admin`), not a Postgres
   enum, specifically so adding a fifth role later is a code change, not a
-  migration that locks the table.
+  migration that locks the table. `tourStepsSeen`/`checklistDismissedAt`
+  back the per-membership onboarding tour, which is currently switched off
+  (see `docs/BUILD_LOG.md`, "onboarding tour disabled").
 - **`Invitation`** — token stored **hashed**, same reasoning as
   `PasswordReset`: a leaked database row must not be redeemable.
 - **`McpToken`** — per-organisation, not one shared secret in an env var.
   A single shared token stops working the moment there's more than one
   tenant, since whoever holds it reaches whichever org happens to be
-  queried.
+  queried. Only a SHA-256 hash is stored; `revokedAt` revokes, `lastUsedAt`
+  is stamped on each use. Created and revoked in Settings → Agent access
+  (`/settings/agents`, developer/admin) since 11 Nov 2026.
 - **`Organization.smtp*`** (added 20 Aug 2026) — an optional per-org SMTP
   override for invitation and sweep-notification emails, same nullable-
   presence-means-override shape as `Site.psiApiKey`; verified by a real
@@ -53,6 +77,8 @@ erDiagram
   `SMTP_*` env vars. See `docs/DECISIONS.md`.
 
 ## 3. Site structure
+
+Everything from here to §8 is in each **tenant** database.
 
 - **`Site`** — one `psiApiKey` per site (nullable), never sent to the
   browser unmasked. Each tenant burns its own Google quota rather than
@@ -70,15 +96,22 @@ erDiagram
   URL list), `isManuallyGrouped` (pins this one page's group assignment
   against re-ingest), `latestResultMobileId`/`latestResultDesktopId`
   (denormalized pointers — turns "1,000 pages with current scores" from a
-  correlated subquery per row into two plain joins).
+  correlated subquery per row into two plain joins). `lastmod` (from the
+  sitemap) and `lastAuditedAt` (stamped on every result, either strategy)
+  drive "Measure changed pages".
 
 ## 4. The audit path
 
-- **`AuditRun`** — one row per sweep/section-run/page-run. `status`
-  includes `skipped` (the overlap guard refuses to start a sweep while
-  another is running, rather than queueing behind it) and `cancelled`
-  (a stopped run, distinct from `failed`). `completedJobs`/`totalJobs`
-  drive every progress bar in the UI.
+- **`AuditRun`** — one row per sweep/section-run/page-run. `type` is
+  `full_sweep` | `group` | `page`; a hand-picked page selection, a retry and
+  a "changed pages" run are all recorded as `group`, with the real scope in
+  `scopeLabel` (`pages:<ids>`, `retry:<runId>`, `group:<slug>`, `site`,
+  optionally suffixed ` (mobile)`/` (desktop)`) — that label is what resume
+  re-reads. `status` is `queued` | `running` | `paused` | `completed` |
+  `failed` | `cancelled` | `skipped` (the overlap guard refuses to start a
+  sweep while another is running, rather than queueing behind it).
+  `completedJobs`/`totalJobs` drive every progress bar. `skipReason` and
+  `completedAt` are written but not read by anything yet.
 - **`AuditResult`** — one row per (run, page, strategy).
   - `status: "ok" | "error"` — **every aggregate query must filter
     `status: "ok"`**. An error row carries null scores so `completedJobs`
@@ -91,6 +124,13 @@ erDiagram
     lab runs never produce it. **Never write `tbt` into `inp`** — it
     silently poisons every trend and regression comparison downstream.
   - `fieldCls` is **already divided by 100** — CrUX reports CLS × 100 raw.
+  - `fieldOverall` is the Core Web Vitals assessment. Since 11 Nov 2026 it
+    is computed from LCP, INP and CLS only (`cwvAssessment`); older rows
+    hold PSI's `overall_category`, which also counted FCP/TTFB, so readers
+    re-derive it from the metric columns instead of trusting it.
+  - `fieldJson` keeps both CrUX blocks, `{ loadingExperience,
+    originLoadingExperience }`, for the distribution bars and the origin
+    comparison.
   - `rawJson` (legacy inline) / `rawJsonBlobKey` (current, Cloudflare D1) —
     exactly one of the two is ever set for a given row; see §5.
   - `@@unique([auditRunId, pageId, strategy])` is the durable idempotency
@@ -101,7 +141,10 @@ erDiagram
   denormalization out of `rawJson`. Grouping "top issues across the site"
   over JSON means detoasting the whole blob and running `jsonb_each` over
   ~180 audit objects per row on every dashboard load; this table turns
-  that into one indexed `GROUP BY`, targeted at <50ms over 60k rows.
+  that into one indexed `GROUP BY`, targeted at <50ms over 60k rows. It
+  also backs the Top Issues drill-down (`/issues/[auditId]`). `group` holds
+  the extractor's kind (`opportunity`/`diagnostic`/`other`); `weight` is
+  stored but is 0 for every LH13 audit, so nothing sorts by it.
 - **`Recommendation`** — `version` increments, never overwrites. The
   `@@unique([auditResultId, version])` pair is what makes a regeneration
   race-safe: two tabs both computing version N+1 race on the same insert,
@@ -116,8 +159,8 @@ every new row writes it `null` and stores a `rawJsonBlobKey` instead
 (`lib/blob.ts`), keyed by `audit-raw-json/{runId}/{pageId}-{strategy}.json`
 — the same `(auditRunId, pageId, strategy)` triple the unique constraint
 already treats as unique, not the row's own id (which doesn't exist until
-the DB assigns it on insert). That key currently points into a Cloudflare
-D1 database (a `raw_json_blobs` table, reached over D1's HTTP query API),
+the DB assigns it on insert). That key currently points into the organisation's
+own Cloudflare D1 database (a `raw_json_blobs` table, reached over D1's HTTP query API),
 having briefly pointed into Vercel Blob before that. No backfill ran
 either time; old rows keep their inline data until the 10-per-page
 retention window ages them out naturally. `pruneSiteHistory` and
@@ -144,8 +187,9 @@ that mattered).
 
 ## 8. Operational state (added 21 Aug 2026, replacing Redis)
 
-Three small, app-wide tables — not tenant-scoped, since each holds one
-global row or a handful of short-lived rows, never customer data:
+Three small tables, in each tenant database (`RateLimitBucket` also exists
+in the central database, for the shared-fallback PSI limiter used before an
+org has its own key — `docs/DECISIONS.md` §19):
 
 - **`RateLimitBucket`** — the PSI rate limiter's fixed-window token
   bucket. One row per limiter (`key`, today only `"psi"`), atomically

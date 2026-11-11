@@ -27,6 +27,7 @@ where they disagree with the files above, the files above win):
 | `docs/BACKEND_SCHEMA.md` | The Prisma schema, explained model by model. |
 | `docs/IMPLEMENTATION_PLAN.md` | Status by stage, open items, the verification bar. |
 | `docs/PER_TENANT_ARCHITECTURE.md` | **The central-DB/tenant-DB split (Phase 5) — read this before touching auth, `lib/db/*`, or any Server Action/route/workflow that reads tenant data.** |
+| `docs/INTEGRATIONS.md` | MCP setup and tools, the `.md`/CSV exports, and every HTTP route. |
 
 Everything needed to continue lives in the repo. Nothing depends on a particular
 tool's session. `docs/archive/` holds superseded content (old `BUILD_LOG.md`

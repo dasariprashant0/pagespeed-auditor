@@ -18,9 +18,9 @@ import type { PsiStrategy } from '../psi/types.ts';
  *
  * Every tool is a thin adapter over the same service layer the dashboard uses,
  * which is the entire reason for the framework-free boundary. There is
- * deliberately no run_full_sweep tool: sweeps are schedule-only, and the
- * description on run_group_audit says so explicitly, because otherwise an agent
- * will try to fake one by looping over every group.
+ * deliberately no run_full_sweep tool: sweeps start from the schedule or a
+ * person in the dashboard, and run_group_audit's description says so, because
+ * otherwise an agent will try to fake one by looping over every group.
  */
 
 const strategyArg = z.enum(['mobile', 'desktop']).default('mobile');
@@ -261,7 +261,7 @@ export const mcpHandler = createMcpHandler((server) => {
     {
       title: 'Audit a group',
       description:
-        'Queues audits for every page in a group. Returns a run id to poll. NOTE: there is no whole-site tool — full sweeps run only on the configured schedule, so do not loop over every group to imitate one.',
+        'Queues audits for every page in a group. Returns a run id to poll. NOTE: there is no whole-site tool — a full sweep is started by the schedule or by a person in the dashboard, so do not loop over every group to imitate one.',
       inputSchema: { group: z.string(), strategy: z.enum(['mobile', 'desktop', 'both']).default('both') },
       annotations: { readOnlyHint: false },
     },
