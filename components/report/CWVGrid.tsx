@@ -20,7 +20,10 @@ export interface LabMetrics {
 const fmtMs = (v: number | null) =>
   v === null ? '—' : v < 1000 ? `${Math.round(v)} ms` : `${(v / 1000).toFixed(1)} s`;
 
-export function CWVGrid({ lab }: { lab: LabMetrics }) {
+// Lighthouse's own Speed Index scoring curve control points (p10 = good, median = poor).
+const SPEED_INDEX = { mobile: { good: 3387, poor: 5800 }, desktop: { good: 1311, poor: 2300 } } as const;
+
+export function CWVGrid({ lab, strategy }: { lab: LabMetrics; strategy: 'mobile' | 'desktop' }) {
   const rows: Array<{ id: keyof LabMetrics; label: string; core: boolean }> = [
     { id: 'lcp', label: 'LCP', core: true },
     { id: 'inp', label: 'INP', core: true },
@@ -28,10 +31,11 @@ export function CWVGrid({ lab }: { lab: LabMetrics }) {
     { id: 'fcp', label: 'FCP', core: false },
     { id: 'ttfb', label: 'TTFB', core: false },
     { id: 'tbt', label: 'TBT', core: false },
+    { id: 'speedIndex', label: 'Speed Index', core: false },
   ];
 
   return (
-    <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
+    <div className="grid gap-2 grid-cols-2 sm:grid-cols-4 lg:grid-cols-7">
       {rows.map(({ id, label, core }) => {
         const value = lab[id];
 
@@ -50,7 +54,11 @@ export function CWVGrid({ lab }: { lab: LabMetrics }) {
           );
         }
 
-        const bucket = bucketOf(id === 'speedIndex' ? 'fcp' : (id as 'lcp'), value);
+        const si = SPEED_INDEX[strategy];
+        const bucket: Bucket | null =
+          id === 'speedIndex'
+            ? value === null ? null : value <= si.good ? 'good' : value > si.poor ? 'poor' : 'ni'
+            : bucketOf(id as 'lcp', value);
         const display = id === 'cls' ? (value === null ? '—' : value.toFixed(3)) : fmtMs(value);
 
         return (

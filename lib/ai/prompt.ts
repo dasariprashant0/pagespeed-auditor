@@ -54,7 +54,7 @@ export function buildRecommendationPrompt(
       // Concrete offenders, with their numbers. Passing only the first column
       // produced advice like "optimise your images" -- true, useless. Passing
       // the URL AND its size produces "the 1.2 MB hero at /img/hero.png".
-      for (const row of a.details?.rows.slice(0, 4) ?? []) {
+      for (const row of a.details.flatMap((t) => t.rows).slice(0, 4)) {
         const cells = Object.entries(row)
           .filter(([, v]) => v !== null && v !== undefined && v !== '')
           .slice(0, 4)

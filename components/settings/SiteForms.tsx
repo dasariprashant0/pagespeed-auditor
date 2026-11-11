@@ -1,7 +1,7 @@
 'use client';
 
 import { useActionState } from 'react';
-import { createSiteAction, updateSiteAction, updatePsiKeyAction } from '@/app/actions/site';
+import { createSiteAction, updateSiteAction, updatePsiKeyAction, updateAiKeyAction } from '@/app/actions/site';
 import { InfoTooltip } from '@/components/ui/InfoTooltip';
 import { PasswordInput } from '@/components/ui/PasswordInput';
 import type { SiteRef } from '@/lib/services/tenant.service';
@@ -115,6 +115,42 @@ export function PsiKeyForm({ site, canEdit }: { site: SiteRef; canEdit: boolean 
             uses its own so you are not sharing anyone else&rsquo;s quota.
           </p>
         )}
+      </fieldset>
+    </form>
+  );
+}
+
+export function AiKeyForm({ hasKey, canEdit }: { hasKey: boolean; canEdit: boolean }) {
+  const [state, action, pending] = useActionState<Result, FormData>(updateAiKeyAction, null);
+
+  return (
+    <form action={action} className="space-y-3">
+      <fieldset disabled={!canEdit} className="space-y-3">
+        <Labelled
+          label="Anthropic API key"
+          hint="Checked with Anthropic when you save. Clear the field and save to turn AI off again."
+        >
+          <PasswordInput
+            name="anthropicApiKey"
+            // Never sent to the browser; untouched dots keep the stored key.
+            defaultValue={hasKey ? '••••••••••••' : ''}
+            placeholder="sk-ant-…"
+            className={`${input} font-mono`}
+          />
+        </Labelled>
+        <div className="flex flex-wrap items-center gap-3">
+          <button type="submit" disabled={pending} className={button}>
+            {pending ? 'Checking with Anthropic…' : 'Save key'}
+          </button>
+          <a
+            href="https://platform.claude.com/settings/keys"
+            target="_blank" rel="noreferrer"
+            className="text-[11px] text-[var(--muted)] underline-offset-2 hover:underline"
+          >
+            Get a key
+          </a>
+          <Notice state={state} />
+        </div>
       </fieldset>
     </form>
   );

@@ -84,6 +84,11 @@ model Organization {
   d1AccountIdEnc  String?
   d1DatabaseIdEnc String?
   d1ApiTokenEnc   String?
+
+  // Anthropic API key for AI recommendations, encrypted like the d1*Enc
+  // columns (context `${id}:anthropicApiKey`). Null means AI is off for this
+  // organisation and every AI surface is hidden.
+  anthropicApiKeyEnc String?
   /// unprovisioned | provisioning | ready | failed
   provisionStatus String    @default("unprovisioned")
   provisionError  String?

@@ -7,6 +7,7 @@ import { getTopIssues } from '../services/issues.service.ts';
 import { getRunProgress } from '../services/site.service.ts';
 import { requireRunAccess } from '../services/tenant.service.ts';
 import { getOrCreateRecommendation } from '../services/recommendation.service.ts';
+import { aiEnabledForOrg } from '../services/org.service.ts';
 import { BOTH_STRATEGIES, createRun, expandScope, findActiveRun } from '../services/run.service.ts';
 import { startAuditRun } from '../workflows/auditRun.ts';
 import { estimateRun, formatDuration } from '../services/estimate.service.ts';
@@ -18,9 +19,9 @@ import type { PsiStrategy } from '../psi/types.ts';
  *
  * Every tool is a thin adapter over the same service layer the dashboard uses,
  * which is the entire reason for the framework-free boundary. There is
- * deliberately no run_full_sweep tool: sweeps are schedule-only, and the
- * description on run_group_audit says so explicitly, because otherwise an agent
- * will try to fake one by looping over every group.
+ * deliberately no run_full_sweep tool: sweeps start from the schedule or a
+ * person in the dashboard, and run_group_audit's description says so, because
+ * otherwise an agent will try to fake one by looping over every group.
  */
 
 const strategyArg = z.enum(['mobile', 'desktop']).default('mobile');
@@ -217,12 +218,17 @@ export const mcpHandler = createMcpHandler((server) => {
     'get_recommendation',
     {
       title: 'Get fix recommendations',
-      description: 'AI recommendations for one page. Cached per audit; generates on first request.',
+      description: 'AI recommendations for one page. Cached per audit; generates on first request. Only available when the organisation has added an Anthropic API key in Settings → Site.',
       inputSchema: { url: z.string(), strategy: strategyArg, refresh: z.boolean().default(false) },
       annotations: { readOnlyHint: false, idempotentHint: true },
     },
     async ({ url, strategy, refresh }, ctx) => {
       const organizationId = orgIdOf(ctx);
+      // Registered for every organisation, so the "AI is off" case is answered
+      // here rather than by hiding the tool.
+      if (!(await aiEnabledForOrg(organizationId))) {
+        return text('AI recommendations are not enabled for this organisation. An admin can turn them on by adding an Anthropic API key in Settings → Site. Use get_report for the measured findings instead.');
+      }
       const page = await findPage(url, ctx);
       const rec = await getOrCreateRecommendation(organizationId, page.id, strategy as PsiStrategy, { force: refresh });
       return text(`${rec.cached ? '(cached) ' : ''}${rec.content}`);
@@ -261,7 +267,7 @@ export const mcpHandler = createMcpHandler((server) => {
     {
       title: 'Audit a group',
       description:
-        'Queues audits for every page in a group. Returns a run id to poll. NOTE: there is no whole-site tool — full sweeps run only on the configured schedule, so do not loop over every group to imitate one.',
+        'Queues audits for every page in a group. Returns a run id to poll. NOTE: there is no whole-site tool — a full sweep is started by the schedule or by a person in the dashboard, so do not loop over every group to imitate one.',
       inputSchema: { group: z.string(), strategy: z.enum(['mobile', 'desktop', 'both']).default('both') },
       annotations: { readOnlyHint: false },
     },

@@ -130,9 +130,9 @@ model AuditRun {
 
   // SPEC+: "skipped" added -- the overlap guard refuses to start a sweep while
   // another is running rather than queueing it behind.
-  status String // "queued" | "running" | "completed" | "failed" | "skipped"
+  status String // "queued" | "running" | "paused" | "completed" | "failed" | "cancelled" | "skipped"
 
-  scopeLabel String? // "group:blog (mobile)" | "scheduled sweep"
+  scopeLabel String? // "site" | "group:blog (mobile)" | "page:<id>" | "pages:<id,id>" | "retry:<runId>" -- parsed by parseScopeLabel
   skipReason String?
 
   startedAt     DateTime  @default(now())

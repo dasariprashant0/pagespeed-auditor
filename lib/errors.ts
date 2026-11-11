@@ -38,12 +38,6 @@ export class NotProvisionedError extends AppError {
   }
 }
 
-export class ValidationError extends AppError {
-  constructor(message: string) {
-    super(message, 'validation');
-  }
-}
-
 /** Worth another attempt: 429, 5xx, network, malformed body. */
 export class RetryableError extends AppError {
   readonly retryAfterMs?: number;

@@ -64,9 +64,17 @@ those modules directly, so one stray Next import breaks it at load time. ESLint
 enforces it, and the rule was verified by planting a deliberate bad import and
 confirming lint fails — an unenforced boundary is decorative.
 
-### 2.2 Why full sweeps are schedule-only
+### 2.2 Why full sweeps were schedule-only (button reversed 11 Nov 2026)
 
-**Chosen:** no "audit everything now" button, and no `run_full_sweep` MCP tool.
+**Reversed for the UI (11 Nov 2026):** the Overview page now has a "Measure
+whole site" button (`queueAuditAction({ kind: 'site' })`, recorded as a
+`full_sweep` run, `triggeredBy: 'manual'`). The objection below was that the
+button would do "nothing visible for 45 minutes" — that stopped being true once
+live run progress, run control (pause/cancel) and the one-run-per-site guard
+existed. It is gated on `audits:run` and refuses while any run is active. The
+MCP half still stands: no `run_full_sweep` tool.
+
+**Originally chosen:** no "audit everything now" button, and no `run_full_sweep` MCP tool.
 
 Not a product preference — arithmetic. 1,000 pages × 2 strategies = 2,000 PSI
 calls. The API sustains roughly 0.75 req/s before it starts returning
@@ -257,7 +265,7 @@ fixture-first approach in M1.
 
 Listed because each looks like an omission and isn't.
 
-- **No "run full sweep" button or MCP tool.** See §2.2.
+- **No "run full sweep" MCP tool.** (The UI button was added 11 Nov 2026.) See §2.2.
 - **No canonical-tag resolution during ingestion.** Would mean fetching all 1,000
   pages just to read `<link rel="canonical">`. The sitemap is the source of truth
   for v1; tracking-param and fragment stripping handles the real duplicates.
@@ -1111,3 +1119,36 @@ org's own tenant-scoped one for a BYO key, the shared central one for
 the env fallback. Tested in `test/audit.service.test.ts` via an
 injectable `resolveSiteKey` dependency, without needing a live tenant
 database.
+
+## 20. Core Web Vitals pass/fail is LCP, INP and CLS only; "changed pages" is a frozen selection (11 Nov 2026)
+
+**CWV assessment.** The Passed/Failed badge used to read CrUX's
+`overall_category` from the PSI response. That value also folds in FCP and
+TTFB, so a page with good LCP, INP and CLS but a slow TTFB showed "Failed".
+The assessment is now `cwvAssessment()` (`lib/psi/buckets.ts`): the worst
+of LCP, INP and CLS at p75. INP may be missing on low-traffic URLs, and then
+LCP and CLS decide. Without both of those there is no assessment, and only
+`good` counts as passed. FCP and TTFB are still shown, labelled diagnostic.
+
+It is computed on write (`extractField`) **and re-derived on read**
+(`buildFieldData`, the CSV export), because rows written before this change
+hold the old value in `fieldOverall`. Not re-derived: the stored
+`markdownReport` of old rows, which is what MCP `get_report` returns. Those
+age out with the retention window.
+
+*Rejected:* backfilling `fieldOverall`. That would mean a migration script
+across every tenant database for a value that is cheap to recompute.
+
+**"Measure changed pages".** It audits active pages whose sitemap `lastmod`
+is newer than `lastAuditedAt`, plus any page missing a mobile or desktop
+result. The set is resolved **once**, when the run is queued, and stored as
+an ordinary `pages:<ids>` scope. It is not a scope kind of its own: once a
+page is measured it stops being "changed", so re-expanding a live scope on
+resume would shrink the run beneath its own completed results and finalize
+it early. Like other page selections, it is recorded as a `group` run, not
+a `full_sweep`, so it doesn't count as the site's last sweep or trigger
+sweep notifications.
+
+*Known ceiling:* it is only as good as the sitemap's `lastmod`. A CMS that
+stamps every URL on each publish makes this a full sweep in practice, and
+one that never sets `lastmod` makes it a no-op after the first audit.

@@ -78,8 +78,13 @@ export interface FieldMetricDTO {
 
 export interface FieldDataDTO {
   source: 'page' | 'origin_fallback' | 'none';
+  /** Core Web Vitals assessment from LCP, INP and CLS only -- see cwvAssessment. */
   overall: Bucket | null;
   metrics: Partial<Record<'lcp' | 'inp' | 'cls' | 'fcp' | 'ttfb', FieldMetricDTO>>;
+  /** The whole origin's real-user data, alongside page-level data -- PSI's
+   *  "This URL / Origin" toggle. Null when `source` is already the origin, or
+   *  for rows written before fieldJson kept both. */
+  origin?: { overall: Bucket | null; metrics: FieldDataDTO['metrics'] } | null;
 }
 
 /**
@@ -90,6 +95,8 @@ export interface FieldDataDTO {
  * component.
  */
 export interface AuditDetailTable {
+  /** Set when one audit carries several tables (LH13 `list` insights). */
+  title?: string;
   headings: Array<{ key: string; label: string; type: string }>;
   rows: Array<Record<string, string>>;
   /** Rows dropped by pruning, so the UI can say so instead of implying totality. */
@@ -106,8 +113,15 @@ export interface AuditItemDTO {
   displayValue: string | null;
   savingsMs: number | null;
   savingsBytes: number | null;
-  /** Null when the audit carries no tabular evidence. */
-  details: AuditDetailTable | null;
+  /** Evidence tables; empty when the audit carries none. LH13 `list` insights
+   *  (LCP breakdown, CLS culprits, request chains) carry several. */
+  details: AuditDetailTable[];
+  /** Metrics this audit affects (`metricSavings` keys) -- PSI's "Show audits
+   *  relevant to" filter. */
+  metrics: string[];
+  /** Platform-specific advice from Lighthouse stack packs (WordPress, Next.js…),
+   *  present only when Lighthouse detected that stack. */
+  stackTips: Array<{ stack: string; tip: string }>;
 }
 
 /** The run conditions PSI prints under its report, so numbers are interpretable. */
@@ -118,7 +132,13 @@ export interface RunEnvironmentDTO {
   device: string | null;
   networkThrottling: string | null;
   cpuThrottling: string | null;
+  /** "HeadlessChrome 151.0.7922.71 · CPU benchmark 635", as PSI prints it. */
+  browser: string | null;
   fetchedAt: string | null;
+  /** The URL Lighthouse ended up on, when a redirect moved it off the requested one. */
+  redirectedTo: string | null;
+  /** Lighthouse's runWarnings -- PSI shows these as a banner above the report. */
+  warnings: string[];
 }
 
 export interface PageReportDTO {
@@ -158,6 +178,11 @@ export interface PageReportDTO {
     passed: AuditItemDTO[];
     /** Audits that did not apply to this page. */
     notApplicable: AuditItemDTO[];
+    /** PSI's "Additional items to manually check" -- unscored, need a human. */
+    manual: AuditItemDTO[];
+    /** Unscored performance insights (e.g. LCP breakdown) -- informational,
+     *  neither passed nor failed, but carry real evidence. */
+    informative: AuditItemDTO[];
     /** data: URI of the final screenshot, when one survived pruning. */
     screenshot: string | null;
     environment: RunEnvironmentDTO;
@@ -200,11 +225,6 @@ export interface RunProgressDTO {
   completedJobs: number;
   failedJobs: number;
   percentComplete: number;
-  /** Jobs waiting out a retry backoff. Non-zero means progress is paused, not stuck. */
-  retryingJobs: number;
-  /** Seconds until the next retry fires. Computed server-side: a clock read
-   *  during render is impure, and the client only needs the number. */
-  nextRetryInSeconds: number | null;
   startedAt: string | null;
   finishedAt: string | null;
   etaSeconds: number | null;
@@ -223,11 +243,3 @@ export interface SiteSummaryDTO {
   lastSweepAt: string | null;
   siteAverage: FourScores;
 }
-
-/**
- * Groups holding fewer than this render collapsed under a single "Small groups"
- * card on the dashboard home. See docs/DECISIONS.md 5.1 -- the real site
- * produces 42 one-page groups, and 68 cards is not a usable home screen.
- * A display constant only: the data model is untouched.
- */
-export const SMALL_GROUP_THRESHOLD = 3;

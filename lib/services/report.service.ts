@@ -1,7 +1,8 @@
 import { getTenantPrisma } from '../db/tenant.ts';
 import { NotFoundError } from '../errors.ts';
-import { bucketOf } from '../psi/buckets.ts';
-import type { Bucket, MetricId, PsiStrategy } from '../psi/types.ts';
+import { bucketOf, cwvAssessment } from '../psi/buckets.ts';
+import { CRUX_KEYS, extractField } from '../psi/extract.ts';
+import type { MetricId, PsiLoadingExperience, PsiResponse, PsiStrategy } from '../psi/types.ts';
 import { issueKindFromGroup } from './issues.service.ts';
 import { getPageScoreHistory } from './results.service.ts';
 import { fetchRawJson } from '../blob.ts';
@@ -28,19 +29,6 @@ import type {
 // Field data
 // ---------------------------------------------------------------------------
 
-/**
- * Same mapping as lib/psi/extract.ts uses on the write side. Duplicated rather
- * than imported because extract.ts does not export it; if that changes, delete
- * this copy.
- */
-const CRUX_KEYS: Record<string, MetricId> = {
-  LARGEST_CONTENTFUL_PAINT_MS: 'lcp',
-  INTERACTION_TO_NEXT_PAINT: 'inp',
-  CUMULATIVE_LAYOUT_SHIFT_SCORE: 'cls',
-  FIRST_CONTENTFUL_PAINT_MS: 'fcp',
-  EXPERIMENTAL_TIME_TO_FIRST_BYTE: 'ttfb',
-};
-
 export interface FieldColumns {
   fieldSource: string | null;
   fieldOverall: string | null;
@@ -51,14 +39,26 @@ export interface FieldColumns {
   fieldTtfb: number | null;
 }
 
-const BUCKETS: readonly Bucket[] = ['good', 'ni', 'poor'];
+
+/**
+ * The CrUX block a row's field columns describe. fieldJsonOf stores BOTH blocks
+ * as `{ loadingExperience, originLoadingExperience }`; reading `.metrics` off
+ * the top level (as this used to) found nothing, so the distribution bars never
+ * rendered for any real row. A bare `{ metrics }` blob is still accepted.
+ */
+function cruxBlockOf(fieldJson: unknown, source: FieldDataDTO['source']): unknown {
+  if (typeof fieldJson !== 'object' || fieldJson === null) return null;
+  const j = fieldJson as { loadingExperience?: unknown; originLoadingExperience?: unknown; metrics?: unknown };
+  if (j.metrics) return j;
+  return source === 'origin_fallback' ? j.originLoadingExperience : j.loadingExperience;
+}
 
 /** [good, needs-improvement, poor] proportions, pulled out of the trimmed blob. */
-function distributionsFromJson(fieldJson: unknown): Partial<Record<MetricId, [number, number, number]>> {
+function distributionsFromJson(block: unknown): Partial<Record<MetricId, [number, number, number]>> {
   const out: Partial<Record<MetricId, [number, number, number]>> = {};
-  if (typeof fieldJson !== 'object' || fieldJson === null) return out;
+  if (typeof block !== 'object' || block === null) return out;
 
-  const metrics = (fieldJson as { metrics?: unknown }).metrics;
+  const metrics = (block as { metrics?: unknown }).metrics;
   if (typeof metrics !== 'object' || metrics === null) return out;
 
   for (const [rawKey, raw] of Object.entries(metrics as Record<string, unknown>)) {
@@ -95,8 +95,7 @@ export function buildFieldData(cols: FieldColumns, fieldJson?: unknown): FieldDa
 
   if (source === 'none') return { source: 'none', overall: null, metrics: {} };
 
-  const overall = BUCKETS.includes(cols.fieldOverall as Bucket) ? (cols.fieldOverall as Bucket) : null;
-  const distributions = distributionsFromJson(fieldJson);
+  const distributions = distributionsFromJson(cruxBlockOf(fieldJson, source));
 
   const values: Array<[MetricId, number | null]> = [
     ['lcp', cols.fieldLcp],
@@ -114,7 +113,18 @@ export function buildFieldData(cols: FieldColumns, fieldJson?: unknown): FieldDa
     metrics[id] = { value, bucket, distribution: distributions[id] ?? null } satisfies FieldMetricDTO;
   }
 
-  return { source, overall, metrics };
+  // Re-derived from the metrics, not read from cols.fieldOverall: rows written
+  // before 11 Nov 2026 hold PSI's overall_category, which counted FCP/TTFB.
+  return { source, overall: cwvAssessment(metrics), metrics, origin: originFieldData(source, fieldJson) };
+}
+
+/** PSI's "Origin" tab, shown next to page-level data when both exist. */
+function originFieldData(source: FieldDataDTO['source'], fieldJson: unknown): FieldDataDTO['origin'] {
+  if (source !== 'page' || typeof fieldJson !== 'object' || fieldJson === null) return null;
+  const origin = (fieldJson as { originLoadingExperience?: PsiLoadingExperience | null }).originLoadingExperience;
+  if (!origin) return null;
+  const f = extractField({ originLoadingExperience: origin } as PsiResponse);
+  return f.source === 'none' ? null : { overall: f.overall, metrics: f.metrics };
 }
 
 // ---------------------------------------------------------------------------
@@ -300,7 +310,8 @@ export async function getPageReport(
 
   const descriptions = descriptionsFromRawJson(rawJson);
   const detailTables = detailsFromRawJson(rawJson);
-  const { passed, notApplicable } = passedAuditsFromRawJson(rawJson);
+  const { passed, notApplicable, manual, informative } = passedAuditsFromRawJson(rawJson, detailTables);
+  const extras = auditExtrasFromRawJson(rawJson);
   const screenshot = screenshotFromRawJson(rawJson);
   const environment = environmentFromRawJson(rawJson);
 
@@ -314,7 +325,8 @@ export async function getPageReport(
     displayValue: i.displayValue,
     savingsMs: i.savingsMs,
     savingsBytes: i.savingsBytes,
-    details: detailTables.get(i.auditId) ?? null,
+    details: detailTables.get(i.auditId) ?? [],
+    ...(extras.get(i.auditId) ?? NO_EXTRAS),
   }));
 
   const ok = latest.status === 'ok';
@@ -360,6 +372,8 @@ export async function getPageReport(
       other: items.filter((i) => i.kind === 'other'),
       passed,
       notApplicable,
+      manual,
+      informative,
       screenshot,
       environment,
       markdownReport: latest.markdownReport,
@@ -390,6 +404,15 @@ function cellToString(v: unknown): string {
   if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') return String(v);
   if (typeof v === 'object') {
     const o = v as Record<string, unknown>;
+    // A DOM node: what a person recognises (its text) plus where an agent finds
+    // it (the selector). The snippet alone is often an anonymous <div>.
+    if (o.type === 'node') {
+      return [o.nodeLabel, o.selector].filter((s) => typeof s === 'string' && s).join(' — ') || String(o.snippet ?? '');
+    }
+    // A script position: file:line, the way DevTools prints it.
+    if (o.type === 'source-location' && typeof o.url === 'string') {
+      return typeof o.line === 'number' ? `${o.url}:${o.line + 1}` : o.url;
+    }
     // Node references and link/url/code wrappers all carry the useful text here.
     for (const k of ['url', 'text', 'snippet', 'selector', 'value', 'label', 'path']) {
       const inner = o[k];
@@ -412,6 +435,8 @@ function formatCell(raw: unknown, type: string): string {
     if (type === 'ms' || type === 'timespanMs') {
       return n < 1000 ? `${Math.round(n)} ms` : `${(n / 1000).toFixed(2)} s`;
     }
+    // Layout-shift scores and the like arrive as 0.1718218077239916.
+    if (type === 'numeric' && !Number.isInteger(n)) return String(Number(n.toFixed(3)));
   }
   return s;
 }
@@ -424,48 +449,142 @@ function formatCell(raw: unknown, type: string): string {
  * strings inside them, so `truncated` tells the UI to say "showing first 10"
  * rather than implying the list is complete.
  */
-export function detailsFromRawJson(rawJson: unknown): Map<string, AuditDetailTable> {
-  const out = new Map<string, AuditDetailTable>();
+export function detailsFromRawJson(rawJson: unknown): Map<string, AuditDetailTable[]> {
+  const out = new Map<string, AuditDetailTable[]>();
   const audits = (rawJson as { lighthouseResult?: { audits?: Record<string, unknown> } })?.lighthouseResult?.audits;
   if (!audits) return out;
 
   for (const [auditId, audit] of Object.entries(audits)) {
     const details = (audit as { details?: Record<string, unknown> }).details;
     if (!details) continue;
-
-    const type = String(details.type ?? '');
-    // Only tabular shapes carry readable evidence; filmstrips, screenshots,
-    // treemaps and debugdata do not.
-    if (type !== 'table' && type !== 'opportunity' && type !== 'list') continue;
-
-    const rawHeadings = Array.isArray(details.headings) ? details.headings : [];
-    const headings = rawHeadings
-      .map((h) => {
-        const o = h as Record<string, unknown>;
-        return {
-          key: String(o.key ?? ''),
-          // v10+ uses label/valueType; v9 used text/itemType.
-          label: String(o.label ?? o.text ?? o.key ?? ''),
-          type: String(o.valueType ?? o.itemType ?? 'text'),
-        };
-      })
-      .filter((h) => h.key);
-
-    const rawItems = Array.isArray(details.items) ? details.items : [];
-    if (headings.length === 0 || rawItems.length === 0) continue;
-
-    const rows = rawItems.map((item) => {
-      const o = item as Record<string, unknown>;
-      const row: Record<string, string> = {};
-      for (const h of headings) row[h.key] = formatCell(o[h.key], h.type);
-      return row;
-    });
-
-    // Pruning caps items at 10, so a full ten strongly implies more were cut.
-    out.set(auditId, { headings, rows, truncated: rawItems.length >= 10 });
+    const tables = tablesOf(details);
+    if (tables.length > 0) out.set(auditId, tables);
   }
 
   return out;
+}
+
+type Raw = Record<string, unknown>;
+
+/**
+ * Every readable table inside one audit's `details`.
+ *
+ * Filmstrips, screenshots, treemaps and debugdata carry no readable evidence
+ * and yield nothing. LH13's insights mostly use `list` -- a list of tables,
+ * DOM nodes and sections -- which an earlier version skipped outright, so the
+ * LCP breakdown, CLS culprits and request chains showed no evidence at all.
+ */
+function tablesOf(details: Raw, title?: string): AuditDetailTable[] {
+  const items = Array.isArray(details.items) ? (details.items as unknown[]) : [];
+  switch (details.type) {
+    case 'table':
+    case 'opportunity': {
+      const t = tableOf(details, title);
+      return t ? [t] : [];
+    }
+    case 'list':
+      return items.flatMap((item) => {
+        const o = item as Raw;
+        if (o.type === 'node') {
+          return [{ title, headings: [{ key: 'node', label: 'Element', type: 'node' }], rows: [{ node: cellToString(o) }], truncated: false }];
+        }
+        return typeof o === 'object' && o !== null ? tablesOf(o, title) : [];
+      });
+    case 'list-section': {
+      const value = details.value as Raw | undefined;
+      const sectionTitle = typeof details.title === 'string' ? details.title : title;
+      if (value?.type === 'network-tree') return chainTable(value, sectionTitle);
+      return value ? tablesOf(value, sectionTitle) : [];
+    }
+    case 'checklist': {
+      // { key: { label, value: boolean } } -- document-latency-insight.
+      const checks = Object.values((details.items ?? {}) as Record<string, Raw>);
+      if (checks.length === 0) return [];
+      return [{
+        title,
+        headings: [{ key: 'check', label: 'Check', type: 'text' }, { key: 'status', label: 'Status', type: 'text' }],
+        rows: checks.map((c) => ({ check: String(c.label ?? ''), status: c.value ? 'Passed' : 'Failed' })),
+        truncated: false,
+      }];
+    }
+    default:
+      return [];
+  }
+}
+
+function tableOf(details: Raw, title?: string): AuditDetailTable | null {
+  const rawHeadings = Array.isArray(details.headings) ? (details.headings as Raw[]) : [];
+  const headings = rawHeadings
+    .map((o) => ({
+      key: String(o.key ?? ''),
+      // v10+ uses label/valueType; v9 used text/itemType.
+      label: String(o.label ?? o.text ?? o.key ?? ''),
+      type: String(o.valueType ?? o.itemType ?? 'text'),
+      sub: o.subItemsHeading as Raw | undefined,
+    }))
+    .filter((h) => h.key);
+
+  const rawItems = Array.isArray(details.items) ? (details.items as Raw[]) : [];
+  if (headings.length === 0 || rawItems.length === 0) return null;
+
+  const rows: Array<Record<string, string>> = [];
+  for (const o of rawItems) {
+    const row: Record<string, string> = {};
+    for (const h of headings) row[h.key] = formatCell(o[h.key], h.type);
+    rows.push(row);
+
+    // Sub-rows (per-script breakdowns, a third party's individual requests,
+    // a layout shift's causes) map onto the parent's columns through each
+    // heading's subItemsHeading -- the same way Lighthouse renders them.
+    const subs = (o.subItems as { items?: Raw[] } | undefined)?.items ?? [];
+    for (const s of subs) {
+      const sub: Record<string, string> = {};
+      for (const [i, h] of headings.entries()) {
+        const key = h.sub?.key;
+        const v = typeof key === 'string' ? formatCell(s[key], String(h.sub?.valueType ?? h.type)) : '';
+        sub[h.key] = i === 0 && v ? `↳ ${v}` : v;
+      }
+      if (Object.values(sub).some(Boolean)) rows.push(sub);
+    }
+  }
+
+  return {
+    title,
+    headings: headings.map(({ key, label, type }) => ({ key, label, type })),
+    rows,
+    // Pruning caps items at 10 (30 for the deep ones), so a full cap implies more were cut.
+    truncated: rawItems.length >= 10,
+  };
+}
+
+/** The critical request chain, flattened depth-first with indentation. */
+function chainTable(tree: Raw, title?: string): AuditDetailTable[] {
+  const rows: Array<Record<string, string>> = [];
+  const walk = (chains: unknown, depth: number) => {
+    for (const node of Object.values((chains ?? {}) as Record<string, Raw>)) {
+      rows.push({
+        url: `${'  '.repeat(depth)}${depth > 0 ? '↳ ' : ''}${String(node.url ?? '')}`,
+        time: formatCell(node.navStartToEndTime, 'ms'),
+        size: formatCell(node.transferSize, 'bytes'),
+        longest: node.isLongest ? 'yes' : '',
+      });
+      walk(node.children, depth + 1);
+    }
+  };
+  walk(tree.chains, 0);
+  if (rows.length === 0) return [];
+  const longest = (tree.longestChain as { duration?: unknown } | undefined)?.duration;
+  return [{
+    title: title ?? (typeof longest === 'number' ? `Critical request chain — longest ${formatCell(longest, 'ms')}` : 'Critical request chain'),
+    headings: [
+      { key: 'url', label: 'Request', type: 'url' },
+      { key: 'time', label: 'Finished at', type: 'ms' },
+      { key: 'size', label: 'Transfer size', type: 'bytes' },
+      { key: 'longest', label: 'On longest chain', type: 'text' },
+    ],
+    rows,
+    truncated: false,
+  }];
 }
 
 // ---------------------------------------------------------------------------
@@ -488,9 +607,14 @@ export function screenshotFromRawJson(rawJson: unknown): string | null {
  * assessment, and PSI shows both, so they are recovered from rawJson here. This
  * is one row for one page, not a list query.
  */
-export function passedAuditsFromRawJson(rawJson: unknown): {
+export function passedAuditsFromRawJson(
+  rawJson: unknown,
+  detailTables: Map<string, AuditDetailTable[]> = detailsFromRawJson(rawJson),
+): {
   passed: AuditItemDTO[];
   notApplicable: AuditItemDTO[];
+  manual: AuditItemDTO[];
+  informative: AuditItemDTO[];
 } {
   const lr = (rawJson as {
     lighthouseResult?: {
@@ -501,8 +625,11 @@ export function passedAuditsFromRawJson(rawJson: unknown): {
 
   const passed: AuditItemDTO[] = [];
   const notApplicable: AuditItemDTO[] = [];
-  if (!lr?.audits || !lr.categories) return { passed, notApplicable };
+  const manual: AuditItemDTO[] = [];
+  const informative: AuditItemDTO[] = [];
+  if (!lr?.audits || !lr.categories) return { passed, notApplicable, manual, informative };
 
+  const extras = auditExtrasFromRawJson(rawJson);
   const seen = new Set<string>();
   const CATEGORIES = ['performance', 'accessibility', 'best-practices', 'seo'] as const;
 
@@ -525,13 +652,25 @@ export function passedAuditsFromRawJson(rawJson: unknown): {
         displayValue: typeof a.displayValue === 'string' ? a.displayValue : null,
         savingsMs: null,
         savingsBytes: null,
-        details: null,
+        details: detailTables.get(ref.id) ?? [],
+        ...(extras.get(ref.id) ?? NO_EXTRAS),
       };
 
-      if (mode === 'notApplicable' || mode === 'manual') {
+      // Informative insights before the passed check: Lighthouse scores them 1,
+      // so they used to land in "Passed" with their evidence stripped -- the
+      // LCP breakdown read as a passed audit with nothing in it. PSI lists them
+      // under Insights, unscored. Only the visible groups: the `hidden` ones
+      // (network-requests, debug payloads) PSI does not show either.
+      if (mode === 'informative' && (ref.group === 'insights' || ref.group === 'diagnostics')) {
+        seen.add(ref.id);
+        informative.push(item);
+      } else if (mode === 'manual') {
+        seen.add(ref.id);
+        manual.push(item);
+      } else if (mode === 'notApplicable') {
         seen.add(ref.id);
         notApplicable.push(item);
-      } else if (score !== null && score >= 0.9) {
+      } else if (score !== null && score >= 0.9 && ref.group !== 'metrics' && ref.group !== 'hidden') {
         seen.add(ref.id);
         passed.push(item);
       }
@@ -539,7 +678,42 @@ export function passedAuditsFromRawJson(rawJson: unknown): {
   }
 
   const byTitle = (a: AuditItemDTO, b: AuditItemDTO) => a.title.localeCompare(b.title);
-  return { passed: passed.sort(byTitle), notApplicable: notApplicable.sort(byTitle) };
+  return {
+    passed: passed.sort(byTitle),
+    notApplicable: notApplicable.sort(byTitle),
+    manual: manual.sort(byTitle),
+    informative,
+  };
+}
+
+const NO_EXTRAS = { metrics: [] as string[], stackTips: [] as AuditItemDTO['stackTips'] };
+
+/**
+ * Per-audit metric tags and stack-pack tips, keyed by audit id.
+ *
+ * Tags are the `metricSavings` keys, which is what PSI's "Show audits relevant
+ * to: FCP / LCP / TBT / CLS" filter keys on. Stack tips exist only on rows
+ * written after stackPacks stopped being pruned (11 Nov 2026), and only when
+ * Lighthouse detected a stack it has a pack for.
+ */
+export function auditExtrasFromRawJson(rawJson: unknown): Map<string, Pick<AuditItemDTO, 'metrics' | 'stackTips'>> {
+  const out = new Map<string, Pick<AuditItemDTO, 'metrics' | 'stackTips'>>();
+  const lr = (rawJson as {
+    lighthouseResult?: {
+      audits?: Record<string, { metricSavings?: Record<string, unknown> }>;
+      stackPacks?: Array<{ title?: string; descriptions?: Record<string, string> }>;
+    };
+  })?.lighthouseResult;
+  if (!lr?.audits) return out;
+
+  for (const [id, a] of Object.entries(lr.audits)) {
+    const metrics = Object.keys(a.metricSavings ?? {});
+    const stackTips = (lr.stackPacks ?? []).flatMap((p) =>
+      p.descriptions?.[id] ? [{ stack: String(p.title ?? 'Stack'), tip: p.descriptions[id] }] : [],
+    );
+    if (metrics.length || stackTips.length) out.set(id, { metrics, stackTips });
+  }
+  return out;
 }
 
 /** The device, throttling and version the numbers were produced under. */
@@ -549,13 +723,22 @@ export function environmentFromRawJson(rawJson: unknown): RunEnvironmentDTO {
       lighthouseVersion?: string;
       userAgent?: string;
       fetchTime?: string;
-      configSettings?: { formFactor?: string; throttlingMethod?: string; throttling?: Record<string, number> };
-      environment?: { benchmarkIndex?: number };
+      requestedUrl?: string;
+      finalDisplayedUrl?: string;
+      finalUrl?: string;
+      runWarnings?: unknown[];
+      configSettings?: {
+        formFactor?: string;
+        throttlingMethod?: string;
+        throttling?: Record<string, number>;
+      };
+      environment?: { benchmarkIndex?: number; hostUserAgent?: string };
     };
   })?.lighthouseResult;
 
   const cfg = lr?.configSettings;
   const th = cfg?.throttling;
+  const finalUrl = lr?.finalDisplayedUrl ?? lr?.finalUrl ?? null;
 
   return {
     lighthouseVersion: lr?.lighthouseVersion ?? null,
@@ -566,6 +749,21 @@ export function environmentFromRawJson(rawJson: unknown): RunEnvironmentDTO {
         ? `${th.rttMs} ms TCP RTT, ${Math.round((th.throughputKbps ?? 0) / 1024)} Mbps throughput (${cfg?.throttlingMethod ?? 'simulated'})`
         : null,
     cpuThrottling: th && typeof th.cpuSlowdownMultiplier === 'number' ? `${th.cpuSlowdownMultiplier}x slowdown` : null,
+    browser: browserOf(lr?.environment),
     fetchedAt: lr?.fetchTime ?? null,
+    redirectedTo: finalUrl && lr?.requestedUrl && sameUrl(finalUrl, lr.requestedUrl) === false ? finalUrl : null,
+    warnings: (lr?.runWarnings ?? []).filter((w): w is string => typeof w === 'string' && w.length > 0),
   };
+}
+
+/** A trailing slash or #fragment is not a redirect worth a banner. */
+function sameUrl(a: string, b: string): boolean {
+  const norm = (u: string) => u.replace(/#.*$/, '').replace(/\/$/, '');
+  return norm(a) === norm(b);
+}
+
+function browserOf(env: { benchmarkIndex?: number; hostUserAgent?: string } | undefined): string | null {
+  const chrome = env?.hostUserAgent?.match(/HeadlessChrome\/[\d.]+/)?.[0] ?? null;
+  const bench = typeof env?.benchmarkIndex === 'number' ? `CPU benchmark ${env.benchmarkIndex}` : null;
+  return [chrome, bench].filter(Boolean).join(' · ') || null;
 }

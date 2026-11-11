@@ -3,7 +3,8 @@
 > Companion to `docs/PLAN.md` (the original architecture plan) and
 > `docs/DECISIONS.md` (why each piece is the way it is, numbered). This
 > document is the current-state technical reference; it does not re-litigate
-> anything already decided there. Written 20 Aug 2026.
+> anything already decided there. Written 20 Aug 2026; updated 11 Nov 2026
+> (per-tenant databases, email transports, MCP tokens, exports).
 
 ## 1. Stack
 
@@ -11,13 +12,14 @@
 |---|---|---|
 | Framework | Next.js 16 (App Router, Turbopack) | `proxy.ts`, not `middleware.ts` — Next 16 renamed it |
 | Language | TypeScript, React 19 | `useOptimistic`, `useSyncExternalStore` used deliberately, not `useEffect` + `setState` |
-| Database | Postgres via Neon (Vercel Marketplace) | Prisma 7, `PrismaPg` driver adapter — no `url` in the datasource block, see `prisma.config.ts` |
+| Database | Postgres via Neon — a **central** identity database plus **one database per organisation** | Two Prisma 7 schemas (`prisma/central`, `prisma/tenant`), `PrismaPg` driver adapter — no `url` in the datasource block, see `prisma.config.ts`. See §7 and `docs/PER_TENANT_ARCHITECTURE.md` |
 | Rate limiter / ops state | Postgres (`lib/opsState.ts`) | Token bucket for PSI pacing, live run-log events, scheduler heartbeat. Was Redis via Upstash until 21 Aug 2026 — removed after a real incident, see `docs/DECISIONS.md` §16 |
-| Raw JSON storage | Cloudflare D1 (`lib/blob.ts`, over its HTTP query API) | Pruned Lighthouse JSON (`AuditResult.rawJson` replacement). Was Vercel Blob until 21 Aug 2026 — moved after its free write-op allowance turned out smaller than one full sweep, and Cloudflare R2 (the obvious replacement) requires a card to enable even for free-tier use. See `docs/DECISIONS.md` §13 and §18 |
+| Raw JSON storage | Cloudflare D1, per organisation (`lib/blob.ts`, over its HTTP query API) | Pruned Lighthouse JSON (`AuditResult.rawJson` replacement). Was Vercel Blob until 21 Aug 2026 — moved after its free write-op allowance turned out smaller than one full sweep, and Cloudflare R2 (the obvious replacement) requires a card to enable even for free-tier use. See `docs/DECISIONS.md` §13 and §18 |
 | Durable execution | Vercel Workflow DevKit (`workflow`, `@workflow/core`) | Replaced BullMQ, 20 Aug 2026 — see `docs/DECISIONS.md` §11 |
-| Auth | Session cookie (JWT via `jose`), bcrypt password hashes | `proxy.ts` is a UX layer only; `requireSession()`/`requireCapability()` in every Server Action is the real boundary |
+| Auth | Session cookie (JWT via `jose`), bcrypt password hashes, optional Google sign-in | `proxy.ts` is a UX layer only; `requireSession()`/`requireCapability()` in every Server Action is the real boundary. MCP uses per-org bearer tokens instead — §9 |
+| Email | `EMAIL_TRANSPORT`: `none` (log only, default), `smtp` (nodemailer) or `resend` | A per-org SMTP override (`Organization.smtp*`) wins over both. Resend was wired but never called until 11 Nov 2026 |
 | Styling | Tailwind v4, CSS-first (`@theme inline` in `globals.css`) | No `tailwind.config.js` |
-| AI | `@anthropic-ai/sdk` | Recommendations generation, versioned per audit result |
+| AI | `@anthropic-ai/sdk` | Recommendations, versioned per audit result. Opt-in per organisation: the key is saved in Settings → Site (`Organization.anthropicApiKeyEnc`, encrypted, verified with `models.list` on save). Model is deployment-wide (`ANTHROPIC_MODEL`, default `claude-sonnet-5`). No env key and no Claude-CLI fallback since 11 Nov 2026 |
 | Testing | `node --test --experimental-strip-types` | No jest, no vitest |
 
 ## 2. Deployment topology
@@ -134,31 +136,70 @@ dev, CI, or production — there's nothing Vercel-specific to fail to pull.
 
 ## 7. Multi-tenancy
 
-`Organization` → `Membership` (role) → `Site` → `Group`/`Page` →
-`AuditRun`/`AuditResult`. Every service function that reads or writes
-tenant data takes an `organizationId`/`siteId` and every Server Action calls
-`requireSiteAccess`/`requireRunAccess` before touching a caller-supplied id —
-a Server Action is a public endpoint reachable by a crafted POST no matter
-what `proxy.ts`'s matcher says. Per-site PSI API key (not one shared key),
-so tenants don't share or starve each other's Google quota.
+Two layers of database since 22 Aug 2026 (`docs/DECISIONS.md` §19,
+`docs/PER_TENANT_ARCHITECTURE.md`):
+
+- **Central** (`centralPrisma`, `DATABASE_URL`): `User`, `Organization`,
+  `Membership` (role), `Invitation`, `PasswordReset`, `McpToken`,
+  `RateLimitBucket`. Identity only — no audit data.
+- **Tenant** (`getTenantPrisma(organizationId)`): each organisation connects
+  its **own** Neon database and Cloudflare D1 (Settings → Database). The
+  connection details are stored encrypted (`SECRET_BOX_KEY`,
+  `lib/crypto/secretBox.ts`). `Site` → `Group`/`Page` → `AuditRun`/
+  `AuditResult` live there. An org that hasn't connected one sees demo data
+  (`lib/onboarding/demoTenant.ts`) instead of an error.
+
+Every Server Action and route calls `requireSiteAccess`/`requirePageAccess`/
+`requireRunAccess` before touching a caller-supplied id — a Server Action is
+a public endpoint reachable by a crafted POST no matter what `proxy.ts`'s
+matcher says. PSI API key is per site, so tenants don't share or starve
+each other's Google quota.
 
 ## 8. Non-functional requirements
 
 - **Cost**: Postgres storage must not scale linearly with sweep count.
   Two independent controls: the 10-per-page retention window
-  (`retention.service.ts`), and Blob-backed raw JSON storage (~15× cheaper
-  per GB than Neon for the same bytes — `docs/DECISIONS.md` §13).
+  (`retention.service.ts`, `RESULT_RETAIN_RUNS`), and raw JSON pruned
+  (`lib/psi/prune.ts`) and stored in Cloudflare D1 rather than Postgres
+  (`docs/DECISIONS.md` §18). D1's database size cap is why the filmstrip,
+  full-page screenshot, treemap and `entities` are pruned rather than shown.
 - **Idempotency**: `@@unique([auditRunId, pageId, strategy])` on
-  `AuditResult` is the durable dedupe guarantee — it survives Redis
-  eviction, which a BullMQ jobId dedupe could not.
+  `AuditResult` is the durable dedupe guarantee — it survives a replayed
+  Workflow step.
 - **Accessibility**: the tool reports accessibility scores; it has to pass
   its own audit. One focus ring, everywhere, including inside SVG.
 - **Theming**: explicit System/Light/Dark, not just OS-following — added
   20 Aug 2026 after "the whole app followed the OS setting with no
   override" was raised directly.
 
+## 9. Interfaces outside the dashboard
+
+- **MCP** at `/api/mcp`: 9 tools, per-organisation bearer tokens (hashed,
+  revocable) created in Settings → Agent access. No full-sweep tool.
+- **Exports**: agent `.md` per page or group, and CSV of latest scores.
+
+Details, tool list and routes: `docs/INTEGRATIONS.md`.
+
+## 10. PSI data coverage
+
+The page report reads the stored (pruned) Lighthouse JSON, not only the
+extracted columns, so it shows everything PSI shows except media:
+
+- every audit's evidence: tables, LH13 `list` insights, `checklist`,
+  sub-items and the critical request chain
+- informational insights, manual checks, passed and not-applicable audits,
+  and per-category sections
+- metric tags (`metricSavings`) and stack-pack tips
+- page and origin CrUX data with distributions
+- run warnings, redirects, and browser and CPU benchmark
+
+The **Core Web Vitals assessment is LCP, INP and CLS only**
+(`cwvAssessment`, `lib/psi/buckets.ts`), not PSI's `overall_category`.
+It is re-derived on read, so older rows are correct too.
+
 ## Related documents
 
 `docs/PRD.md`, `docs/BACKEND_SCHEMA.md`, `docs/APP_FLOW.md`, `docs/UI_UX.md`,
-`docs/IMPLEMENTATION_PLAN.md`, and the numbered decisions in
-`docs/DECISIONS.md` (§1–§13) for the reasoning behind every choice above.
+`docs/IMPLEMENTATION_PLAN.md`, `docs/INTEGRATIONS.md`,
+`docs/PER_TENANT_ARCHITECTURE.md`, and the numbered decisions in
+`docs/DECISIONS.md` for the reasoning behind every choice above.

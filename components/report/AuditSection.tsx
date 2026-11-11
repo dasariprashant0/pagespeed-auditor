@@ -1,4 +1,5 @@
 import type { AuditItemDTO } from '@/lib/services/types';
+import { formatBytes } from '@/lib/report/format';
 
 /**
  * Native <details>/<summary>, nested one level: section, then each audit.
@@ -46,17 +47,22 @@ export function AuditSection({
 function fmtMs(v: number | null) {
   return v === null ? null : v < 1000 ? `${Math.round(v)} ms` : `${(v / 1000).toFixed(1)} s`;
 }
-function fmtBytes(v: number | null) {
-  return v === null ? null : v < 1024 ? `${v} B` : v < 1048576 ? `${Math.round(v / 1024)} KiB` : `${(v / 1048576).toFixed(1)} MiB`;
-}
 
 function AuditItem({ item: a }: { item: AuditItemDTO }) {
-  const bits = [fmtMs(a.savingsMs), fmtBytes(a.savingsBytes), a.displayValue].filter(Boolean);
-  const hasBody = Boolean(a.description) || Boolean(a.details);
+  const bits = [fmtMs(a.savingsMs), a.savingsBytes === null ? null : formatBytes(a.savingsBytes), a.displayValue].filter(Boolean);
+  const hasBody = Boolean(a.description) || a.details.length > 0 || a.stackTips.length > 0;
 
   const header = (
     <div className="flex items-start justify-between gap-3">
-      <span className="min-w-0 text-[12.5px]">{a.title}</span>
+      <span className="min-w-0 text-[12.5px]">
+        {a.title}
+        {/* PSI's "relevant to" metric chips: which metric fixing this moves. */}
+        {a.metrics.map((m) => (
+          <span key={m} className="ml-1.5 inline-block rounded-[4px] bg-[var(--surface-sunken)] px-1 align-[1px] text-[9.5px] font-medium text-[var(--muted)]">
+            {m}
+          </span>
+        ))}
+      </span>
       {bits.length > 0 && (
         <span className="shrink-0 text-[11px] text-[var(--muted)]">{bits.join(' · ')}</span>
       )}
@@ -80,7 +86,15 @@ function AuditItem({ item: a }: { item: AuditItemDTO }) {
 
       <div className="space-y-3 border-t border-[var(--border)] bg-[var(--surface-subtle)] px-3.5 py-3">
         {a.description && <Markdownish text={a.description} />}
-        {a.details && <DetailTable table={a.details} />}
+        {a.stackTips.map((s) => (
+          <div key={s.stack} className="rounded-[6px] border border-[var(--border)] bg-[var(--surface)] px-2.5 py-2">
+            <div className="mb-0.5 text-[10px] font-medium uppercase tracking-wide text-[var(--muted)]">{s.stack}</div>
+            <Markdownish text={s.tip} />
+          </div>
+        ))}
+        {a.details.map((t, i) => (
+          <DetailTable key={i} table={t} />
+        ))}
       </div>
     </details>
   );
@@ -121,11 +135,12 @@ function Markdownish({ text }: { text: string }) {
   return <p className="text-[12px] leading-relaxed text-[var(--muted)]">{parts}</p>;
 }
 
-function DetailTable({ table }: { table: NonNullable<AuditItemDTO['details']> }) {
+function DetailTable({ table }: { table: AuditItemDTO['details'][number] }) {
   const numeric = new Set(['bytes', 'ms', 'timespanMs', 'numeric']);
 
   return (
     <div>
+      {table.title && <div className="mb-1 text-[11px] font-medium">{table.title}</div>}
       <div className="-mx-1 overflow-x-auto">
         <table className="w-full min-w-[420px] border-collapse text-[11.5px]">
           <thead>
@@ -149,7 +164,7 @@ function DetailTable({ table }: { table: NonNullable<AuditItemDTO['details']> })
                 {table.headings.map((h) => (
                   <td
                     key={h.key}
-                    className={`max-w-[26rem] truncate px-2 py-1.5 align-top ${
+                    className={`max-w-[26rem] truncate whitespace-pre px-2 py-1.5 align-top ${
                       numeric.has(h.type) ? 'tnum text-right' : ''
                     }`}
                     title={row[h.key]}

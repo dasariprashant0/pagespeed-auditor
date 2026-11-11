@@ -27,6 +27,7 @@ where they disagree with the files above, the files above win):
 | `docs/BACKEND_SCHEMA.md` | The Prisma schema, explained model by model. |
 | `docs/IMPLEMENTATION_PLAN.md` | Status by stage, open items, the verification bar. |
 | `docs/PER_TENANT_ARCHITECTURE.md` | **The central-DB/tenant-DB split (Phase 5) — read this before touching auth, `lib/db/*`, or any Server Action/route/workflow that reads tenant data.** |
+| `docs/INTEGRATIONS.md` | MCP setup and tools, the `.md`/CSV exports, and every HTTP route. |
 
 Everything needed to continue lives in the repo. Nothing depends on a particular
 tool's session. `docs/archive/` holds superseded content (old `BUILD_LOG.md`
@@ -84,8 +85,10 @@ error. This used to also gate BullMQ's `lockDuration`; there's no queue lock
 anymore (see `docs/DECISIONS.md` §11) — retries now live inside one Workflow
 step.
 
-**6. Full sweeps are schedule-only.** No "audit everything now" button, ever, and
-no `run_full_sweep` MCP tool. See `docs/DECISIONS.md` §2.2.
+**6. Full sweeps: schedule, or the Overview's "Measure whole site" button.**
+Nothing else starts one — still no `run_full_sweep` MCP tool. The button was
+added 11 Nov 2026, reversing the old "no button, ever" rule; see
+`docs/DECISIONS.md` §2.2.
 
 **7. There is no standalone worker process anymore.** `npm run worker` doesn't
 exist. Audit dispatch is `lib/workflows/auditRun.ts` (Vercel Workflow), triggered

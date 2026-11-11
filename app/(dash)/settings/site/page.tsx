@@ -12,7 +12,8 @@ import {
 import { emailConfigProblem } from '@/lib/notify/email';
 import { formatBytes } from '@/lib/view/bytes';
 import { SettingsNav } from '@/components/settings/SettingsNav';
-import { AddSiteForm, EditSiteForm, PsiKeyForm } from '@/components/settings/SiteForms';
+import { AddSiteForm, AiKeyForm, EditSiteForm, PsiKeyForm } from '@/components/settings/SiteForms';
+import { aiEnabledForOrg } from '@/lib/services/org.service';
 import { IngestButton } from '@/components/settings/IngestButton';
 
 export const dynamic = 'force-dynamic';
@@ -37,10 +38,11 @@ export default async function SiteSettingsPage() {
   const canEdit = can(ctx.role, 'site:manage');
   const site = sites[0] ?? null;
 
-  const [groups, history, orgEmail] = await Promise.all([
+  const [groups, history, orgEmail, aiOn] = await Promise.all([
     site ? demoAwareListGroupsWithAggregates(ctx.organizationId, site.id, { strategy: 'mobile' }) : Promise.resolve([]),
     site ? demoAwareHistoryOverview(ctx.organizationId, site.id) : Promise.resolve(null),
     orgEmailRef(ctx.organizationId),
+    aiEnabledForOrg(ctx.organizationId),
   ]);
   const pageCount = groups.reduce((n, g) => n + g.pageCount, 0);
   const sweepEstimate = site ? await demoAwareEstimateRun(ctx.organizationId, pageCount * 2, site.id) : null;
@@ -79,6 +81,17 @@ export default async function SiteSettingsPage() {
               }
             >
               <PsiKeyForm site={site} canEdit={canEdit} />
+            </Panel>
+
+            <Panel
+              title="AI recommendations"
+              hint={
+                canEdit
+                  ? `${aiOn ? 'On.' : 'Off — nothing AI-related is shown anywhere until a key is saved.'} With a key, each page report gets a "What to fix first" panel that asks Claude for a prioritised fix list, and the MCP get_recommendation tool starts working. Usage is billed to your Anthropic account.`
+                  : `AI recommendations are ${aiOn ? 'on' : 'off'}. Only an admin can change this.`
+              }
+            >
+              <AiKeyForm hasKey={aiOn} canEdit={canEdit} />
             </Panel>
 
             <Panel

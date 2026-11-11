@@ -135,3 +135,66 @@ export async function getTopIssues(organizationId: string, opts: TopIssueOptions
     } satisfies TopIssueDTO;
   });
 }
+
+export interface IssuePagesDTO {
+  auditId: string;
+  title: string;
+  /** Pages measured in the snapshot run -- the denominator for "n of m". */
+  pagesTotal: number;
+  snapshotAt: string | null;
+  pages: Array<{
+    pageId: string;
+    path: string;
+    url: string;
+    displayValue: string | null;
+    savingsMs: number | null;
+    savingsBytes: number | null;
+  }>;
+}
+
+/**
+ * The drill-down behind one Top Issues row: which pages have it, biggest
+ * saving first. Same snapshot run as getTopIssues, so the count here always
+ * matches the row that was clicked.
+ */
+export async function getIssuePages(
+  organizationId: string,
+  auditId: string,
+  opts: { strategy: PsiStrategy; siteId?: string },
+): Promise<IssuePagesDTO | null> {
+  const prisma = await getTenantPrisma(organizationId);
+  const run = await findSnapshotRun(organizationId, opts.siteId);
+  if (!run) return null;
+
+  const where = { auditRunId: run.id, strategy: opts.strategy };
+  const [rows, pagesTotal] = await Promise.all([
+    prisma.auditIssue.findMany({
+      where: { ...where, auditId },
+      orderBy: [{ savingsMs: { sort: 'desc', nulls: 'last' } }, { page: { path: 'asc' } }],
+      select: {
+        title: true,
+        displayValue: true,
+        savingsMs: true,
+        savingsBytes: true,
+        page: { select: { id: true, path: true, url: true } },
+      },
+    }),
+    prisma.auditResult.count({ where: { ...where, status: 'ok' } }),
+  ]);
+  if (rows.length === 0) return null;
+
+  return {
+    auditId,
+    title: rows[0].title,
+    pagesTotal,
+    snapshotAt: run.finishedAt?.toISOString() ?? null,
+    pages: rows.map((r) => ({
+      pageId: r.page.id,
+      path: r.page.path,
+      url: r.page.url,
+      displayValue: r.displayValue,
+      savingsMs: r.savingsMs === null ? null : Math.round(r.savingsMs),
+      savingsBytes: r.savingsBytes,
+    })),
+  };
+}

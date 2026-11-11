@@ -25,7 +25,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ pageId: 
   // two separate files it has to correlate loses exactly that.
   const wanted: PsiStrategy[] =
     asked === 'both' ? ['mobile', 'desktop'] : asked === 'desktop' ? ['desktop'] : ['mobile'];
-  const includePassed = url.searchParams.get('passed') === '1';
+  // Full report by default (passed, not-applicable, manual checks included);
+  // ?passed=0 trims it to just the work to do.
+  const includePassed = url.searchParams.get('passed') !== '0';
 
   // Same id-in-the-URL exposure as the report page.
   try {

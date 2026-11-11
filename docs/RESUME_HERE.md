@@ -4,7 +4,9 @@
 > from 19 Aug 2026 (dashboard not yet built, a since-finished multi-agent
 > workflow's verification checklist, `npm run worker` as a real command).
 > Everything in that version is done now; this file describes what's
-> actually true today, not a snapshot to reconcile against.
+> actually true today, not a snapshot to reconcile against. Updated
+> 11 Nov 2026 (PR #7: manual sweeps, CWV fix, full PSI coverage, MCP
+> tokens page, changed-pages runs, Top Issues drill-down, CSV export).
 
 ## Read order
 
@@ -12,11 +14,13 @@
 2. `docs/IMPLEMENTATION_PLAN.md` — status by stage, open items, the
    verification bar for anything new
 3. `docs/PLAN.md` / `docs/DECISIONS.md` — original architecture plan, and
-   why things are the way they are (numbered, §1–§13)
+   why things are the way they are (numbered, §1–§20)
 4. `docs/BUILD_LOG.md` — full chronological history, most recent first
    read at the bottom
 5. `docs/PRD.md`, `docs/TRD.md`, `docs/APP_FLOW.md`, `docs/UI_UX.md`,
-   `docs/BACKEND_SCHEMA.md` — reference-format current-state doc suite
+   `docs/BACKEND_SCHEMA.md`, `docs/INTEGRATIONS.md`,
+   `docs/PER_TENANT_ARCHITECTURE.md` — reference-format current-state doc
+   suite
 6. `docs/SPEC.md` — the original brief
 
 Nothing needed to continue lives outside this repo.
@@ -27,8 +31,8 @@ Nothing needed to continue lives outside this repo.
 Workflow, not a queue worker — see `docs/DECISIONS.md` §11), the
 dashboard, scheduling, notifications, regressions, AI recommendations, a
 9-tool MCP server, and a multi-tenant `Organization`/`Membership`/role
-model throughout. Deployed to Vercel with Neon (Postgres) and Vercel
-Blob (see `docs/TRD.md` §1–2). No Redis -- the rate limiter, scheduler
+model throughout. Deployed to Vercel with Neon (Postgres) and Cloudflare
+D1 for raw PSI JSON (see `docs/TRD.md` §1–2, `docs/DECISIONS.md` §18). No Redis -- the rate limiter, scheduler
 heartbeat, and live run log all live in Postgres (`docs/DECISIONS.md` §16).
 
 Sign up at `/signup` — the first account becomes admin of a new
@@ -38,7 +42,7 @@ is configured in the app.
 ```bash
 npx tsc --noEmit   # must be clean
 npm run lint       # must be clean
-npm test           # must pass — 187 tests as of this writing
+npm test           # must pass — 220 tests as of 11 Nov 2026
 ```
 
 ## Two things that will cost you real time if you don't know them first
@@ -86,16 +90,18 @@ first:
 ## Outstanding
 
 See `docs/IMPLEMENTATION_PLAN.md` §4 for the current open-items table.
-Nothing here is blocking; there is no unverified in-flight work the way
-there was when this file was last written.
+Nothing is blocking. One thing is unverified: PR #7 (11 Nov 2026) passed
+typecheck, lint and tests but has not been checked in a browser. Check it on
+its Vercel preview before merging, including one real "Measure changed
+pages" run, since Workflow can't be trusted locally.
 
 ## Decisions that are settled — do not re-litigate
 
 Full reasoning in `docs/DECISIONS.md` (§1–§18). In brief: Postgres +
 Prisma + Vercel Workflow (BullMQ was replaced, not the original plan);
 batch size sits above the rate limiter's throughput need, not below; full
-sweeps are schedule-only with no manual button and no `run_full_sweep`
-MCP tool, ever; group aggregate is the mean with the worst page shown
+sweeps start from the schedule or the Overview's "Measure whole site"
+button (added 11 Nov 2026, §2.2), never from MCP -- no `run_full_sweep`; group aggregate is the mean with the worst page shown
 beside it; the `AuditIssue` side table (never aggregate over `rawJson`);
 `GroupAlias` so merged groups don't reappear; pages are deactivated not
 deleted; Server Actions for all UI mutations with `requireSession()`/

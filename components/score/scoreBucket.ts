@@ -1,12 +1,7 @@
-/** PSI's own bands. Shared by every score surface so they cannot drift apart. */
-export type ScoreBand = 'fail' | 'average' | 'pass';
+/** PSI's own bands, defined once in lib/psi/buckets.ts so every score surface agrees. */
+import { scoreBand, type ScoreBand } from '@/lib/psi/buckets';
 
-export function scoreBand(score: number | null | undefined): ScoreBand | null {
-  if (score === null || score === undefined || Number.isNaN(score)) return null;
-  if (score < 50) return 'fail';
-  if (score < 90) return 'average';
-  return 'pass';
-}
+export { scoreBand, type ScoreBand };
 
 export const BAND_LABEL: Record<ScoreBand, string> = {
   fail: 'Poor',

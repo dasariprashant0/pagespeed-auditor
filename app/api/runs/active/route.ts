@@ -45,16 +45,8 @@ export async function GET() {
   // One measurement shared by every run in the response.
   const seed = runs.length > 0 ? (await estimateRun(session.organizationId, 1)).throughputPerSecond : undefined;
 
-  // Retry backoff now happens inside one workflow step (lib/workflows/auditRun.ts)
-  // rather than as BullMQ delayed jobs, so there is no longer a queue to
-  // introspect for "how many are waiting out a backoff" -- a run mid-retry
-  // just looks like a normal in-flight page until it either succeeds or
-  // exhausts its attempts.
-  const retryingJobs = 0;
-  const nextRetryInSeconds: number | null = null;
-
   return NextResponse.json(
-    { runs: runs.map((r) => ({ ...toRunProgress(r, undefined, seed), retryingJobs, nextRetryInSeconds })) },
+    { runs: runs.map((r) => toRunProgress(r, undefined, seed)) },
     { headers: { 'cache-control': 'no-store' } },
   );
 }

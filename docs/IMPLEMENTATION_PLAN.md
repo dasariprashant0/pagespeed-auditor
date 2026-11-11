@@ -13,6 +13,9 @@
 > architectural change than anything else in this table; read
 > `docs/PER_TENANT_ARCHITECTURE.md` before touching auth, `lib/db/*`, or
 > any Server Action/route/workflow that reads tenant data.
+>
+> **Updated 11 Nov 2026**: §1 table re-checked against the code; §2b added
+> for that day's work; §4 open items refreshed.
 
 ## 1. Status by stage
 
@@ -21,18 +24,17 @@
 | 1. Ingestion, PSI, queue, storage | **Done** | Queue is now Vercel Workflow, not BullMQ — `docs/DECISIONS.md` §11 |
 | 2. Dashboard | **Done** | Full interface rebuild 20 Aug 2026 — `docs/DECISIONS.md` §10 |
 | 3. Scheduling | **Done** | Vercel Cron, Hobby-plan daily-only limit — `docs/DECISIONS.md` §11 |
-| 4. Notifications | **Done** | Email (Resend/SMTP) + Slack, sweeps only |
+| 4. Notifications | **Done** | Email (SMTP, Resend, or a per-org SMTP override) + Slack, sweeps only. Resend was never actually called until 11 Nov 2026 |
 | 5. Trends / regressions | **Done** | Score history per page, regression badges |
 | 6. AI recommendations | **Done** | Versioned, Claude via `@anthropic-ai/sdk` |
-| MCP server | **Done, not being extended this pass** | 9 tools, full list in `docs/PRD.md` §4 |
+| MCP server | **Done, not being extended this pass** | 9 tools; tokens managed in Settings → Agent access since 11 Nov 2026 — `docs/INTEGRATIONS.md` |
 | Multi-tenant rebuild | **Done** | `Organization`/`Membership`/role model throughout (shared database, one org's data alongside another's) |
 | Per-tenant cutover (Phase 5) | **Done** | Each org now provisions its OWN Neon + Cloudflare D1, not a shared one — see `docs/PER_TENANT_ARCHITECTURE.md`, `docs/DECISIONS.md` §19, and the Phase 5 entries in `docs/BUILD_LOG.md`. Phase 6 (dropping the old shared tables, removing the `CLOUDFLARE_*` env fallback) is **not started** |
-| Onboarding tour | **Done** | Per-membership, DOM-anchored, opportunistic tour plus a persistent floating checklist — `docs/superpowers/specs/2026-08-22-onboarding-tour-design.md`, BUILD_LOG's 22 Aug entry |
+| Onboarding tour | **Built, switched off** | Per-membership tour plus floating checklist — `docs/superpowers/specs/2026-08-22-onboarding-tour-design.md`. Disabled at the wiring level after it misbehaved; see BUILD_LOG "onboarding tour disabled" |
+| Manual sweeps + changed-pages runs | **Done, 11 Nov 2026** | "Measure whole site" and "Measure changed pages" on the Overview — `docs/DECISIONS.md` §2.2, §20 |
+| Full PSI report coverage | **Done, 11 Nov 2026** | Every evidence type, origin data, CWV on LCP/INP/CLS only — `docs/TRD.md` §10 |
+| Top issue drill-down, CSV export | **Done, 11 Nov 2026** | `/issues/[auditId]`, `/api/reports/csv` |
 
-`CLAUDE.md`'s scope note ("current scope: stages 1–2... MCP deliberately
-out of scope") is stale against this table — flagged in `docs/PRD.md` §6
-rather than silently corrected, since it wasn't this session's call to
-rewrite that file's framing.
 
 ## 2. What shipped in the 20 Aug 2026 session, in order
 
@@ -72,6 +74,25 @@ Item 10 shares the same unresolved local-verification limitation as item
 *removed* a local-verification gap rather than adding one: unlike Vercel
 Blob, D1's HTTP API works identically from local dev.
 
+## 2b. What shipped on 11 Nov 2026 (PR #7)
+
+1. "Measure whole site" button (reverses the old "no button" rule; still no
+   MCP full sweep).
+2. Core Web Vitals pass/fail on LCP, INP and CLS only, re-derived on read.
+3. Fixed field distribution bars never rendering (wrong `fieldJson` shape).
+4. Report and `.md` show all PSI evidence: LH13 insight lists, sub-items,
+   request chain, informational insights, manual checks, per-category
+   sections, metric tags, stack tips, origin data, Speed Index, run
+   warnings and redirects.
+5. Bugs: Resend transport never sent; paused/cancelled runs read "queued".
+6. Dead code removed (~20 items), helpers deduplicated,
+   `WORKER_CONCURRENCY` default 48.
+7. Settings → Agent access (MCP tokens), "Measure changed pages", Top
+   Issues drill-down, CSV export.
+8. Docs: `docs/INTEGRATIONS.md` added; this suite brought up to date.
+
+Not yet browser-verified; verify on the Vercel preview for PR #7.
+
 ## 3. Standing risk: local dev cannot verify everything
 
 Two separate things can only be trusted against a real Vercel deployment,
@@ -102,6 +123,12 @@ build are necessary, not sufficient.
 | 3 | ~~Two PSI fixtures never captured~~ | **Half-resolved, 22 Aug 2026** — `origin_fallback: true` is now a real captured fixture (`test/fixtures/psi/mobile-origin-fallback.json`, httpbin.org), asserted against in `test/extract.test.ts`. `loadingExperience` absent entirely was NOT reproduced despite probing 6 real public reference domains (Wikipedia, MDN, RFC editor, IANA, w3.org, httpbin) -- every one had at least origin-level CrUX volume. Stays covered only by the hand-built `{}` case already in `test/extract.test.ts`; genuinely zero-CrUX real domains appear to be rare even among obscure public sites |
 | 4 | ~~`AUTH_USERNAME`/`AUTH_PASSWORD_HASH` single-tenant leftovers~~ | **Resolved** — these were dead: read only by a display panel and by `scripts/hash-password.ts`/`set-password.ts`, never by the real per-user login path in `lib/services/account.service.ts`. Removed from `lib/env.ts`, `.env`/`.env.example`, the Settings → Automation panel, `package.json`, and the two scripts deleted. `scripts/reset-password.ts` is unrelated and stays — it resets a real `User` row's password hash |
 | 5 | MCP tool surface | Feature-complete, explicitly not being extended this pass (direct instruction, 20 Aug 2026) |
+| 6 | Onboarding tour | Switched off; needs debugging before re-enabling |
+| 7 | Regressions only on the page report | Not in the sweep email or a site-wide list yet |
+| 8 | Columns written but never read | `AuditRun.skipReason`, `AuditRun.completedAt`, `User.lastLoginAt` — show them or drop them |
+| 9 | Run history per page not shown | `getPageRunHistory` and `RunHistoryTable` were removed as unused on 11 Nov 2026; rebuild if wanted |
+| 10 | Old rows' stored markdown | MCP `get_report` returns the "Overall" line from PSI's `overall_category` for rows written before 11 Nov 2026; ages out with retention |
+| 11 | Phase 6 of the per-tenant work | Dropping old shared tables, removing the `CLOUDFLARE_*` env fallback — not started |
 
 ## 5. Verification bar for anything added to this list
 
@@ -109,8 +136,8 @@ Match what this session actually did, not a lower bar:
 `npx tsc --noEmit`, `npm run lint`, `npm test`, and for anything
 UI-facing, a real browser check (this session used Playwright against
 both local dev and the live Vercel deployment) — not just "the types
-compile." For anything touching Workflow, Postgres migrations, or Blob,
-verify against a live Vercel deployment specifically, per §3.
+compile." For anything touching Workflow or Postgres migrations, verify
+against a live Vercel deployment specifically, per §3.
 
 ## Related documents
 

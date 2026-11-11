@@ -3,6 +3,8 @@
 import { requireCapability } from '@/lib/http/auth-guard';
 import { getTenantPrisma } from '@/lib/db/tenant';
 import { estimateRun, formatDuration } from '@/lib/services/estimate.service';
+import { changedPageIds } from '@/lib/services/run.service';
+import { defaultSite } from '@/lib/services/tenant.service';
 
 export type EstimatePreview = {
   jobs: number;
@@ -19,7 +21,7 @@ export type EstimatePreview = {
  * shown on the button and the number shown after clicking it agree.
  */
 export async function previewEstimateAction(input: {
-  kind: 'page' | 'group' | 'pages';
+  kind: 'page' | 'group' | 'pages' | 'site' | 'changed';
   ref: string;
   strategyCount?: number;
 }): Promise<EstimatePreview> {
@@ -30,6 +32,10 @@ export async function previewEstimateAction(input: {
   const pageCount =
     input.kind === 'page'
       ? 1
+      : input.kind === 'site'
+        ? await prisma.page.count({ where: { isActive: true } })
+      : input.kind === 'changed'
+        ? await changedCount(ctx.organizationId, prisma)
       // `ref` is already the exact comma-joined selection -- counting it
       // directly avoids a query for what's already known, and matches what
       // expandScope will actually do with the same ids.
@@ -45,4 +51,9 @@ export async function previewEstimateAction(input: {
     medianSeconds: Math.round(est.medianCallMs / 1000),
     sampleSize: est.sampleSize,
   };
+}
+
+async function changedCount(organizationId: string, prisma: Awaited<ReturnType<typeof getTenantPrisma>>): Promise<number> {
+  const site = await defaultSite(organizationId);
+  return site ? (await changedPageIds(prisma, site.id)).length : 0;
 }

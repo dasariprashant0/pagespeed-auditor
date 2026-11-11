@@ -1,7 +1,7 @@
 import { centralPrisma } from '../db/central.ts';
 import { getTenantPrisma } from '../db/tenant.ts';
 import { getD1Usage } from '../tenantDb/provision.ts';
-import { decryptSecret } from '../crypto/secretBox.ts';
+import { decryptSecret, encryptSecret } from '../crypto/secretBox.ts';
 import { NotFoundError } from '../errors.ts';
 import type { D1Credentials } from '../blob.ts';
 
@@ -105,4 +105,35 @@ export async function databaseUsageFor(organizationId: string): Promise<Database
   const d1 = d1Creds ? await getD1Usage(d1Creds.accountId, d1Creds.databaseId, d1Creds.apiToken) : null;
 
   return { neon, d1 };
+}
+
+const aiKeyContext = (organizationId: string) => `${organizationId}:anthropicApiKey`;
+
+/**
+ * The organisation's Anthropic key, or null when AI is off. Null hides every
+ * AI surface: the recommendation panel, generation, and MCP get_recommendation.
+ */
+export async function aiKeyForOrg(organizationId: string): Promise<string | null> {
+  const org = await centralPrisma.organization.findUnique({
+    where: { id: organizationId },
+    select: { anthropicApiKeyEnc: true },
+  });
+  return org?.anthropicApiKeyEnc ? decryptSecret(org.anthropicApiKeyEnc, aiKeyContext(organizationId)) : null;
+}
+
+/** Presence only -- for deciding what to render, without decrypting anything. */
+export async function aiEnabledForOrg(organizationId: string): Promise<boolean> {
+  const org = await centralPrisma.organization.findUnique({
+    where: { id: organizationId },
+    select: { anthropicApiKeyEnc: true },
+  });
+  return Boolean(org?.anthropicApiKeyEnc);
+}
+
+/** Stores (encrypted) or clears the key. The caller verifies it first. */
+export async function setAiKeyForOrg(organizationId: string, apiKey: string | null): Promise<void> {
+  await centralPrisma.organization.update({
+    where: { id: organizationId },
+    data: { anthropicApiKeyEnc: apiKey ? encryptSecret(apiKey, aiKeyContext(organizationId)) : null },
+  });
 }

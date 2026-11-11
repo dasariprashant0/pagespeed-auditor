@@ -2,7 +2,6 @@ import { getTenantPrisma } from '../db/tenant.ts';
 import { scoreBand } from '../psi/buckets.ts';
 import type { PsiStrategy } from '../psi/types.ts';
 import {
-  SMALL_GROUP_THRESHOLD,
   type FourScores,
   type GroupSummaryDTO,
   type PageListItemDTO,
@@ -110,25 +109,6 @@ export function worstPerformance(
   return { score, pageId };
 }
 
-/**
- * Splits group cards into the ones worth their own card and the tail that gets
- * collapsed behind one "Small groups (n)" card.
- *
- * Presentation only -- see docs/DECISIONS.md 5.1. The real site produces 68
- * groups from 747 pages, 42 of them holding exactly one page, and 68 cards is
- * not a home screen. The data model is untouched so this stays reversible.
- */
-export function splitSmallGroups<T extends { pageCount: number }>(
-  groups: T[],
-  threshold: number = SMALL_GROUP_THRESHOLD,
-): { primary: T[]; small: T[] } {
-  const primary: T[] = [];
-  const small: T[] = [];
-  for (const g of groups) (g.pageCount >= threshold ? primary : small).push(g);
-  return { primary, small };
-}
-
-/** Which denormalized pointer this strategy reads. */
 export function latestResultIdFor(
   page: { latestResultMobileId: string | null; latestResultDesktopId: string | null },
   strategy: PsiStrategy,
@@ -144,7 +124,7 @@ export interface StrategyOptions {
   strategy: PsiStrategy;
 }
 
-/** Scores only. Narrower than AUDIT_RESULT_SUMMARY_SELECT: group cards need no metrics. */
+/** Scores only. Group cards need no metrics. */
 const GROUP_SCORE_SELECT = {
   pageId: true,
   status: true,
@@ -459,93 +439,4 @@ export async function getScoreHistory(
       t: g._max.createdAt!.toISOString(),
       v: g._avg.performanceScore === null ? null : Math.round(g._avg.performanceScore),
     }));
-}
-
-// ---------------------------------------------------------------------------
-// Run-by-run history
-// ---------------------------------------------------------------------------
-
-export interface PageRunHistoryEntry {
-  resultId: string;
-  runId: string;
-  runType: string;
-  triggeredBy: string;
-  strategy: string;
-  at: string;
-  status: 'ok' | 'error';
-  runtimeError: string | null;
-  scores: FourScores;
-  /** Change against the run before it, so a regression is visible in the list. */
-  performanceDelta: number | null;
-  lcp: number | null;
-  cls: number | null;
-  hasRecommendation: boolean;
-}
-
-/**
- * Every retained run for one page, newest first.
- *
- * This is the "we checked weekly, what changed over the month" view. Deltas are
- * computed against the previous SUCCESSFUL run rather than the previous row --
- * comparing against an error row's nulls would show a phantom collapse and then
- * a phantom recovery.
- */
-export async function getPageRunHistory(
-  organizationId: string,
-  pageId: string,
-  strategy: PsiStrategy,
-  limit = 20,
-): Promise<PageRunHistoryEntry[]> {
-  const prisma = await getTenantPrisma(organizationId);
-  const rows = await prisma.auditResult.findMany({
-    where: { pageId, strategy },
-    orderBy: { createdAt: 'desc' },
-    take: limit,
-    select: {
-      id: true,
-      createdAt: true,
-      status: true,
-      runtimeError: true,
-      performanceScore: true,
-      accessibilityScore: true,
-      bestPracticesScore: true,
-      seoScore: true,
-      lcp: true,
-      cls: true,
-      auditRun: { select: { id: true, type: true, triggeredBy: true } },
-      // Just enough to show the "has advice" dot; the bodies are large.
-      recommendations: { where: { status: 'complete' }, select: { id: true }, take: 1 },
-    },
-  });
-
-  // Walk oldest-first so each entry can see the last good score before it.
-  const ascending = [...rows].reverse();
-  const deltas = new Map<string, number | null>();
-  let lastGood: number | null = null;
-  for (const r of ascending) {
-    const score = r.status === 'ok' ? r.performanceScore : null;
-    deltas.set(r.id, score !== null && lastGood !== null ? score - lastGood : null);
-    if (score !== null) lastGood = score;
-  }
-
-  return rows.map((r) => ({
-    resultId: r.id,
-    runId: r.auditRun.id,
-    runType: r.auditRun.type,
-    triggeredBy: r.auditRun.triggeredBy,
-    strategy,
-    at: r.createdAt.toISOString(),
-    status: r.status === 'error' ? 'error' : 'ok',
-    runtimeError: r.runtimeError,
-    scores: {
-      performance: r.performanceScore,
-      accessibility: r.accessibilityScore,
-      bestPractices: r.bestPracticesScore,
-      seo: r.seoScore,
-    },
-    performanceDelta: deltas.get(r.id) ?? null,
-    lcp: r.lcp,
-    cls: r.cls,
-    hasRecommendation: r.recommendations.length > 0,
-  }));
 }

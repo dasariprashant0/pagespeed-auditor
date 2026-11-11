@@ -30,7 +30,7 @@ export default async function SettingsPage() {
   const [groups, scheduleData, scheduler] = await Promise.all([
     demoAwareListGroupsWithAggregates(ctx.organizationId, site.id, { strategy: 'mobile' }),
     demoAwareScheduleAutomationData(ctx.organizationId, site.id),
-    // Never let a Redis blip take the settings page down with it: not knowing
+    // Never let a database blip take the settings page down with it: not knowing
     // whether the scheduler is ticking is a worse answer than a 500, but only just.
     schedulerHealth(ctx.organizationId).catch(() => ({ alive: false, lastTickSecondsAgo: null })),
   ]);
@@ -72,7 +72,7 @@ export default async function SettingsPage() {
           title="Automatic site check"
           hint={`Tests all ${activePages} pages on mobile and desktop. Takes ${formatDuration(sweepEstimate.seconds)}${
             sweepEstimate.measured ? '' : ' (rough estimate until a few pages have been tested)'
-          }, so it runs on a schedule rather than on demand — usually overnight. You can still test any single page or section whenever you like.`}
+          }, so it usually runs on a schedule — overnight. You can also start one from the Overview page, or test any single page or section whenever you like.`}
         >
           <ScheduleForm
             initial={{

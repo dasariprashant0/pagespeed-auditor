@@ -8,8 +8,8 @@ import type { RunProgressDTO, RunStatus, SiteSummaryDTO } from './types.ts';
 /**
  * Site-level headline numbers and audit-run progress.
  *
- * The progress shape is polled, not pushed: the run executes in a separate
- * worker process that writes progress to Postgres, so a Next SSE handler would
+ * The progress shape is polled, not pushed: the run executes in a Vercel
+ * Workflow that writes progress to Postgres, so a Next SSE handler would
  * poll this same row and re-emit it. See docs/DECISIONS.md 2.7.
  */
 
@@ -17,7 +17,7 @@ import type { RunProgressDTO, RunStatus, SiteSummaryDTO } from './types.ts';
 // Pure progress arithmetic
 // ---------------------------------------------------------------------------
 
-const RUN_STATUSES: readonly RunStatus[] = ['queued', 'running', 'completed', 'failed', 'skipped'];
+const RUN_STATUSES: readonly RunStatus[] = ['queued', 'running', 'paused', 'completed', 'failed', 'cancelled', 'skipped'];
 
 export function asRunStatus(value: string): RunStatus {
   return (RUN_STATUSES as readonly string[]).includes(value) ? (value as RunStatus) : 'queued';
@@ -131,8 +131,6 @@ export function toRunProgress(
     completedJobs: run.completedJobs,
     failedJobs: run.failedJobs,
     percentComplete: percentComplete(run.completedJobs, run.totalJobs, status),
-    retryingJobs: 0,
-    nextRetryInSeconds: null,
     startedAt: run.startedAt ? run.startedAt.toISOString() : null,
     finishedAt: run.finishedAt ? run.finishedAt.toISOString() : null,
     // Only a live run has an ETA worth showing.
@@ -154,17 +152,6 @@ export async function getRunProgress(organizationId: string, runId: string): Pro
   const prisma = await getTenantPrisma(organizationId);
   const run = await prisma.auditRun.findUnique({ where: { id: runId }, select: RUN_SELECT });
   return run ? toRunProgress(run) : null;
-}
-
-export async function listRecentRuns(organizationId: string, siteId: string, limit = 20): Promise<RunProgressDTO[]> {
-  const prisma = await getTenantPrisma(organizationId);
-  const runs = await prisma.auditRun.findMany({
-    where: { siteId },
-    select: RUN_SELECT,
-    orderBy: { startedAt: 'desc' },
-    take: limit,
-  });
-  return runs.map((r) => toRunProgress(r));
 }
 
 /**

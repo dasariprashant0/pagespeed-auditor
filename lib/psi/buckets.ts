@@ -54,6 +54,25 @@ export function bucketFromCruxCategory(category: string | null | undefined): Buc
   }
 }
 
+/**
+ * The Core Web Vitals assessment: LCP, INP and CLS only -- FCP and TTFB are
+ * diagnostic and never decide pass/fail. Deliberately NOT PSI's
+ * `overall_category`, which also folds in FCP/TTFB, so a page with good LCP,
+ * INP and CLS but slow TTFB came out "Failed".
+ *
+ * Same rule pagespeed.web.dev uses: the worst of the three at p75, and INP may
+ * be missing (low-traffic URLs often lack interaction samples) -- then LCP and
+ * CLS alone decide. Without both LCP and CLS there is no assessment. Only
+ * 'good' means passed.
+ */
+export function cwvAssessment(metrics: Partial<Record<MetricId, { bucket: Bucket }>>): Bucket | null {
+  const lcp = metrics.lcp?.bucket;
+  const cls = metrics.cls?.bucket;
+  if (!lcp || !cls) return null;
+  const core = [lcp, cls, metrics.inp?.bucket].filter((b): b is Bucket => !!b);
+  return core.reduce((worst, b) => (BUCKET_RANK[b] > BUCKET_RANK[worst] ? b : worst));
+}
+
 /** PSI's own score bands: red <50, orange 50-89, green 90+. */
 export type ScoreBand = 'fail' | 'average' | 'pass';
 

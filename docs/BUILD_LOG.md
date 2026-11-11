@@ -1080,3 +1080,145 @@ than the "several minutes" the route was designed to tolerate.
 Verified: `npm run typecheck` clean, `npm run lint` 0 errors, `npm test`
 190/190 passing (workflow YAML has no test surface; verified instead by
 manually dispatching the changed workflow file, which succeeded).
+
+### 11 Nov 2026 — Manual "Measure whole site" button
+
+Added an on-demand full sweep, reversing the UI half of DECISIONS §2.2
+(the MCP half stands: still no `run_full_sweep` tool). `queueAuditAction`
+and `previewEstimateAction` accept `kind: 'site'`; it reuses the existing
+`expandScope` site branch and records a `full_sweep` run with
+`triggeredBy: 'manual'`, so history, finalize and sweep summaries treat it
+exactly like a scheduled one. Same `audits:run` gate and one-run-per-site
+refusal as page/group runs. Button lives in the Overview header;
+Automation settings copy updated to point at it.
+
+### 11 Nov 2026 — CWV assessment fix, and the report now shows everything PSI returns
+
+**Bug:** the "Core Web Vitals Passed/Failed" badge used PSI's
+`overall_category`, which also folds in FCP and TTFB. Now
+`cwvAssessment()` (`lib/psi/buckets.ts`) decides it from LCP, INP and CLS
+only (worst of the three at p75; INP may be missing, then LCP+CLS decide;
+no LCP or CLS = no assessment). Applied on write (`extractField`) AND on
+read (`buildFieldData` re-derives it), so existing rows are corrected
+without a backfill.
+
+**Bug:** field distribution bars never rendered for real rows —
+`fieldJsonOf` stores `{ loadingExperience, originLoadingExperience }` but
+the reader looked for a top-level `.metrics`. Fixed in `cruxBlockOf`.
+
+**PSI coverage gaps closed** (all read-side from the stored rawJson, so
+they apply to existing results too, except stack tips):
+- LH13 `list` insights (CLS culprits, LCP breakdown, request chains,
+  forced reflow), `checklist` (document latency), `network-tree` and
+  table `subItems` now render as evidence. Before, only flat tables did.
+- Informative insights (LCP breakdown) were filed under "Passed" with no
+  evidence; they get an "Informational insights" section.
+- Manual checks split out of "Not applicable" (PSI's "Additional items to
+  manually check"). A11y / Best Practices / SEO are separate sections.
+- Per-audit metric tags from `metricSavings` (PSI's "relevant to" filter).
+- Origin field data shown alongside page data (PSI's URL/Origin toggle).
+- Lab Speed Index; run warnings and redirect banner; browser + CPU
+  benchmark in run conditions.
+- `stackPacks` no longer pruned (only each pack's `iconDataURL`), so
+  stack-specific tips show for runs from now on.
+- The downloadable `.md` carries all of the above; passed and
+  not-applicable lists are now included by default (`?passed=0` trims).
+
+Deliberately still not shown: the filmstrip (`screenshot-thumbnails`,
+~259 KB/run) and full-page screenshot — D1 storage is the constraint
+(see the "exceeded maximum DB size" fix); the script treemap; `entities`.
+
+### 11 Nov 2026 — Two bug fixes, dead-code sweep, four features
+
+**Bugs fixed**
+- `EMAIL_TRANSPORT=resend` never sent: `sendEmail` always used SMTP and
+  `sendViaResend` had no caller. It now routes there when there is no
+  per-org SMTP override.
+- `asRunStatus` lacked `paused`/`cancelled`, so those runs read as
+  "queued" in the progress bar and MCP `get_run_status`.
+
+**Removed (no callers)**: run.service's duplicate `percentComplete` /
+`etaSeconds` / `getRunProgress`; `listRecentRuns`; `splitSmallGroups` +
+`SMALL_GROUP_THRESHOLD`; `getPageRunHistory`; `AUDIT_RESULT_SUMMARY_SELECT`;
+`requireTenantPrisma`; `jsonOk` / `badOrigin` / `errorResponse`;
+`ValidationError`; `targetRequestsPerSecond`; env `PSI_FAKE`, `SITE_NAME`,
+`SYNC_GROUP_PAGE_LIMIT`; the always-zero `retryingJobs` /
+`nextRetryInSeconds` and their UI branch; components GroupCard,
+RunHistoryTable, ScoreSpectrum, PriorityForm. `WORKER_CONCURRENCY`
+default 20 → 48 to match CLAUDE.md rule 5. `scoreBand`, `slugify` and the
+byte formatter now exist once (sizes read KiB/MiB everywhere). Stale
+Redis/worker comments corrected where they described current behaviour.
+
+**Features**
+- **Settings → Agent access** (`/settings/agents`): create and revoke MCP
+  tokens (developer:access); the token is shown once with a ready
+  `claude mcp add` command. Before this, a token needed a manual DB insert.
+- **Measure changed pages** (Overview): audits pages whose sitemap
+  `lastmod` is newer than `lastAuditedAt`, plus never-audited ones. Frozen
+  into a `pages` scope at queue time — a live scope would shrink on resume
+  as pages get measured. Recorded as a `group` run, not a full sweep.
+- **Top issue drill-down** (`/issues/[auditId]`): every affected page in
+  the same snapshot run, biggest saving first, with "Measure these n".
+- **CSV export** (`/api/reports/csv`, `?group=` optional): latest scores,
+  lab and field metrics per page per strategy; CWV pass/fail recomputed
+  from LCP/INP/CLS so old rows are correct. Formula-injection safe.
+
+Also: the active-run bar showed a raw comma-joined id list for page
+selections; it now shows "n selected pages".
+
+Verified: `tsc` clean, lint 0 errors, 220/220 tests. Not visually checked
+(dev server not running).
+
+Review sweep before commit: the redirect banner now ignores a trailing
+slash / `#fragment` difference; "changed pages" also picks up pages
+missing a mobile or desktop result (`lastAuditedAt` covers both); MCP
+token labels capped at 60 chars server-side; APP_FLOW, PRD and
+RESUME_HERE updated (they still said "no manual button" / Vercel Blob).
+Known and left alone: the stored `markdownReport` on rows written before
+today (what MCP `get_report` returns) still says "Overall" from PSI's
+`overall_category`; new rows say the LCP/INP/CLS assessment.
+
+### 11 Nov 2026 — Documentation brought up to date
+
+Every reference doc re-checked against the code:
+- BACKEND_SCHEMA and TRD now describe the central + per-tenant databases
+  (they still described one shared schema).
+- UI_UX's component table matches what exists. `SetupChecklist`,
+  `RoleTourBanner` and `SpectrumRibbon` were gone; the tour is marked as
+  switched off.
+- IMPLEMENTATION_PLAN status and open items refreshed.
+- PRD features and roles updated; its "known drift" section is resolved.
+- README dropped the removed `MCP_BEARER_TOKEN` setup in favour of the
+  Agent access page, added the tenant commands, and links the
+  PER_TENANT local-migration warning.
+- RESUME_HERE and APP_FLOW updated.
+- PLAN amended where §2.2 and §20 changed it.
+- New `docs/INTEGRATIONS.md`: MCP setup and tools, `.md`/CSV exports, HTTP
+  routes. New DECISIONS §20: the CWV rule, and why "changed pages" is a
+  frozen selection.
+- Also changed: the MCP `run_group_audit` description no longer says full
+  sweeps are schedule-only, and the tenant schema's `AuditRun.status` /
+  `scopeLabel` comments list the real values.
+
+### 11 Nov 2026 — AI recommendations are opt-in per organisation
+
+Problem: no AI is set up, but the "What to fix first" panel still showed on
+every page report.
+
+- New `Organization.anthropicApiKeyEnc` (central migration
+  `20261111120000_org_anthropic_key`, additive), encrypted with secretBox
+  (context `${orgId}:anthropicApiKey`).
+- Settings → Site has an "AI recommendations" panel. An admin saves a key,
+  which is checked with Anthropic (`models.list`, no tokens spent) before
+  it is stored. Saving an empty field turns AI off.
+- Without a key:
+  - the recommendation panel is not rendered at all;
+  - `getOrCreateRecommendation` refuses before claiming a version slot;
+  - MCP `get_recommendation` replies that AI is off.
+- `lib/ai/provider.ts` is now a single Anthropic path that uses the org's
+  key. The env `ANTHROPIC_API_KEY`, the Claude-CLI adapter and
+  `RECOMMENDATION_PROVIDER` were removed. `ANTHROPIC_MODEL` (default
+  `claude-sonnet-5`) stays deployment-wide.
+
+Verified: tsc clean, lint 0 errors, 220/220 tests. A local `next build`
+stalled in the sandbox; the Vercel preview build is the check.

@@ -19,7 +19,7 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { PsiRateLimiter } from '../lib/psi/rateLimiter.ts';
 
 const JOBS = Number(process.env.JOBS ?? 60);
-const CONCURRENCY = Number(process.env.WORKER_CONCURRENCY ?? 20);
+const CONCURRENCY = Number(process.env.WORKER_CONCURRENCY ?? 48);
 const MAX = Number(process.env.PSI_RATE_MAX ?? 3);
 const WINDOW = Number(process.env.PSI_RATE_WINDOW_MS ?? 4000);
 

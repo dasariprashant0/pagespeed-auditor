@@ -12,7 +12,7 @@ const TERMINAL = new Set(['completed', 'failed', 'cancelled', 'skipped']);
 /**
  * Live progress for whatever is running, on every screen.
  *
- * Polling rather than SSE: the run executes in a separate worker process
+ * Polling rather than SSE: the run executes in a Vercel Workflow
  * writing to Postgres, so an SSE handler would poll Postgres and re-emit --
  * identical query load plus a long-lived connection. See docs/PLAN.md.
  */
@@ -70,26 +70,12 @@ export function ActiveRunBar({ canRunAudits = false }: { canRunAudits?: boolean 
 }
 
 function RunRow({ run: r, canRunAudits }: { run: RunProgressDTO; canRunAudits: boolean }) {
-  const remaining = r.totalJobs - r.completedJobs;
-
-  /*
-   * When everything left is backing off after a PSI failure, the observed-rate
-   * ETA is meaningless -- it keeps promising seconds while a job sits on a
-   * multi-minute retry, which reads as a hang rather than as the retry policy
-   * doing its job. Say what is actually happening instead.
-   */
-  const allRemainingRetrying = r.retryingJobs > 0 && r.retryingJobs >= remaining;
-
-  let tail: string;
-  if (allRemainingRetrying) {
-    const s = r.nextRetryInSeconds;
-    const when = s === null ? '' : s > 90 ? ` — next attempt in ~${Math.round(s / 60)} min` : ` — retrying in ${s}s`;
-    tail = `, ${remaining} retrying after a failed request${when}`;
-  } else if (r.etaSeconds !== null) {
-    tail = r.etaSeconds > 90 ? `, ~${Math.round(r.etaSeconds / 60)} min left` : `, ~${r.etaSeconds}s left`;
-  } else {
-    tail = '';
-  }
+  const tail =
+    r.etaSeconds === null
+      ? ''
+      : r.etaSeconds > 90
+        ? `, ~${Math.round(r.etaSeconds / 60)} min left`
+        : `, ~${r.etaSeconds}s left`;
 
   const held = r.status === 'paused';
   const text = held
@@ -108,7 +94,7 @@ function RunRow({ run: r, canRunAudits }: { run: RunProgressDTO; canRunAudits: b
             {r.scopeName ?? r.scopeLabel ?? r.type} ↗
           </Link>
         ) : (
-          <span className="shrink-0 text-[11px] font-medium">{r.scopeLabel ?? r.type}</span>
+          <span className="shrink-0 text-[11px] font-medium">{r.scopeName ?? r.scopeLabel ?? r.type}</span>
         )}
 
         <div
@@ -117,20 +103,14 @@ function RunRow({ run: r, canRunAudits }: { run: RunProgressDTO; canRunAudits: b
           aria-valuemax={r.totalJobs}
           aria-valuenow={r.completedJobs}
           aria-valuetext={text}
-          aria-label={`Audit progress for ${r.scopeLabel ?? r.type}`}
+          aria-label={`Audit progress for ${r.scopeName ?? r.scopeLabel ?? r.type}`}
           className="h-1.5 min-w-[8rem] flex-1 overflow-hidden rounded-full bg-[var(--surface-sunken)]"
         >
           <div
             className="h-full rounded-full transition-[width] duration-500"
             style={{
               width: `${r.percentComplete}%`,
-              // Amber while waiting on a retry, so a paused run does not look
-              // like a healthy one that has simply gone quiet.
-              background: held
-                ? 'var(--faint)'
-                : allRemainingRetrying
-                  ? 'var(--score-average)'
-                  : 'var(--info)',
+              background: held ? 'var(--faint)' : 'var(--info)',
             }}
           />
         </div>

@@ -21,8 +21,8 @@ export const maxDuration = 60;
  * ~35 minutes and must be ≥1h apart (schedule.service.ts's MIN_INTERVAL_MS),
  * so 15-minute granularity loses nothing.
  *
- * Full-sweep-is-schedule-only (docs/DECISIONS.md 2.2) holds here by
- * construction: this route is the only caller of planAndStartSweep.
+ * This route is the only caller of planAndStartSweep. A manual full sweep
+ * (docs/DECISIONS.md 2.2) goes through queueAuditAction instead.
  *
  * Per-tenant cutover (phase 5): `Schedule`/`AuditRun` now live in each org's
  * own Neon database, so "what's due right now" can no longer be answered by

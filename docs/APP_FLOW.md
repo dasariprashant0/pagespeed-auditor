@@ -49,24 +49,32 @@ per site.
 
 ## 3. Running an audit
 
-Three scopes, one underlying mechanism (`lib/workflows/auditRun.ts`):
+Four scopes, one underlying mechanism (`lib/workflows/auditRun.ts`):
 
 ```mermaid
 flowchart LR
   A[Trigger] --> B{Scope}
   B -->|one page| C[RunAuditButton on /p/pageId]
   B -->|one section| D[section-level run on /g/slug]
-  B -->|whole site| E[Vercel Cron -> /api/cron/schedule-tick<br/>ONLY -- no manual button, ever]
-  C & D & E --> F[startAuditRun: creates AuditRun, dispatches auditRunWorkflow]
+  B -->|whole site| E[Vercel Cron -> /api/cron/schedule-tick<br/>or Measure whole site on Overview]
+  B -->|changed pages| K[Measure changed pages on Overview<br/>frozen into a pages selection]
+  C & D & E & K --> F[startAuditRun: creates AuditRun, dispatches auditRunWorkflow]
   F --> G[Every screen: ActiveRunBar polls /api/runs/active every 3s]
   G --> H[Optional: expand RunTerminal, polls /api/runs/runId/log every 2s]
   F --> I[finalizeAndNotify once every job reports]
   I --> J[full_sweep only: email/Slack via NotificationSetting]
 ```
 
-A full sweep cannot be started by clicking anything, anywhere, by anyone —
-see `docs/DECISIONS.md` §2.2. The MCP server's tool list has no
-`run_full_sweep` for the same reason.
+A full sweep starts from the schedule or the Overview's "Measure whole
+site" button (reversed 11 Nov 2026 — see `docs/DECISIONS.md` §2.2). The MCP
+server's tool list still has no `run_full_sweep`.
+
+"Measure changed pages" audits pages whose sitemap `lastmod` is newer than
+their last audit, plus any missing a mobile or desktop result. The set is
+resolved once and stored as a `pages` scope, so a resume can't shrink it.
+
+Each Top Issues row on the Overview links to `/issues/[auditId]` — every
+affected page in the same snapshot run, with a "Measure these" button.
 
 ## 4. While a run is in flight
 
@@ -91,8 +99,8 @@ flowchart TD
   B --> C[Field data: Core Web Vitals Passed/Failed badge]
   C --> D[Lab metrics]
   D --> E[History: score trend, needs 2+ audits]
-  E --> F["What to fix first" -- AI recommendation, on demand]
-  F --> G[Opportunities / Diagnostics / Passed / Not applicable]
+  E --> F["What to fix first" -- AI recommendation, on demand, only if the org has an Anthropic key]
+  F --> G[Opportunities / Diagnostics / Informational / A11y / Best Practices / SEO / Manual checks / Passed / Not applicable]
   G --> H[Run conditions -- environment, collapsible]
 ```
 
@@ -113,6 +121,11 @@ flowchart LR
   E --> F["Earlier answers" picker in the UI]
 ```
 
+**Off until an admin adds an Anthropic API key** in Settings → Site
+(checked against Anthropic on save, stored encrypted on `Organization`).
+Without one the panel isn't rendered at all, and MCP `get_recommendation`
+replies that AI is off. Clearing the key turns it off again.
+
 Capped at `RECOMMENDATION_KEEP_VERSIONS` (10) per result. The prompt is
 built from evidence tables (`AuditIssue`, up to 4 evidence rows each), never
 from raw model guesswork about the stack.
@@ -132,6 +145,13 @@ needs the explicit "Save schedule" button — a deliberate split between a
 low-stakes flip and deliberate configuration.
 
 `/settings/team` → invite, remove, change a teammate's role.
+
+`/settings/agents` → create and revoke MCP tokens (developer and admin).
+The token is shown once, with a ready `claude mcp add` command.
+
+**Exports:** "Download .md" on a page or group (for a coding agent) and
+"Download CSV" on the Overview or a group (`/api/reports/csv`, latest
+scores and metrics per page per strategy).
 
 ## Related documents
 

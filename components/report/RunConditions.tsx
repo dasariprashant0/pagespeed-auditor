@@ -12,6 +12,8 @@ export function RunConditions({ env, strategy }: { env: RunEnvironmentDTO; strat
     ['Device', env.device ?? (strategy === 'mobile' ? 'Emulated mobile' : 'Emulated desktop')],
     ['Network', env.networkThrottling],
     ['CPU', env.cpuThrottling],
+    ['Browser', env.browser],
+    ['User agent', env.userAgent],
     ['Lighthouse', env.lighthouseVersion],
     ['Captured', env.fetchedAt ? new Date(env.fetchedAt).toLocaleString() : null],
   ].filter(([, v]) => v) as Array<[string, string]>;
