@@ -20,6 +20,7 @@ export function SettingsNav({ active }: { active: string }) {
     { href: '/settings/automation', label: 'Automation' },
     { href: '/settings/notifications', label: 'Notifications' },
     { href: '/settings/database', label: 'Database' },
+    { href: '/settings/agents', label: 'Agent access' },
   ];
 
   return (

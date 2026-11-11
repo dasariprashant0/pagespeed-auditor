@@ -10,7 +10,7 @@ import {
 import { onboardingState, type OnboardingState } from '../services/onboarding.service.ts';
 import { listGroupsWithAggregates, listPagesInGroup, type StrategyOptions } from '../services/results.service.ts';
 import { getSiteSummary } from '../services/site.service.ts';
-import { getTopIssues, type TopIssueOptions } from '../services/issues.service.ts';
+import { getIssuePages, getTopIssues, type IssuePagesDTO, type TopIssueOptions } from '../services/issues.service.ts';
 import { getPageReport } from '../services/report.service.ts';
 import { regressionsForPage } from '../services/regression.service.ts';
 import { estimateRun } from '../services/estimate.service.ts';
@@ -139,6 +139,15 @@ export function demoAwareGetSiteSummary(
 
 export function demoAwareGetTopIssues(organizationId: string, opts: TopIssueOptions): Promise<TopIssueDTO[]> {
   return demoAware(() => getTopIssues(organizationId, opts), DEMO_TOP_ISSUES);
+}
+
+/** Sample data has no per-page issue rows, so the drill-down is empty. */
+export function demoAwareGetIssuePages(
+  organizationId: string,
+  auditId: string,
+  opts: { strategy: PsiStrategy; siteId?: string },
+): Promise<IssuePagesDTO | null> {
+  return demoAware(() => getIssuePages(organizationId, auditId, opts), null);
 }
 
 export function demoAwareEstimateRun(organizationId: string, jobs: number, siteId?: string): Promise<RunEstimate> {

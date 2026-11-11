@@ -12,6 +12,8 @@ import { WaitingOnAdmin } from '@/components/onboarding/WaitingOnAdmin';
 import { can } from '@/lib/auth/roles';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { StrategyTabs } from '@/components/ui/StrategyTabs';
+import { RunAuditButton } from '@/components/runs/RunAuditButton';
+import { buttonClass } from '@/components/ui/Button';
 import { ScoreTiles } from '@/components/score/ScoreTiles';
 import { SectionGrid } from '@/components/nav/SectionGrid';
 import { TopIssuesWidget } from '@/components/nav/TopIssuesWidget';
@@ -106,7 +108,34 @@ export default async function HomePage({
               })}`}
           </>
         }
-        actions={<StrategyTabs active={strategy} basePath="/" />}
+        actions={
+          <>
+            {can(ctx.role, 'audits:run') && (
+              <>
+                <RunAuditButton
+                  kind="changed"
+                  target=""
+                  label="Measure changed pages"
+                  hint="Only pages the sitemap says changed since their last audit, plus any missing a mobile or desktop measurement."
+                  demoMode={site.id === 'demo-site'}
+                />
+                <RunAuditButton
+                  kind="site"
+                  target=""
+                  label="Measure whole site"
+                  hint={`All ${summary.activePageCount} pages, mobile and desktop. Takes a while — progress shows as it runs.`}
+                  demoMode={site.id === 'demo-site'}
+                />
+              </>
+            )}
+            {summary.auditedCount > 0 && (
+              <a href="/api/reports/csv" download className={buttonClass('ghost')}>
+                Download CSV
+              </a>
+            )}
+            <StrategyTabs active={strategy} basePath="/" />
+          </>
+        }
       >
         {summary.auditedCount > 0 && (
           <div className="mt-5">
@@ -149,7 +178,7 @@ export default async function HomePage({
 
           <section className="mb-7">
             <h2 className="eyebrow mb-2">Affecting the most pages</h2>
-            <TopIssuesWidget issues={topIssues} />
+            <TopIssuesWidget issues={topIssues} strategy={strategy} />
           </section>
 
           {/* One list, not a big grid plus a collapsed tail. Splitting them

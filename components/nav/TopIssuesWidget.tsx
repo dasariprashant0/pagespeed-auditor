@@ -1,4 +1,5 @@
-import type { TopIssueDTO } from '@/lib/services/types';
+import Link from 'next/link';
+import type { PsiStrategy, TopIssueDTO } from '@/lib/services/types';
 
 /**
  * One shared root cause behind forty pages is worth more than forty individual
@@ -15,7 +16,7 @@ function ms(v: number): string {
   return v < 1000 ? `${Math.round(v)} ms` : `${(v / 1000).toFixed(v < 10_000 ? 1 : 0)} s`;
 }
 
-export function TopIssuesWidget({ issues }: { issues: TopIssueDTO[] }) {
+export function TopIssuesWidget({ issues, strategy }: { issues: TopIssueDTO[]; strategy: PsiStrategy }) {
   if (issues.length === 0) {
     return (
       <div className="panel px-4 py-5 text-[12px] text-[var(--muted)]">
@@ -45,7 +46,12 @@ export function TopIssuesWidget({ issues }: { issues: TopIssueDTO[] }) {
           >
             <div className="min-w-0 flex-1 basis-full sm:basis-auto">
               <div className="flex items-center gap-2">
-                <span className="truncate text-[12.5px]">{i.title}</span>
+                <Link
+                  href={`/issues/${encodeURIComponent(i.auditId)}?strategy=${strategy}`}
+                  className="truncate text-[12.5px] underline-offset-2 hover:underline"
+                >
+                  {i.title}
+                </Link>
                 {i.kind === 'opportunity' && (
                   <span
                     className="shrink-0 rounded-full px-1.5 py-px text-[9.5px] font-semibold uppercase tracking-wide"

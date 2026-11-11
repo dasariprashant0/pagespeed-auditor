@@ -25,8 +25,8 @@ export function RunAuditButton({
   demoMode = false,
   disabled = false,
 }: {
-  /** `pages` is a hand-picked set from a group's list; `target` is their ids, comma-joined. */
-  kind: 'page' | 'group' | 'pages';
+  /** `pages` is a hand-picked set from a group's list; `target` is their ids, comma-joined. `site` and `changed` ignore `target`. */
+  kind: 'page' | 'group' | 'pages' | 'site' | 'changed';
   target: string;
   label?: string;
   strategies?: PsiStrategy[];

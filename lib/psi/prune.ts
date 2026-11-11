@@ -34,8 +34,14 @@ const DROP_AUDITS = [
   'diagnostics',
 ] as const;
 
-/** Top-level lighthouseResult keys that are large and unused. */
-const DROP_LH_KEYS = ['fullPageScreenshot', 'timing', 'entities', 'i18n', 'stackPacks'] as const;
+/**
+ * Top-level lighthouseResult keys that are large and unused.
+ *
+ * `stackPacks` is NOT here any more (11 Nov 2026): its per-audit advice
+ * ("on WordPress, use plugin X") is shown in the report. Only each pack's
+ * iconDataURL is dropped -- that inline image is the only heavy part.
+ */
+const DROP_LH_KEYS = ['fullPageScreenshot', 'timing', 'entities', 'i18n'] as const;
 
 /**
  * Audits whose details.items lists can run to thousands of rows.
@@ -116,6 +122,8 @@ export function pruneResponse(input: PsiResponse): { pruned: PsiResponse; stats:
     for (const k of DROP_LH_KEYS) {
       delete (lr as Record<string, unknown>)[k];
     }
+    const packs = (lr as { stackPacks?: Array<Record<string, unknown>> }).stackPacks;
+    if (Array.isArray(packs)) for (const p of packs) delete p.iconDataURL;
 
     if (lr.audits) {
       for (const id of DROP_AUDITS) delete lr.audits[id];

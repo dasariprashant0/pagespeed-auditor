@@ -3,6 +3,7 @@ import { centralPrisma } from '../db/central.ts';
 import { hashPassword, verifyPassword } from '../auth/password.ts';
 import { isRole, type Role } from '../auth/roles.ts';
 import { logger } from '../logger.ts';
+import { slugify } from '../sitemap/group.ts';
 
 /**
  * Accounts, organisations and invitations.
@@ -25,13 +26,10 @@ export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
-function slugify(name: string): string {
-  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'org';
-}
 
 /** Slugs are user-visible and unique; collisions get a numeric suffix. */
 async function uniqueSlug(base: string): Promise<string> {
-  const root = slugify(base);
+  const root = slugify(base).slice(0, 40) || 'org';
   for (let i = 0; i < 50; i++) {
     const candidate = i === 0 ? root : `${root}-${i + 1}`;
     const taken = await centralPrisma.organization.findUnique({ where: { slug: candidate }, select: { id: true } });

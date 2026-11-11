@@ -1,4 +1,4 @@
-import { bucketFromCruxCategory } from './buckets.ts';
+import { bucketFromCruxCategory, cwvAssessment } from './buckets.ts';
 import type {
   ExtractedAudit,
   ExtractedField,
@@ -70,7 +70,7 @@ export function extractLab(res: PsiResponse): ExtractedLab {
 // --- field (CrUX) data -----------------------------------------------------
 
 /** PSI's CrUX metric keys -> our MetricId. */
-const CRUX_KEYS: Record<string, MetricId> = {
+export const CRUX_KEYS: Record<string, MetricId> = {
   LARGEST_CONTENTFUL_PAINT_MS: 'lcp',
   INTERACTION_TO_NEXT_PAINT: 'inp',
   CUMULATIVE_LAYOUT_SHIFT_SCORE: 'cls',
@@ -126,7 +126,7 @@ export function extractField(res: PsiResponse): ExtractedField {
     metrics[id] = { value, bucket, distribution: distributionOf(m) };
   }
 
-  return { source, overall: bucketFromCruxCategory(le.overall_category), metrics };
+  return { source, overall: cwvAssessment(metrics), metrics };
 }
 
 // --- audits (opportunities / diagnostics / other) --------------------------

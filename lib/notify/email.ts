@@ -1,6 +1,7 @@
 import nodemailer from 'nodemailer';
 import { logger } from '../logger.ts';
 import { getEnv } from '../env.ts';
+import { sendViaResend } from './resend.ts';
 
 /**
  * SMTP rather than a hosted API on purpose: for roughly thirty emails a month,
@@ -39,10 +40,6 @@ export function emailConfigProblem(): string | null {
     return 'This deployment\'s shared mailbox isn\'t finished setting up — ask whoever manages hosting, or set your own mailbox above instead.';
   }
   return null;
-}
-
-export function emailIsConfigured(): boolean {
-  return emailConfigProblem() === null;
 }
 
 /**
@@ -118,6 +115,7 @@ export async function sendEmail(
   if (!override) {
     const problem = emailConfigProblem();
     if (problem) return { sent: false, reason: problem };
+    if (getEnv().EMAIL_TRANSPORT === 'resend') return sendViaResend(to, subject, html, text);
   }
 
   const transporter = transporterFor(override);

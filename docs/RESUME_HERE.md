@@ -27,8 +27,8 @@ Nothing needed to continue lives outside this repo.
 Workflow, not a queue worker — see `docs/DECISIONS.md` §11), the
 dashboard, scheduling, notifications, regressions, AI recommendations, a
 9-tool MCP server, and a multi-tenant `Organization`/`Membership`/role
-model throughout. Deployed to Vercel with Neon (Postgres) and Vercel
-Blob (see `docs/TRD.md` §1–2). No Redis -- the rate limiter, scheduler
+model throughout. Deployed to Vercel with Neon (Postgres) and Cloudflare
+D1 for raw PSI JSON (see `docs/TRD.md` §1–2, `docs/DECISIONS.md` §18). No Redis -- the rate limiter, scheduler
 heartbeat, and live run log all live in Postgres (`docs/DECISIONS.md` §16).
 
 Sign up at `/signup` — the first account becomes admin of a new
@@ -94,8 +94,8 @@ there was when this file was last written.
 Full reasoning in `docs/DECISIONS.md` (§1–§18). In brief: Postgres +
 Prisma + Vercel Workflow (BullMQ was replaced, not the original plan);
 batch size sits above the rate limiter's throughput need, not below; full
-sweeps are schedule-only with no manual button and no `run_full_sweep`
-MCP tool, ever; group aggregate is the mean with the worst page shown
+sweeps start from the schedule or the Overview's "Measure whole site"
+button (added 11 Nov 2026, §2.2), never from MCP -- no `run_full_sweep`; group aggregate is the mean with the worst page shown
 beside it; the `AuditIssue` side table (never aggregate over `rawJson`);
 `GroupAlias` so merged groups don't reappear; pages are deactivated not
 deleted; Server Actions for all UI mutations with `requireSession()`/

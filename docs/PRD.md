@@ -42,8 +42,11 @@ there is one real org.
 3. **Keeps history** — the last 10 audits per (page, strategy), old ones
    pruned automatically (`retention.service.ts`), not an unbounded log.
 4. **Shows a dashboard**: sitewide overview, per-section drill-down,
-   per-page report (scores, Core Web Vitals pass/fail, opportunities,
-   diagnostics, passed/not-applicable audits, score history).
+   per-page report (scores, Core Web Vitals pass/fail on LCP/INP/CLS only,
+   page and origin field data with distributions, opportunities,
+   diagnostics with full evidence, a11y/best-practices/SEO, manual checks,
+   passed/not-applicable audits, score history), and a Top Issues
+   drill-down listing every affected page. Exports: agent `.md` and CSV.
 5. **Schedules** a whole-site sweep (weekly by default), with email/Slack
    notification on completion or failure.
 6. **Generates AI recommendations** — a prioritised fix list per report,
@@ -54,7 +57,10 @@ there is one real org.
    20 Aug 2026).
 8. **Exposes an MCP server** (`lib/mcp/server.ts`) so an AI agent can read
    reports, trends, and top issues, and trigger a page/group audit — never
-   a full sweep (see §4).
+   a full sweep (see §4). Tokens are created and revoked in Settings →
+   Agent access.
+10. **Re-measures only what changed** — "Measure changed pages" audits
+   pages whose sitemap `lastmod` is newer than their last audit.
 9. **Onboards a teammate by role** — a dismissible "here's what your role
    can do" banner once per person, and a role-aware waiting state instead
    of an admin-only checklist when there's nothing to look at yet.
@@ -64,9 +70,11 @@ there is one real org.
 These are load-bearing decisions, not gaps — see `docs/DECISIONS.md` §2.2
 and §11 for the reasoning:
 
-- **No "audit everything now" button, ever.** A full sweep is
-  schedule-only. There is no `run_full_sweep` MCP tool and never will be —
-  it would let one click burn the entire daily PSI quota.
+- **Full sweeps: schedule, or one guarded button.** The Overview's "Measure
+  whole site" button (`audits:run` only, refused while any run is active)
+  was added 11 Nov 2026 — see `DECISIONS.md` §2.2. There is still no
+  `run_full_sweep` MCP tool: an agent must not be able to start a ~2,000-call
+  sweep on its own.
 - **No SSE/WebSocket push.** Every live view (`ActiveRunBar`, `RunTerminal`)
   polls. The run executes in Vercel Workflow and writes to Postgres;
   a stream would still just be polling that state and re-emitting it.

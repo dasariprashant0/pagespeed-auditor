@@ -5,7 +5,7 @@ import { requireCapability } from '@/lib/http/auth-guard';
 import { friendlyErrorMessage } from '@/lib/http/actionError';
 import { getTenantPrisma } from '@/lib/db/tenant';
 import { defaultSite, requireRunAccess } from '@/lib/services/tenant.service';
-import { BOTH_STRATEGIES, createRun, expandScope, findActiveRun, failedResultsForRun, type FailedResult } from '@/lib/services/run.service';
+import { BOTH_STRATEGIES, changedPageIds, createRun, expandScope, findActiveRun, failedResultsForRun, type FailedResult } from '@/lib/services/run.service';
 import { startAuditRun } from '@/lib/workflows/auditRun';
 import { estimateRun, formatDuration } from '@/lib/services/estimate.service';
 import type { PsiStrategy } from '@/lib/services/types';
@@ -15,7 +15,7 @@ export type QueueResult =
   | { ok: false; error: string };
 
 /**
- * Queues an on-demand audit for one page or one group.
+ * Queues an on-demand audit for one page, one group, or the whole site.
  *
  * Always queued, never run inline. The spec allows a synchronous path for small
  * jobs, but measured PSI latency on this site is ~60 s per call -- so even a
@@ -23,12 +23,16 @@ export type QueueResult =
  * most proxy timeouts. Queuing costs one poll and behaves identically at any
  * size.
  *
- * There is deliberately NO whole-site variant: sweeps are schedule-only.
- * See docs/DECISIONS.md 2.2.
+ * `site` is a manual full sweep -- the same run a schedule starts, recorded as
+ * `full_sweep` so it counts as one everywhere. See docs/DECISIONS.md 2.2.
+ *
+ * `changed` audits only pages the sitemap says changed since their last audit
+ * (or that were never audited). It is resolved to a fixed `pages` selection
+ * here -- see changedPageIds for why it can't stay a live scope.
  */
 export async function queueAuditAction(input: {
-  /** `pages` is a hand-picked set from a group's list; `ref` is their ids, comma-joined. */
-  kind: 'page' | 'group' | 'pages';
+  /** `pages` is a hand-picked set from a group's list; `ref` is their ids, comma-joined. `site` and `changed` ignore `ref`. */
+  kind: 'page' | 'group' | 'pages' | 'site' | 'changed';
   ref: string;
   strategies?: PsiStrategy[];
 }): Promise<QueueResult> {
@@ -47,7 +51,11 @@ export async function queueAuditAction(input: {
     if (!site) return { ok: false, error: 'No site configured.' };
 
     const strategies = input.strategies?.length ? input.strategies : BOTH_STRATEGIES;
-    const scope = { kind: input.kind, ref: input.ref, strategies };
+    const changed = input.kind === 'changed' ? await changedPageIds(prisma, site.id) : null;
+    if (changed?.length === 0) return { ok: false, error: 'No page has changed since its last audit.' };
+    const kind = input.kind === 'changed' ? 'pages' : input.kind;
+    const ref = changed ? changed.join(',') : input.kind === 'site' ? null : input.ref;
+    const scope = { kind, ref, strategies };
 
     // One run at a time per site. Two concurrent runs would share the rate
     // limiter and each appear stalled for twice as long.
@@ -66,7 +74,7 @@ export async function queueAuditAction(input: {
       // on run.type (history labels, MCP tools, RUN_TYPES) needs a third
       // value. The scope itself still says 'pages'; that's what
       // expandScope/resume actually read.
-      type: input.kind === 'pages' ? 'group' : input.kind,
+      type: kind === 'pages' ? 'group' : kind === 'site' ? 'full_sweep' : kind,
       triggeredBy: 'manual',
       scope,
       totalJobs: pairs.length,

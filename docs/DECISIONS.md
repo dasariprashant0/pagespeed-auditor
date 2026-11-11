@@ -64,9 +64,17 @@ those modules directly, so one stray Next import breaks it at load time. ESLint
 enforces it, and the rule was verified by planting a deliberate bad import and
 confirming lint fails — an unenforced boundary is decorative.
 
-### 2.2 Why full sweeps are schedule-only
+### 2.2 Why full sweeps were schedule-only (button reversed 11 Nov 2026)
 
-**Chosen:** no "audit everything now" button, and no `run_full_sweep` MCP tool.
+**Reversed for the UI (11 Nov 2026):** the Overview page now has a "Measure
+whole site" button (`queueAuditAction({ kind: 'site' })`, recorded as a
+`full_sweep` run, `triggeredBy: 'manual'`). The objection below was that the
+button would do "nothing visible for 45 minutes" — that stopped being true once
+live run progress, run control (pause/cancel) and the one-run-per-site guard
+existed. It is gated on `audits:run` and refuses while any run is active. The
+MCP half still stands: no `run_full_sweep` tool.
+
+**Originally chosen:** no "audit everything now" button, and no `run_full_sweep` MCP tool.
 
 Not a product preference — arithmetic. 1,000 pages × 2 strategies = 2,000 PSI
 calls. The API sustains roughly 0.75 req/s before it starts returning
@@ -257,7 +265,7 @@ fixture-first approach in M1.
 
 Listed because each looks like an omission and isn't.
 
-- **No "run full sweep" button or MCP tool.** See §2.2.
+- **No "run full sweep" MCP tool.** (The UI button was added 11 Nov 2026.) See §2.2.
 - **No canonical-tag resolution during ingestion.** Would mean fetching all 1,000
   pages just to read `<link rel="canonical">`. The sitemap is the source of truth
   for v1; tracking-param and fragment stripping handles the real duplicates.

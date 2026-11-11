@@ -5,6 +5,7 @@ import {
   parseScopeLabel,
   expandScope,
   scopeLink,
+  isChangedSinceAudit,
   type RunScope,
 } from '../lib/services/run.service.ts';
 
@@ -100,5 +101,21 @@ describe('scopeLink', () => {
   test('a single-page "pages" scope uses the singular', () => {
     const label = formatScopeLabel({ kind: 'pages', ref: 'p1', strategies: ['mobile', 'desktop'] });
     assert.deepEqual(scopeLink(label, 'group'), { scopeHref: null, scopeName: '1 selected page' });
+  });
+});
+
+describe('isChangedSinceAudit', () => {
+  const d = (s: string) => new Date(s);
+  test('never audited is changed', () => {
+    assert.equal(isChangedSinceAudit({ lastmod: null, lastAuditedAt: null }), true);
+  });
+  test('lastmod after the last audit is changed', () => {
+    assert.equal(isChangedSinceAudit({ lastmod: d('2026-11-02'), lastAuditedAt: d('2026-11-01') }), true);
+  });
+  test('lastmod before the last audit is not', () => {
+    assert.equal(isChangedSinceAudit({ lastmod: d('2026-10-01'), lastAuditedAt: d('2026-11-01') }), false);
+  });
+  test('no lastmod with an existing audit is not', () => {
+    assert.equal(isChangedSinceAudit({ lastmod: null, lastAuditedAt: d('2026-11-01') }), false);
   });
 });

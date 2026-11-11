@@ -91,6 +91,7 @@ function labTable(result: ExtractedResult): string {
   lines.push(
     `| TBT | ${formatMetric('tbt', result.lab.tbt)} | ${formatBucket(bucketOf('tbt', result.lab.tbt))} |`,
   );
+  lines.push(`| Speed Index | ${formatMs(result.lab.speedIndex)} | — |`);
 
   return `| Metric | Value | Rating |\n|---|---:|---|\n${lines.join('\n')}`;
 }
@@ -115,7 +116,10 @@ function fieldSection(result: ExtractedResult): string {
       ? '> Showing site-wide real-user data — this page does not have enough traffic of its own.\n\n'
       : '';
 
-  const overall = f.overall ? `\n\n**Overall:** ${formatBucket(f.overall)}` : '';
+  // LCP, INP and CLS only -- FCP/TTFB never decide it (cwvAssessment).
+  const overall = f.overall
+    ? `\n\n**Core Web Vitals assessment:** ${f.overall === 'good' ? 'Passed' : 'Failed'} (LCP, INP and CLS at p75)`
+    : '';
 
   return `${preamble}| Metric | 75th percentile | Rating |\n|---|---:|---|\n${rows}${overall}`;
 }

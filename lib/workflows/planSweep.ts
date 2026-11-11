@@ -12,8 +12,9 @@ import { startAuditRun } from './auditRun.ts';
 /**
  * Plans and starts a full-site sweep. Moved verbatim from the old
  * lib/queue/processors/planSweep.processor.ts (a BullMQ control-queue job) --
- * called now by the cron route instead. Only the scheduler calls this; there
- * is deliberately no on-demand path to a full sweep. See docs/DECISIONS.md 2.2.
+ * called now by the cron route instead. The manual "Measure whole site" button
+ * goes through queueAuditAction instead, which refuses rather than records a
+ * skipped run when something is active. See docs/DECISIONS.md 2.2.
  */
 export async function planAndStartSweep(
   organizationId: string,

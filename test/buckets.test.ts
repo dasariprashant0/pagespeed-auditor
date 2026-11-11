@@ -1,6 +1,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { bucketOf, bucketFromCruxCategory, scoreBand, isWorse, THRESHOLDS } from '../lib/psi/buckets.ts';
+import { bucketOf, bucketFromCruxCategory, scoreBand, isWorse, THRESHOLDS, cwvAssessment } from '../lib/psi/buckets.ts';
+import type { Bucket } from '../lib/psi/types.ts';
 
 describe('CWV buckets', () => {
   test('boundaries are inclusive at good, exclusive at poor', () => {
@@ -68,5 +69,33 @@ describe('bucket ordering', () => {
     assert.ok(isWorse('ni', 'good'));
     assert.ok(!isWorse('good', 'good'));
     assert.ok(!isWorse('good', 'poor'));
+  });
+});
+
+describe('Core Web Vitals assessment', () => {
+  const m = (lcp?: Bucket, cls?: Bucket, inp?: Bucket, rest: Bucket = 'poor') => ({
+    ...(lcp && { lcp: { bucket: lcp } }),
+    ...(cls && { cls: { bucket: cls } }),
+    ...(inp && { inp: { bucket: inp } }),
+    fcp: { bucket: rest },
+    ttfb: { bucket: rest },
+  });
+
+  test('FCP and TTFB never decide pass/fail', () => {
+    assert.equal(cwvAssessment(m('good', 'good', 'good', 'poor')), 'good');
+  });
+
+  test('worst of LCP, INP and CLS wins', () => {
+    assert.equal(cwvAssessment(m('good', 'ni', 'good')), 'ni');
+    assert.equal(cwvAssessment(m('good', 'good', 'poor')), 'poor');
+  });
+
+  test('missing INP: LCP and CLS alone decide', () => {
+    assert.equal(cwvAssessment(m('good', 'good')), 'good');
+  });
+
+  test('no assessment without both LCP and CLS', () => {
+    assert.equal(cwvAssessment(m('good', undefined, 'good')), null);
+    assert.equal(cwvAssessment({}), null);
   });
 });

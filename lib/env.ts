@@ -12,12 +12,6 @@ import { z } from 'zod';
  * this module pulls in Node built-ins. Read process.env directly there.
  */
 
-const bool = (def: boolean) =>
-  z
-    .string()
-    .optional()
-    .transform((v) => (v === undefined || v === '' ? def : v === '1' || v.toLowerCase() === 'true'));
-
 const int = (def: number) =>
   z
     .string()
@@ -52,7 +46,7 @@ const schema = z.object({
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
 
   /** How many pages a sweep processes per batch -- see lib/workflows/auditRun.ts. */
-  WORKER_CONCURRENCY: int(20),
+  WORKER_CONCURRENCY: int(48),
   PSI_RATE_MAX: int(3),
   PSI_RATE_WINDOW_MS: int(4000),
   STALE_RUN_HOURS: int(12),
@@ -63,12 +57,9 @@ const schema = z.object({
   PSI_API_KEY: z.string().default(''),
   PSI_TIMEOUT_MS: int(90_000),
   PSI_MAX_ATTEMPTS: int(5),
-  PSI_FAKE: bool(false),
 
-  SITE_NAME: z.string().default('Company Site'),
   SITE_BASE_URL: z.string().url().optional(),
   SITE_SITEMAP_URL: z.string().url().optional(),
-  SYNC_GROUP_PAGE_LIMIT: int(15),
 
   SESSION_SECRET: z.string().default(''),
 
@@ -153,9 +144,4 @@ let cached: Env | undefined;
 export function getEnv(): Env {
   cached ??= load();
   return cached;
-}
-
-/** Sustained requests/second the limiter allows. Purely derived; used in logs and tests. */
-export function targetRequestsPerSecond(e = getEnv()): number {
-  return (e.PSI_RATE_MAX / e.PSI_RATE_WINDOW_MS) * 1000;
 }

@@ -33,6 +33,12 @@ const SCORE_KEYS = [
   { key: 'seo', label: 'SEO' },
 ] as const;
 
+const OTHER_CATEGORIES = [
+  { id: 'accessibility', label: 'Accessibility' },
+  { id: 'best-practices', label: 'Best Practices' },
+  { id: 'seo', label: 'SEO' },
+] as const;
+
 export default async function PageReport({
   params,
   searchParams,
@@ -129,6 +135,25 @@ export default async function PageReport({
         />
       ) : (
         <>
+          {/* PSI prints these above the report: a redirect means the numbers
+              describe a different URL, and a run warning means they may be off. */}
+          {(r.environment.redirectedTo || r.environment.warnings.length > 0) && (
+            <div
+              role="note"
+              className="mb-4 space-y-1 rounded-[8px] border px-3.5 py-2.5 text-[12px]"
+              style={{ borderColor: 'var(--score-average)', background: 'var(--score-average-tint)' }}
+            >
+              {r.environment.redirectedTo && (
+                <p>
+                  Redirected — these results are for <span className="break-all font-medium">{r.environment.redirectedTo}</span>.
+                </p>
+              )}
+              {r.environment.warnings.map((w) => (
+                <p key={w}>{w}</p>
+              ))}
+            </div>
+          )}
+
           <section aria-label="Scores" className="mb-6">
             <div className="panel grid grid-cols-2 items-start gap-x-4 gap-y-5 px-4 py-4 sm:flex sm:flex-wrap sm:gap-x-8 sm:px-5">
               {SCORE_KEYS.map(({ key, label }) => (
@@ -160,7 +185,7 @@ export default async function PageReport({
             <h2 className="eyebrow mb-2">
               Lab metrics
             </h2>
-            <CWVGrid lab={r.lab} />
+            <CWVGrid lab={r.lab} strategy={strategy} />
           </section>
 
           <section className="mb-6">
@@ -192,8 +217,15 @@ export default async function PageReport({
               emptyLabel="No opportunities found — nothing here would meaningfully improve load time." />
             <AuditSection title="Diagnostics" items={r.diagnostics} defaultOpen
               emptyLabel="No diagnostics flagged." />
-            <AuditSection title="Accessibility, Best Practices & SEO" items={r.other}
-              emptyLabel="No issues found in these categories." />
+            <AuditSection title="Informational insights" items={r.informative}
+              emptyLabel="No informational insights for this run." />
+            {/* One section per category, as PSI lays them out. */}
+            {OTHER_CATEGORIES.map(({ id, label }) => (
+              <AuditSection key={id} title={`${label} issues`} items={r.other.filter((a) => a.category === id)}
+                emptyLabel={`No ${label.toLowerCase()} issues found.`} />
+            ))}
+            <AuditSection title="Additional items to manually check" items={r.manual}
+              emptyLabel="Nothing needs a manual check." />
             <AuditSection title="Passed audits" items={r.passed}
               emptyLabel="Nothing passed — worth checking the page actually rendered." />
             <AuditSection title="Not applicable" items={r.notApplicable}

@@ -1,6 +1,6 @@
 import type { TenantPrismaClient } from '../db/tenant.ts';
 import type { PsiStrategy } from '../psi/types.ts';
-import type { RunProgressDTO, RunStatus } from './types.ts';
+import type { RunStatus } from './types.ts';
 import { NotFoundError } from '../errors.ts';
 import { logger } from '../logger.ts';
 import { getEnv } from '../env.ts';
@@ -48,7 +48,7 @@ export const BOTH_STRATEGIES: PsiStrategy[] = ['mobile', 'desktop'];
 // ---------------------------------------------------------------------------
 
 /**
- * A run has to be resumable after Redis is lost, which means "which pages was
+ * A run has to be resumable after its workflow is lost, which means "which pages was
  * this run supposed to cover" must survive in Postgres. The schema has no scope
  * columns, so `scopeLabel` carries it in a format that is both machine-parseable
  * and readable in the runs list. format/parse are a matched pair -- change one
@@ -123,70 +123,6 @@ export function diffMissingPairs(
 ): AuditPair[] {
   const done = new Set(existing.map((e) => pairKey(e.pageId, e.strategy)));
   return expected.filter((p) => !done.has(pairKey(p.pageId, p.strategy)));
-}
-
-export function percentComplete(completedJobs: number, totalJobs: number): number {
-  if (totalJobs <= 0) return 0;
-  return Math.min(100, Math.round((completedJobs / totalJobs) * 100));
-}
-
-export function etaSeconds(
-  completedJobs: number,
-  totalJobs: number,
-  startedAt: Date | null,
-  now: Date,
-): number | null {
-  if (!startedAt || completedJobs <= 0 || completedJobs >= totalJobs) return null;
-  const elapsedS = (now.getTime() - startedAt.getTime()) / 1000;
-  if (elapsedS <= 0) return null;
-  return Math.round((elapsedS / completedJobs) * (totalJobs - completedJobs));
-}
-
-// ---------------------------------------------------------------------------
-// Reads
-// ---------------------------------------------------------------------------
-
-const RUN_PROGRESS_SELECT = {
-  id: true,
-  type: true,
-  triggeredBy: true,
-  status: true,
-  scopeLabel: true,
-  totalJobs: true,
-  completedJobs: true,
-  failedJobs: true,
-  startedAt: true,
-  finishedAt: true,
-  error: true,
-} as const;
-
-export async function getRunProgress(
-  prisma: TenantPrismaClient,
-  runId: string,
-  now: Date = new Date(),
-): Promise<RunProgressDTO> {
-  const run = await prisma.auditRun.findUnique({ where: { id: runId }, select: RUN_PROGRESS_SELECT });
-  if (!run) throw new NotFoundError(`run ${runId}`);
-
-  return {
-    runId: run.id,
-    type: run.type as RunProgressDTO['type'],
-    triggeredBy: run.triggeredBy as RunProgressDTO['triggeredBy'],
-    status: run.status as RunStatus,
-    scopeLabel: run.scopeLabel,
-    ...scopeLink(run.scopeLabel, run.type),
-    totalJobs: run.totalJobs,
-    completedJobs: run.completedJobs,
-    failedJobs: run.failedJobs,
-    percentComplete: percentComplete(run.completedJobs, run.totalJobs),
-    retryingJobs: 0,
-    nextRetryInSeconds: null,
-    startedAt: run.startedAt?.toISOString() ?? null,
-    finishedAt: run.finishedAt?.toISOString() ?? null,
-    etaSeconds:
-      run.status === 'running' ? etaSeconds(run.completedJobs, run.totalJobs, run.startedAt, now) : null,
-    error: run.error,
-  };
 }
 
 /** The overlap guard's input: a sweep must not start while another is in flight. */
@@ -350,6 +286,36 @@ export async function expandScope(
   );
 }
 
+/**
+ * A page is worth re-measuring when it has never been audited, or when the
+ * sitemap says it changed after its last audit. A page with no `lastmod` and
+ * an existing audit is not "changed" -- there is no evidence it moved.
+ */
+export function isChangedSinceAudit(p: { lastmod: Date | null; lastAuditedAt: Date | null }): boolean {
+  if (!p.lastAuditedAt) return true;
+  return p.lastmod !== null && p.lastmod > p.lastAuditedAt;
+}
+
+/**
+ * Active pages changed since their last audit. Filtered in JS because Prisma
+ * cannot compare two columns in a `where`; a site is ~1,000 rows.
+ *
+ * The caller freezes the result into a `pages` scope rather than a scope of
+ * its own: once audited, a page stops being "changed", so re-expanding on
+ * resume would shrink the run under its own completed results.
+ */
+export async function changedPageIds(prisma: TenantPrismaClient, siteId: string): Promise<string[]> {
+  const pages = await prisma.page.findMany({
+    where: { siteId, isActive: true },
+    select: { id: true, lastmod: true, lastAuditedAt: true, latestResultMobileId: true, latestResultDesktopId: true },
+  });
+  // Missing either strategy counts too: lastAuditedAt covers both, so a page
+  // measured on mobile only would otherwise never get its desktop result.
+  return pages
+    .filter((p) => !p.latestResultMobileId || !p.latestResultDesktopId || isChangedSinceAudit(p))
+    .map((p) => p.id);
+}
+
 export interface FailedResult {
   pageId: string;
   path: string;
@@ -421,7 +387,7 @@ export interface ResumeSummary {
  * Re-enqueues only the work a run has no AuditResult for, and corrects the
  * counters from the true row count.
  *
- * The counter correction is the point. After a Redis flush the jobs are gone but
+ * The counter correction is the point. After a lost workflow the jobs are gone but
  * the results are not, and a `completedJobs` left at its pre-crash value would
  * either finalize the run early or never finalize it at all.
  */
@@ -605,12 +571,12 @@ export function scopeLink(
 /**
  * Holding a sweep without losing it.
  *
- * Pausing pauses the QUEUE, not individual jobs -- BullMQ has no per-job hold,
+ * Pausing holds the batch loop, not individual jobs -- there is no per-job hold,
  * and the overlap guard already means at most one sweep is in flight, so the
  * two amount to the same thing here. Two consequences to be honest about in the
  * UI rather than hide:
  *
- *  - Jobs already handed to a worker run to completion. Up to WORKER_CONCURRENCY
+ *  - Jobs already in the current batch run to completion. Up to WORKER_CONCURRENCY
  *    more results will land after the pause. Killing them mid-flight would burn
  *    the quota they already spent and produce nothing.
  *  - Everything queued stays queued. Nothing is lost, and resuming continues

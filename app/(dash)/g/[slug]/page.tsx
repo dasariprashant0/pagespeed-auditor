@@ -8,6 +8,7 @@ import { DownloadMarkdown } from '@/components/report/DownloadMarkdown';
 import { PageTable, type PageRow } from '@/components/nav/PageTable';
 import { EmptyState } from '@/components/nav/EmptyState';
 import { RunAuditButton } from '@/components/runs/RunAuditButton';
+import { buttonClass } from '@/components/ui/Button';
 import { ScoreCharts, type ChartData } from '@/components/charts/ScoreCharts';
 import { formatDuration } from '@/lib/services/estimate.service';
 import type { PsiStrategy } from '@/lib/services/types';
@@ -108,6 +109,9 @@ export default async function GroupPage({
               currentStrategy={strategy}
               hint="Every measured page in this section as one markdown file, for handing to a coding agent."
             />
+            <a href={`/api/reports/csv?group=${slug}`} download className={buttonClass('ghost')}>
+              Download CSV
+            </a>
             <StrategyTabs active={strategy} basePath={`/g/${slug}`} />
           </>
         }

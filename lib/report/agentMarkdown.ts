@@ -1,4 +1,5 @@
 import type { PageReportDTO, AuditItemDTO } from '../services/types.ts';
+import { formatBytes } from './format.ts';
 
 /**
  * A report written for a coding agent, not for a person.
@@ -55,11 +56,21 @@ export function buildAgentReport(report: PageReportDTO, opts: AgentReportOptions
     return out.join('\n');
   }
 
+  const env = r.environment;
   out.push(`Measured: ${new Date(r.fetchedAt).toISOString()} · Lighthouse ${r.lighthouseVersion ?? 'unknown'}`);
-  if (r.environment.networkThrottling) {
-    out.push(`Conditions: ${r.environment.device ?? ''} · ${r.environment.networkThrottling} · ${r.environment.cpuThrottling ?? ''}`);
+  if (env.networkThrottling) {
+    out.push(`Conditions: ${[env.device, env.networkThrottling, env.cpuThrottling, env.browser].filter(Boolean).join(' · ')}`);
   }
+  if (env.userAgent) out.push(`User agent: \`${env.userAgent}\``);
   out.push('');
+  if (env.redirectedTo) {
+    out.push(`> **Redirected.** These results describe ${env.redirectedTo}, not the URL above.`);
+    out.push('');
+  }
+  for (const w of env.warnings) {
+    out.push(`> **Lighthouse warning:** ${w}`);
+    out.push('');
+  }
 
   // --- what the agent is being asked to move ------------------------------
   out.push('## Current scores');
@@ -76,21 +87,36 @@ export function buildAgentReport(report: PageReportDTO, opts: AgentReportOptions
   }
   out.push('');
 
+  // --- Core Web Vitals assessment: LCP, INP and CLS only -----------------
+  if (r.field.overall) {
+    const verdict = r.field.overall === 'good' ? 'PASSED' : 'FAILED';
+    const scope = r.field.source === 'origin_fallback' ? ' (site-wide data — this URL has too little traffic)' : '';
+    out.push(`## Core Web Vitals assessment: ${verdict}${scope}`);
+    out.push('');
+    out.push('Assessed on real-user LCP, INP and CLS at the 75th percentile. FCP and TTFB are diagnostic and do not affect it.');
+    out.push('');
+  }
+
   out.push('## Metrics');
   out.push('');
-  out.push('| Metric | Lab | Real users (75th pct) | Target |');
-  out.push('|---|---:|---:|---|');
-  const field = (k: 'lcp' | 'inp' | 'cls' | 'fcp' | 'ttfb') => {
-    const m = r.field.metrics[k];
-    if (!m) return '—';
-    return k === 'cls' ? m.value.toFixed(3) : ms(m.value);
+  out.push('| Metric | Lab | Real users (75th pct) | Rating | Good / NI / Poor visits | Target |');
+  out.push('|---|---:|---:|---|---|---|');
+  const field = (k: 'lcp' | 'inp' | 'cls' | 'fcp' | 'ttfb', f: Pick<typeof r.field, 'metrics'> = r.field) => {
+    const m = f.metrics[k];
+    if (!m) return ['—', '—', '—'];
+    return [
+      k === 'cls' ? m.value.toFixed(3) : ms(m.value),
+      RATING[m.bucket],
+      m.distribution ? m.distribution.map((p) => `${Math.round(p * 100)}%`).join(' / ') : '—',
+    ];
   };
-  out.push(`| LCP | ${ms(r.lab.lcp)} | ${field('lcp')} | under 2.5 s |`);
-  out.push(`| CLS | ${r.lab.cls?.toFixed(3) ?? '—'} | ${field('cls')} | under 0.1 |`);
-  out.push(`| INP | not measurable in lab | ${field('inp')} | under 200 ms |`);
-  out.push(`| TBT | ${ms(r.lab.tbt)} | — | under 200 ms |`);
-  out.push(`| FCP | ${ms(r.lab.fcp)} | ${field('fcp')} | under 1.8 s |`);
-  out.push(`| TTFB | ${ms(r.lab.ttfb)} | ${field('ttfb')} | under 800 ms |`);
+  out.push(`| LCP (core) | ${ms(r.lab.lcp)} | ${field('lcp').join(' | ')} | under 2.5 s |`);
+  out.push(`| INP (core) | not measurable in lab | ${field('inp').join(' | ')} | under 200 ms |`);
+  out.push(`| CLS (core) | ${r.lab.cls?.toFixed(3) ?? '—'} | ${field('cls').join(' | ')} | under 0.1 |`);
+  out.push(`| FCP | ${ms(r.lab.fcp)} | ${field('fcp').join(' | ')} | under 1.8 s |`);
+  out.push(`| TTFB | ${ms(r.lab.ttfb)} | ${field('ttfb').join(' | ')} | under 800 ms |`);
+  out.push(`| TBT (lab proxy for INP) | ${ms(r.lab.tbt)} | — | — | — | under 200 ms |`);
+  out.push(`| Speed Index | ${ms(r.lab.speedIndex)} | — | — | — | under ${report.strategy === 'mobile' ? '3.4 s' : '1.3 s'} |`);
   out.push('');
   if (r.field.source === 'none') {
     out.push('> No real-user data for this URL — too little traffic for Chrome UX Report. Lab numbers only.');
@@ -99,11 +125,30 @@ export function buildAgentReport(report: PageReportDTO, opts: AgentReportOptions
   }
   out.push('');
 
+  // PSI's "Origin" tab: the whole site, for telling a page-specific problem
+  // from a site-wide one.
+  if (r.field.origin) {
+    const o = r.field.origin;
+    out.push(`### Whole site (origin) for comparison${o.overall ? ` — Core Web Vitals ${o.overall === 'good' ? 'PASSED' : 'FAILED'}` : ''}`);
+    out.push('');
+    out.push('| Metric | Real users (75th pct) | Rating | Good / NI / Poor visits |');
+    out.push('|---|---:|---|---|');
+    for (const [k, label] of [['lcp', 'LCP'], ['inp', 'INP'], ['cls', 'CLS'], ['fcp', 'FCP'], ['ttfb', 'TTFB']] as const) {
+      out.push(`| ${label} | ${field(k, o).join(' | ')} |`);
+    }
+    out.push('');
+  }
+
   // --- the actionable part ------------------------------------------------
+  const byCategory = (c: AuditItemDTO['category']) => r.other.filter((a) => a.category === c);
   const sections: Array<[string, AuditItemDTO[], string]> = [
     ['Problems to fix, highest impact first', r.opportunities, 'Each entry lists the specific resources responsible.'],
     ['Diagnostics', r.diagnostics, 'Contributing factors rather than direct wins.'],
-    ['Accessibility, best practices and SEO', r.other, 'Usually concrete and cheap to fix.'],
+    ['Informational insights', r.informative, 'Unscored — not a failure, but the evidence explains where time goes (e.g. the LCP breakdown).'],
+    ['Accessibility issues', byCategory('accessibility'), 'Usually concrete and cheap to fix.'],
+    ['Best practices issues', byCategory('best-practices'), 'Usually concrete and cheap to fix.'],
+    ['SEO issues', byCategory('seo'), 'Usually concrete and cheap to fix.'],
+    ['Additional items to manually check', r.manual, 'Lighthouse cannot test these automatically. Check them by hand; do not assume they pass.'],
   ];
 
   for (const [title, items, note] of sections) {
@@ -117,26 +162,35 @@ export function buildAgentReport(report: PageReportDTO, opts: AgentReportOptions
       out.push(`### ${i + 1}. ${a.title}`);
       const cost = [
         a.savingsMs !== null ? `saves ~${ms(a.savingsMs)}` : null,
-        a.savingsBytes !== null ? `${kib(a.savingsBytes)} smaller` : null,
+        a.savingsBytes !== null ? `${formatBytes(a.savingsBytes)} smaller` : null,
         a.displayValue,
       ].filter(Boolean);
       if (cost.length) out.push(`**Measured cost:** ${cost.join(' · ')}`);
+      if (a.metrics.length) out.push(`**Affects:** ${a.metrics.join(', ')}`);
+      out.push(`**Audit id:** \`${a.auditId}\``);
       out.push('');
       if (a.description) {
         // Lighthouse descriptions carry the canonical explanation and a doc link.
         out.push(a.description.replace(/\s+/g, ' ').trim());
         out.push('');
       }
-      if (a.details && a.details.rows.length > 0) {
-        out.push('Affected:');
+      for (const s of a.stackTips) {
+        out.push(`**On ${s.stack}:** ${s.tip.replace(/\s+/g, ' ').trim()}`);
         out.push('');
-        out.push(`| ${a.details.headings.map((h) => h.label).join(' | ')} |`);
-        out.push(`|${a.details.headings.map(() => '---').join('|')}|`);
-        for (const row of a.details.rows.slice(0, maxRows)) {
-          out.push(`| ${a.details.headings.map((h) => (row[h.key] || '—').replace(/\|/g, '\\|')).join(' | ')} |`);
+      }
+      for (const t of a.details) {
+        if (t.rows.length === 0) continue;
+        out.push(t.title ? `${t.title}:` : 'Affected:');
+        out.push('');
+        out.push(`| ${t.headings.map((h) => h.label).join(' | ')} |`);
+        out.push(`|${t.headings.map(() => '---').join('|')}|`);
+        for (const row of t.rows.slice(0, maxRows)) {
+          out.push(`| ${t.headings.map((h) => (row[h.key] || '—').replace(/\|/g, '\\|').replace(/\n/g, ' ')).join(' | ')} |`);
         }
-        if (a.details.truncated) out.push('');
-        if (a.details.truncated) out.push(`_(first ${Math.min(maxRows, a.details.rows.length)} shown)_`);
+        if (t.truncated || t.rows.length > maxRows) {
+          out.push('');
+          out.push(`_(first ${Math.min(maxRows, t.rows.length)} shown)_`);
+        }
         out.push('');
       }
     }
@@ -145,7 +199,14 @@ export function buildAgentReport(report: PageReportDTO, opts: AgentReportOptions
   if (opts.includePassed && r.passed.length > 0) {
     out.push('## Already passing — do not change these');
     out.push('');
-    for (const a of r.passed) out.push(`- ${a.title}`);
+    for (const a of r.passed) out.push(`- ${a.title}${a.displayValue ? ` — ${a.displayValue}` : ''} (\`${a.auditId}\`)`);
+    out.push('');
+  }
+
+  if (opts.includePassed && r.notApplicable.length > 0) {
+    out.push('## Not applicable to this page');
+    out.push('');
+    for (const a of r.notApplicable) out.push(`- ${a.title} (\`${a.auditId}\`)`);
     out.push('');
   }
 
@@ -164,12 +225,11 @@ export function buildAgentReport(report: PageReportDTO, opts: AgentReportOptions
   return out.join('\n');
 }
 
+const RATING = { good: 'good', ni: 'needs improvement', poor: 'poor' } as const;
+
 function ms(v: number | null): string {
   if (v === null) return '—';
   return v < 1000 ? `${Math.round(v)} ms` : `${(v / 1000).toFixed(1)} s`;
-}
-function kib(v: number): string {
-  return v < 1024 ? `${Math.round(v)} B` : v < 1048576 ? `${Math.round(v / 1024)} KiB` : `${(v / 1048576).toFixed(1)} MiB`;
 }
 function band(v: number | null): string {
   if (v === null) return '';
