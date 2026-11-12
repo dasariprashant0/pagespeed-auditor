@@ -13,6 +13,7 @@ import { startAuditRun } from '../workflows/auditRun.ts';
 import { estimateRun, formatDuration } from '../services/estimate.service.ts';
 import { normalizeUrl } from '../sitemap/normalize.ts';
 import type { PsiStrategy } from '../psi/types.ts';
+import { orgIdOf } from './orgContext.ts';
 
 /**
  * The MCP tool surface.
@@ -33,11 +34,6 @@ const strategyArg = z.enum(['mobile', 'desktop']).default('mobile');
  * any other way -- findFirst, an env var, an id in the arguments -- would let
  * one tenant's agent read another's data.
  */
-function orgIdOf(ctx: unknown): string {
-  const org = (ctx as { authInfo?: { organizationId?: string } } | undefined)?.authInfo?.organizationId;
-  if (!org) throw new Error('This token is not associated with an organisation.');
-  return org;
-}
 
 async function siteId(ctx: unknown): Promise<string> {
   const organizationId = orgIdOf(ctx);

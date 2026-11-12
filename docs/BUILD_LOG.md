@@ -1222,3 +1222,22 @@ every page report.
 
 Verified: tsc clean, lint 0 errors, 220/220 tests. A local `next build`
 stalled in the sandbox; the Vercel preview build is the check.
+
+### 11 Nov 2026 — MCP: every token reported "not associated with an organisation"
+
+The first real use of a token from Settings → Agent access failed on
+production with `This token is not associated with an organisation.`. The
+token itself was valid: `verifyMcpToken` accepted it.
+
+Cause: `@modelcontextprotocol/server` v2 (under `mcp-handler` 2.1) hands a
+tool its auth at `ctx.http.authInfo`. `orgIdOf` still read v1's
+`ctx.authInfo`, so it never found the org on any request.
+
+Fix: `orgIdOf` moved to `lib/mcp/orgContext.ts` and reads
+`ctx.http.authInfo`, falling back to the v1 shape. `verifyMcpToken` also
+puts the org id in the spec's `extra` field, which the SDK carries through,
+rather than relying only on a custom top-level field.
+`test/mcpOrgContext.test.ts` covers both shapes and the missing-org case.
+
+Verified: tsc clean, lint 0 errors, 223/223 tests. Production check: re-run
+an MCP tool from a session started after the deploy.
