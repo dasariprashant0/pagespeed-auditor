@@ -16,6 +16,7 @@ export interface McpAuthInfo {
   clientId: string;
   scopes: string[];
   organizationId: string;
+  extra: { organizationId: string };
 }
 
 const PREFIX = 'psa_';
@@ -60,5 +61,7 @@ export async function verifyMcpToken(_req: Request, bearerToken?: string): Promi
     // manage people or site configuration.
     scopes: ['audit:read', 'audit:write'],
     organizationId: row.organizationId,
+    // The spec's slot for custom data -- what tools read (see orgIdOf).
+    extra: { organizationId: row.organizationId },
   };
 }
